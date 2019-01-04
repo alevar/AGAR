@@ -83,7 +83,6 @@ def main(args):
 						      "--very-sensitive",
 						      "--end-to-end",
 						      "--no-unal",
-                              "-a",
 						      "-x",os.path.abspath(args.db)+"/db",
 						      "-p",args.threads]
 		if (args.fasta):
