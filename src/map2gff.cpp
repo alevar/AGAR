@@ -58,7 +58,7 @@ GffTranscript::GffTranscript(const std::string& tline){
     } //while exons
 }
 
-Map2GFF::Map2GFF(const std::string& gffFP, const std::string& alFP){
+Map2GFF::Map2GFF(const std::string& gffFP, const std::string& alFP, const std::string& multiFP){
     tlststream.open(gffFP.c_str(),std::ios::in);
     if (!tlststream.good()){
         std::cerr<<"FATAL: Couldn't open trascript data: "<<gffFP<<std::endl;
@@ -77,6 +77,117 @@ Map2GFF::Map2GFF(const std::string& gffFP, const std::string& alFP){
     }
     tlststream.close();
     std::cout<<"Loaded Transcript Data"<<std::endl;
+
+    // reading in the multiFP file
+    multistream.open(multiFP.c_str(),std::ios::in);
+    if(!multistream.good()){
+        std::cerr<<"FATAL: Couldn't open multimapper data: "<<multiFP<<std::endl;
+        exit(1);
+    }
+
+    std::ios::sync_with_stdio(false);
+    std::cout<<"Reading the Multimapper data: "<<multiFP<<std::endl;
+    
+    // GffTranscript t=transcripts[0]// single gfftranscript record used to access the chromosome map
+    std::string mline;
+
+    std::pair< std::map<
+                    std::vector< std::pair< int,int> >,
+                    std::vector<const std::vector<std::pair<int,int> >*>
+                >::iterator,bool> exists_cur_coord;
+
+    std::pair<std::unordered_map<std::string,int>::iterator,bool> exists_ri;
+    std::pair<std::unordered_map<int,std::string>::iterator,bool> exists_ir;
+
+    std::vector<std::pair<int,int> > cur_coords1,cur_coords2;
+    std::stringstream ss(""),sub_ss("");
+    std::string pretab,posttab,sub;
+    int chrid,strand,start,end;
+
+    int max_chrID=0;
+    int count=0;
+    while (std::getline(multistream,mline)){
+        count++;
+        if(count%10000==0){
+            std::cout<<count<<std::endl;
+        }
+        ss.str(mline);
+        ss.clear();
+
+        std::getline(ss,pretab,'\t');
+        std::getline(ss,posttab,'\t');
+
+        ss.str(pretab);
+        ss.clear();
+        std::getline(ss,pretab,':');
+        exists_ri=this->ref_to_id_mult.insert(std::make_pair(pretab,max_chrID));
+        if(exists_ri.second){
+            exists_ir=this->id_to_ref_mult.insert(std::make_pair(max_chrID,pretab));
+            if(!exists_ir.second){
+                std::cerr<<"ERROR. chromosome IDs messed up"<<std::endl;
+
+            }
+            max_chrID++;
+        }
+        std::getline(ss,pretab,'@');
+
+        // unordered
+        strand=int(pretab[0]);
+        cur_coords1.push_back(std::make_pair(exists_ri.first->second,strand));
+        // 3. get the coordinates
+        while(std::getline(ss,pretab,',')){
+            sub_ss.str(pretab);
+            sub_ss.clear();
+            // get start coordinate
+            std::getline(sub_ss,sub,'-');
+            start=atoi(sub.c_str());
+            // get end coordinate
+            std::getline(sub_ss,sub,'-');
+            end=atoi(sub.c_str());
+            cur_coords1.push_back(std::make_pair(start,end));
+        }
+        //now for the matched kmer coordinates
+        ss.str(posttab);
+        ss.clear();
+        std::getline(ss,posttab,':');
+        exists_ri=this->ref_to_id_mult.insert(std::make_pair(posttab,max_chrID));
+        if(exists_ri.second){
+            exists_ir=this->id_to_ref_mult.insert(std::make_pair(max_chrID,posttab));
+            if(!exists_ir.second){
+                std::cerr<<"ERROR. chromosome IDs messed up"<<std::endl;
+
+            }
+            max_chrID++;
+        }
+        std::getline(ss,posttab,'@');
+        strand=int(posttab[0]);
+        cur_coords2.push_back(std::make_pair(exists_ri.first->second,strand));
+        // 3. get the coordinates
+        while(std::getline(ss,posttab,',')){
+            sub_ss.str(posttab);
+            sub_ss.clear();
+            // get start coordinate
+            std::getline(sub_ss,sub,'-');
+            start=atoi(sub.c_str());
+            // get end coordinate
+            std::getline(sub_ss,sub,'-');
+            end=atoi(sub.c_str());
+            cur_coords2.push_back(std::make_pair(start,end));
+        }
+
+        std::vector<std::pair<int,int>>* new_coords=new std::vector<std::pair<int,int>>(cur_coords2);
+        exists_cur_coord=this->multimappers.insert(std::pair<std::vector<std::pair<int,int>>,std::vector<const std::vector<std::pair<int,int> >* > >(cur_coords1,{}));
+        exists_cur_coord.first->second.push_back(new_coords);
+        cur_coords1.clear();
+        cur_coords2.clear();
+    }
+    multistream.close();
+    std::cout<<"Loaded Multimapper Data"<<std::endl;
+
+    //!!!!!!!!!!!!!!!!! NOW TEST THAT IT WORKS AND YOU CAN PARSE IT BACK !!!!!!!!!!!!!!!
+
+    // let's access the chromosome map through the transcript data as
+    // p_trans->names.getSeqName()
     
     // now initialize the sam file
     al=hts_open(alFP.c_str(),"r");
@@ -167,8 +278,6 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
     GffTranscript *p_trans=NULL;
     GffTranscript *mate_p_trans=NULL;
 
-    bool success;
-
     std::unordered_map<std::string,MateRead*> curReadGroup_tmp;
     std::unordered_map<std::string,MatePair*> curReadGroup_paired;
     std::unordered_map<std::string,bam1_t*> curReadGroup;
@@ -186,12 +295,10 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
             // }
             curReadName=newReadName;
             start=false;
-            success=true;
             size_t read_start=0;
             size_t mate_read_start=0;
 
             const char *target_name=al_hdr->target_name[curAl->core.tid];
-            int trans_idx=atoi(target_name);
             p_trans=tidx_to_t[target_name];
 
             GVec<GSeg>& exon_list=p_trans->exons;
@@ -205,6 +312,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
             if (!ret_val){
                 std::cerr<<"SOMETHING WRONG WITH GETTING GENOMIC READ START"<<std::endl;
             }
+            std::cout<<curAl->core.pos<<"\t"<<read_start<<std::endl;
 
             std::string cigar_str="";
             int cigar_ret_val=Map2GFF::convert_cigar(i,cur_intron_len,miss_length,next_exon,match_length,exon_list,num_cigars,read_start,curAl,cigar_str,cigars);
@@ -214,9 +322,9 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                 // evaluate as a pair if a singleton is encountered - forget about it
                 int mate_i=0;
                 const char *mate_target_name=al_hdr->target_name[curAl->core.mtid];
-                int mate_trans_idx=atoi(mate_target_name);
                 mate_p_trans=tidx_to_t[mate_target_name];
                 bool mate_ret_val=Map2GFF::get_read_start(exon_list,curAl->core.mpos,mate_read_start,mate_i);
+                // std::cout<<curAl->core.mpos<<"\t"<<mate_read_start<<std::endl;
                 // if (!mate_ret_val){
                 //     std::cerr<<"SOMETHING WRONG WITH GETTING GENOMIC MATE READ START"<<std::endl;
                 //     // need aditional cases here
@@ -295,7 +403,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                 curReadGroup_tmp.erase(tmpKey_pre);
                             }
                             else{
-                                std::cout<<"BIG MISTAKE AND DON'T KNOW WHAT TO DO"<<std::endl;
+                                std::cerr<<"BIG MISTAKE AND DON'T KNOW WHAT TO DO"<<std::endl;
                             }
                         }
                     }
@@ -321,7 +429,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                         }
                     }
                     else{
-                        std::cout<<"mate_error"<<std::endl;
+                        std::cerr<<"mate_error"<<std::endl;
                         exit(-1);
                     }
                 }
@@ -335,6 +443,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
             if (!curReadGroup_paired.empty()){
                 if (curReadGroup_tmp.empty()){ // Make sure nothing is left in the tmp group
                     int nh=curReadGroup_paired.size();
+                    bool prim=true;
                     for (std::pair<std::string,MatePair*> kv: curReadGroup_paired){
                         // Process first mate
                         uint8_t* ptr_nh_1=bam_aux_get(kv.second->firstMate,"NH");
@@ -344,7 +453,24 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                         bam_aux_append(kv.second->firstMate,"NH",'i',4,(uint8_t*)&nh);
 
                         kv.second->firstMate->core.bin = hts_reg2bin(kv.second->firstMate->core.pos, kv.second->firstMate->core.pos + bam_cigar2rlen(kv.second->firstMate->core.n_cigar, bam_get_cigar(kv.second->firstMate)), 14, 5);
+                        
+                        // set first alignment as primary and the rest to secondary
+                        if (prim){
+                            // if (nh>=2){
+                            //     std::cout<<"FIRST "<<nh<<" "<<bam_get_qname(kv.second->firstMate)<<" "<<bam_flag2str(kv.second->firstMate->core.flag)<<" new: ";
+                            // }
+                            kv.second->firstMate->core.flag &= ~BAM_FSECONDARY;
+                        }
+                        else{
+                            // if (nh>=2){
+                            //     std::cout<<"SECOND "<<bam_get_qname(kv.second->firstMate)<<" "<<bam_flag2str(kv.second->firstMate->core.flag)<<" new: ";
+                            // }
+                            kv.second->firstMate->core.flag |= BAM_FSECONDARY;
+                        }
                         int ret_sam=sam_write1(outSAM,genome_al_hdr,kv.second->firstMate);
+                        // if (nh>=2){
+                        //     std::cout<<bam_flag2str(kv.second->firstMate->core.flag)<<std::endl;
+                        // }
 
                         // Now process second mate
                         uint8_t* ptr_nh_2=bam_aux_get(kv.second->secondMate,"NH");
@@ -354,17 +480,27 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                         bam_aux_append(kv.second->secondMate,"NH",'i',4,(uint8_t*)&nh);
 
                         kv.second->secondMate->core.bin = hts_reg2bin(kv.second->secondMate->core.pos, kv.second->secondMate->core.pos + bam_cigar2rlen(kv.second->secondMate->core.n_cigar, bam_get_cigar(kv.second->secondMate)), 14, 5);
+                        
+                        // set first alignment as primary and the rest to secondary
+                        if (prim){
+                            kv.second->secondMate->core.flag &= ~BAM_FSECONDARY;
+                        }
+                        else{
+                            kv.second->secondMate->core.flag |= BAM_FSECONDARY;
+                        }
                         ret_sam=sam_write1(outSAM,genome_al_hdr,kv.second->secondMate);
 
                         delete kv.second;
+                        prim=false;
                     }
                 }
                 else{
-                    std::cout<<"MISTAKE. READS LEFT IN TMP"<<std::endl;
+                    std::cerr<<"MISTAKE. READS LEFT IN TMP"<<std::endl;
                 }
             }
             else if (!curReadGroup.empty()){
                 int nh=curReadGroup.size();
+                bool prim=true;
                 for (std::pair<std::string,bam1_t*> kv: curReadGroup){
                     uint8_t* ptr_nh=bam_aux_get(kv.second,"NH");
                     if(ptr_nh){
@@ -373,8 +509,15 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                     bam_aux_append(kv.second,"NH",'i',4,(uint8_t*)&nh);
 
                     kv.second->core.bin = hts_reg2bin(kv.second->core.pos, kv.second->core.pos + bam_cigar2rlen(kv.second->core.n_cigar, bam_get_cigar(kv.second)), 14, 5);
+                    if (prim){
+                        kv.second->core.flag &= ~BAM_FSECONDARY;
+                    }
+                    else{
+                        kv.second->core.flag |= BAM_FSECONDARY;
+                    }
                     int ret_sam=sam_write1(outSAM,genome_al_hdr,kv.second);
                     delete kv.second;
+                    prim=false;
                 }
             }
             else{
@@ -389,12 +532,10 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
 
             curReadName=newReadName;
 
-            success=true;
             size_t read_start=0;
             size_t mate_read_start=0;
 
             const char *target_name=al_hdr->target_name[curAl->core.tid];
-            int trans_idx=atoi(target_name);
             p_trans=tidx_to_t[target_name];
 
             GVec<GSeg>& exon_list=p_trans->exons;
@@ -417,7 +558,6 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                 // evaluate as a pair if a singleton is encountered - forget about it
                 int mate_i=0;
                 const char *mate_target_name=al_hdr->target_name[curAl->core.mtid];
-                int mate_trans_idx=atoi(mate_target_name);
                 mate_p_trans=tidx_to_t[mate_target_name];
                 bool mate_ret_val=Map2GFF::get_read_start(exon_list,curAl->core.mpos,mate_read_start,mate_i);
                 // if (!mate_ret_val){
@@ -491,7 +631,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                         curReadGroup_tmp[tmpKey_pre]=new MateRead(bam_dup1(curAl),read_start,cigar_str);;
                     }
                     else{
-                        std::cout<<"mate_error"<<std::endl;
+                        std::cerr<<"mate_error"<<std::endl;
                         exit(-1);
                     }
                 }

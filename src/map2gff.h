@@ -11,8 +11,12 @@
 #include <vector>
 #include <cstring>
 #include <unordered_map>
+#include <map>
+#include <set>
+// #include <boost/config.hpp>
+// #include <boost/container_hash/hash.hpp>
 
-#include "include/htslib/sam.h"
+#include <htslib/sam.h>
 
 #include "GVec.hh"
 
@@ -91,9 +95,22 @@ struct GffTranscript: public GSeg {
 	GffTranscript(const std::string& tline);
 };
 
+// typedef std::vector<std::pair<int,int> > Coords;
+
+struct coord_hash {
+    uint64_t operator()(const std::vector<std::pair<int,int> > &coords ) const
+    {
+        uint64_t resHash=1;
+        for (auto const& coord: coords) {
+            resHash=resHash^std::hash<uint64_t>()(coord.first)^std::hash<uint64_t>()(coord.second);
+        }
+        return resHash;
+    }
+};
+
 class Map2GFF{
     public:
-        Map2GFF(const std::string& gffFP, const std::string& alFP);
+        Map2GFF(const std::string& gffFP, const std::string& alFP, const std::string& multiFP);
         ~Map2GFF();
 
         void convert_coords(const std::string& outFP, const std::string& genome_header);
@@ -108,6 +125,7 @@ class Map2GFF{
         std::unordered_map<std::string,GffTranscript*> tidx_to_t;
 
         std::ifstream tlststream;
+        std::ifstream multistream;
 
         samFile *al; 
         bam_hdr_t *al_hdr;
@@ -115,7 +133,11 @@ class Map2GFF{
         samFile *genome_al;
         bam_hdr_t *genome_al_hdr;
 
-        std::unordered_map<std::string,int> ref_to_id;
+        std::unordered_map<std::string,int> ref_to_id; // built from the genome header file
+
+        std::map<std::vector<std::pair<int,int> >,std::vector<const std::vector<std::pair<int,int> >*> > multimappers;
+        std::unordered_map< std::string,int > ref_to_id_mult; // contains a map from chromosome name to the unique ID
+        std::unordered_map< int,std::string > id_to_ref_mult; // contains a map from unique chromosome ID to the chromosome name
 };
 
 #endif

@@ -103,6 +103,26 @@ def main(args):
 						required=False,
 						default="1",
 						help="number of threads to use")
+	parser_align.add_argument("-a",
+						"--all",
+						action="store_true",
+						help="run hisat/bowtie with the -a option")
+	parser_align.add_argument("-k",
+						required=False,
+						type=int,
+						default=0,
+						help="-k argument for bowtie/hisat first pass")
+	parser_align.add_argument("--bowtie",
+						required=False,
+						nargs='*',
+						help="additional arguments to be passed over to bowtie")
+	parser_align.add_argument("--hisat",
+						required=False,
+						nargs='*',
+						help="additional arguments to be passed over to hisat")
+	parser_align.add_argument("--keep",
+						action="store_true",
+						help="keep temporary files")
 
 	parser_align.set_defaults(func=align.main)
 
