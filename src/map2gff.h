@@ -50,12 +50,14 @@ struct MatePair{
 
 struct MateRead{
     bam1_t *al;
+    std::vector<std::pair<int,int>> coords;
     int pos;
     std::string cigar;
-    MateRead(bam1_t* curAl,int pos, std::string cigar){
+    MateRead(bam1_t* curAl,int pos, std::string cigar,std::vector<std::pair<int,int>> al_coords){
         this->al=curAl;
         this->pos=pos;
         this->cigar=cigar;
+        this->coords=al_coords;
     }
     ~MateRead(){
         // std::cout<<"DELETING 2"<<std::endl;
@@ -108,9 +110,19 @@ struct coord_hash {
     }
 };
 
+typedef std::tuple<int,int,int> coord_range;
+struct coord_cmp {
+    bool operator()(coord_range const & a, coord_range const & b) {
+        if(std::get<2>(a) < std::get<1>(b) || std::get<0>(a)!=std::get<0>(b)){
+            return true;
+        }
+        return false;
+    }
+};
+
 class Map2GFF{
     public:
-        Map2GFF(const std::string& gffFP, const std::string& alFP, const std::string& multiFP);
+        Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::string& multiFP, const std::string& glstFP);
         ~Map2GFF();
 
         void convert_coords(const std::string& outFP, const std::string& genome_header);
@@ -119,13 +131,17 @@ class Map2GFF{
         bool get_read_start(GVec<GSeg>& exon_list,size_t gff_start, size_t& genome_start,int& exon_idx);
         void add_to_group();
         int convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_exon,int match_length,GVec<GSeg>& exon_list,
-                          int &num_cigars,int read_start,bam1_t* curAl,std::string &cigar_str,int cigars[MAX_CIGARS]);
+                          int &num_cigars,int read_start,bam1_t* curAl,std::string &cigar_str,int cigars[MAX_CIGARS],std::vector<std::pair<int,int>> &coords);
+        void add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, const std::vector<std::pair<int,int>> *cor2, bam1_t *al1, bam1_t *al2);
+        
+        // coord_range make_coord_range(int strand, int lower, int upper);
 
         GPVec<GffTranscript> transcripts;
         std::unordered_map<std::string,GffTranscript*> tidx_to_t;
 
         std::ifstream tlststream;
         std::ifstream multistream;
+        std::ifstream glststream;
 
         samFile *al; 
         bam_hdr_t *al_hdr;
@@ -133,11 +149,55 @@ class Map2GFF{
         samFile *genome_al;
         bam_hdr_t *genome_al_hdr;
 
+        std::unordered_map<std::string,MateRead*> curReadGroup_tmp;
+        std::unordered_map<std::string,MateRead*> curReadGroup_tmp_multi;
+        // std::unordered_map<std::string,MatePair*> curReadGroup_paired;
+
+        std::map<
+            std::pair<
+                std::vector<
+                    std::pair<int,int>
+                >, std::vector<
+                    std::pair<int,int>
+                >
+            >,MatePair*> curReadGroup_paired; // key is two vectors of coordinate pairs - one vector for each mate
+        std::pair<
+            std::map<
+                std::pair<
+                    std::vector<
+                        std::pair<int,int>
+                    >, std::vector<
+                        std::pair<int,int>
+                    >
+                >,MatePair*>::iterator,
+            bool> exists_curReadGroup_paired; // key is two vectors of coordinate pairs - one vector for each mate
+
+        std::map<std::vector<std::pair<int,int>>,bam1_t*> curReadGroup;
+        std::pair<std::map<std::vector<std::pair<int,int>>,bam1_t*>::iterator,bool> exists_curReadGroup;
+        std::string curReadName="";
+
         std::unordered_map<std::string,int> ref_to_id; // built from the genome header file
 
         std::map<std::vector<std::pair<int,int> >,std::vector<const std::vector<std::pair<int,int> >*> > multimappers;
         std::unordered_map< std::string,int > ref_to_id_mult; // contains a map from chromosome name to the unique ID
         std::unordered_map< int,std::string > id_to_ref_mult; // contains a map from unique chromosome ID to the chromosome name
+
+        std::map<
+                std::vector< std::pair< int,int> >,
+                std::vector<const std::vector<std::pair<int,int> >*>
+            >::iterator exists_al_coord; // iterator to find the key in the multimappers map based on the coordinates of the current alignment
+        std::map<
+                std::vector< std::pair< int,int> >,
+                std::vector<const std::vector<std::pair<int,int> >*>
+            >::iterator exists_al_coord_mate1; // iterator to find the key in the multimappers map based on the coordinates of the current alignment
+        std::map<
+                std::vector< std::pair< int,int> >,
+                std::vector<const std::vector<std::pair<int,int> >*>
+            >::iterator exists_al_coord_mate2; // iterator to find the key in the multimappers map based on the coordinates of the current alignment
+
+        std::map<coord_range,int,coord_cmp> gene_coords;
+        std::map<coord_range,int>::iterator exists_geneID_mate1;
+        std::map<coord_range,int>::iterator exists_geneID_mate2;
 };
 
 #endif
