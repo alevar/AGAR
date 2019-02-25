@@ -128,6 +128,9 @@ def main(args):
 	parser_align.add_argument("--keep",
 						action="store_true",
 						help="keep temporary files")
+	parser_align.add_argument("--mf",
+						action="store_true",
+						help="use multimapper index to supplement alignments")
 
 	parser_align.set_defaults(func=align.main)
 

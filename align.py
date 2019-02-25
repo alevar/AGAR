@@ -188,26 +188,32 @@ def main(args):
 	
 	#trans2genome
 	print("converting coordinates to genomic")
-	subprocess.call(["/home/avaraby1/genomicTools/trans2genome/trans2genome",
+	trans2genome_cmd=["/home/avaraby1/genomicTools/trans2genome/trans2genome",
 					 "-t",os.path.abspath(args.db)+"/db.fasta.tlst",
 					 "-g",os.path.abspath(args.db)+"/db.fasta.glst",
 					 "-m",os.path.abspath(args.db)+"/db.fasta.multi",
 					 "-i",os.path.abspath(curTMP)+"/sample.trans_first.bam",
 					 "-s",os.path.abspath(args.db)+"/db.genome.header",
-					 "-o",os.path.abspath(curTMP)+"/sample.trans2genome_first.bam"])
+					 "-o",os.path.abspath(curTMP)+"/sample.trans2genome_first.bam"]
+	if args.mf:
+		trans2genome_cmd.append("-f")
+	subprocess.call(trans2genome_cmd)
 	if os.path.exists(os.path.abspath(curTMP)+"/sample.trans_first.sam") and not args.keep:
 		os.remove(os.path.abspath(curTMP)+"/sample.trans_first.sam")
 	# if os.path.exists(os.path.abspath(curTMP)+"/sample.trans_first.bam") and not args.keep:
 	# 	os.remove(os.path.abspath(curTMP)+"/sample.trans_first.bam")
 
 	if os.path.exists(os.path.abspath(curTMP)+"/sample.trans_second.bam"):
-		subprocess.call(["/home/avaraby1/genomicTools/trans2genome/trans2genome",
+		trans2genome_a_cmd=["/home/avaraby1/genomicTools/trans2genome/trans2genome",
 						 "-t",os.path.abspath(args.db)+"/db.fasta.tlst",
 						 "-g",os.path.abspath(args.db)+"/db.fasta.glst",
 						 "-m",os.path.abspath(args.db)+"/db.fasta.multi",
 						 "-i",os.path.abspath(curTMP)+"/sample.trans_second.bam",
 						 "-s",os.path.abspath(args.db)+"/db.genome.header",
-						 "-o",os.path.abspath(curTMP)+"/sample.trans2genome_second.bam"])
+						 "-o",os.path.abspath(curTMP)+"/sample.trans2genome_second.bam"]
+		if args.mf:
+			trans2genome_a_cmd.append("-f")
+		subprocess.call(trans2genome_a_cmd)
 
 	print("merging all sub-alignments")
 	merge_cmd=["samtools","merge",
