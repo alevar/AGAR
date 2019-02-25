@@ -47,6 +47,11 @@ def main(args):
 							  default="hisat",
 							  choices=["hisat","bowtie"],
 							  help="which aligner should be used")
+	parser_build.add_argument("--kmerlen",
+						required=False,
+						type=int,
+						default=76,
+						help="kmer length to use in the search for multimappers")
 
 	parser_build.set_defaults(func=build.main)
 

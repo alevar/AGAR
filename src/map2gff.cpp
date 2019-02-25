@@ -527,7 +527,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
     bool start=true;
 
     while(sam_read1(al,al_hdr,curAl)>0){
-        // std::cout<<bam_get_qname(curAl)<<std::endl;
+        std::cout<<bam_get_qname(curAl)<<std::endl;
         std::string newReadName=bam_get_qname(curAl);
         // std::cout<<newReadName<<std::endl;
         if (newReadName.compare(curReadName)==0 || start){
@@ -656,7 +656,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                                        this->exists_geneID_mate2!=this->gene_coords.end() &&
                                                        this->exists_geneID_mate1->second==this->exists_geneID_mate2->second){ // both identified, and geneIDs match
                                                         // can now safely add to the multimappers
-                                                        std::cout<<"ADDING PAIR MULTI #1"<<std::endl;
+                                                        // std::cout<<"ADDING PAIR MULTI #1"<<std::endl;
                                                         add_multimapper_pair(cor1,cor2,curAl,mr->al);
                                                     }
                                                 }                                            
@@ -702,7 +702,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                                        this->exists_geneID_mate1!=this->gene_coords.end() &&
                                                        this->exists_geneID_mate2->second==this->exists_geneID_mate1->second){ // both identified, and geneIDs match
                                                         // can now safely add to the multimappers
-                                                        std::cout<<"ADDING PAIR MULTI #2"<<std::endl;
+                                                        // std::cout<<"ADDING PAIR MULTI #2"<<std::endl;
                                                         add_multimapper_pair(cor2,cor1,mr->al,curAl);
                                                     }
                                                 }                                            

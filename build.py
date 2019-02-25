@@ -25,7 +25,8 @@ def main(args):
 
 	# gtf_to_fasta
 	print("Extracting fasta from gtf")
-	subprocess.call(["gtf_to_fasta",args.gff,args.ref,os.path.abspath(args.output)+"/db.fasta"])
+	print(" ".join(["/home/avaraby1/genomicTools/tophat-2.1.2/src/gtf_to_fasta",str(args.kmerlen),args.gff,args.ref,os.path.abspath(args.output)+"/db.fasta"]))
+	subprocess.call(["/home/avaraby1/genomicTools/tophat-2.1.2/src/gtf_to_fasta",str(args.kmerlen),args.gff,args.ref,os.path.abspath(args.output)+"/db.fasta"])
 	# buildGenomeHeader.py
 	print("Building genome header file")
 	buildHeader(os.path.abspath(args.ref)+".fai",os.path.abspath(args.output)+"/db.genome.header")

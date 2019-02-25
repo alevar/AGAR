@@ -177,28 +177,34 @@ def main(args):
 	#samtools view -h -b 
 	# these can be outsourced to a different thread for removal
 	# in order to save some time
-	print("converting alignments to BAM and sorting by read name")
-	subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_first.bam",os.path.abspath(curTMP)+"/sample.trans_first.sam"])
-	if not args.keep:
-		os.remove(os.path.abspath(curTMP)+"/sample.trans_first.sam")
-	if alignmentStage==2:
-		subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_second.bam",os.path.abspath(curTMP)+"/sample.trans_second.sam"])
-		if not args.keep:
-			os.remove(os.path.abspath(curTMP)+"/sample.trans_second.sam")
+	# print("converting alignments to BAM and sorting by read name")
+	# subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_first.bam",os.path.abspath(curTMP)+"/sample.trans_first.sam"])
+	# if not args.keep:
+	# 	os.remove(os.path.abspath(curTMP)+"/sample.trans_first.sam")
+	# if alignmentStage==2:
+	# 	subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_second.bam",os.path.abspath(curTMP)+"/sample.trans_second.sam"])
+	# 	if not args.keep:
+	# 		os.remove(os.path.abspath(curTMP)+"/sample.trans_second.sam")
 	
 	#trans2genome
 	print("converting coordinates to genomic")
-	subprocess.call(["trans2genome",
-					 "-g",os.path.abspath(args.db)+"/db.fasta.tlst",
-					 "-i",os.path.abspath(curTMP)+"/sample.trans_first.bam",
+	subprocess.call(["/home/avaraby1/genomicTools/trans2genome/trans2genome",
+					 "-t",os.path.abspath(args.db)+"/db.fasta.tlst",
+					 "-g",os.path.abspath(args.db)+"/db.fasta.glst",
+					 "-m",os.path.abspath(args.db)+"/db.fasta.multi",
+					 "-i",os.path.abspath(curTMP)+"/sample.trans_first.sam", #"-i",os.path.abspath(curTMP)+"/sample.trans_first.bam",
 					 "-s",os.path.abspath(args.db)+"/db.genome.header",
 					 "-o",os.path.abspath(curTMP)+"/sample.trans2genome_first.bam"])
-	if os.path.exists(os.path.abspath(curTMP)+"/sample.trans_first.bam") and not args.keep:
-		os.remove(os.path.abspath(curTMP)+"/sample.trans_first.bam")
+	if os.path.exists(os.path.abspath(curTMP)+"/sample.trans_first.sam") and not args.keep:
+		os.remove(os.path.abspath(curTMP)+"/sample.trans_first.sam")
+	# if os.path.exists(os.path.abspath(curTMP)+"/sample.trans_first.bam") and not args.keep:
+	# 	os.remove(os.path.abspath(curTMP)+"/sample.trans_first.bam")
 
 	if os.path.exists(os.path.abspath(curTMP)+"/sample.trans_second.bam"):
-		subprocess.call(["trans2genome",
-						 "-g",os.path.abspath(args.db)+"/db.fasta.tlst",
+		subprocess.call(["/home/avaraby1/genomicTools/trans2genome/trans2genome",
+						 "-t",os.path.abspath(args.db)+"/db.fasta.tlst",
+						 "-g",os.path.abspath(args.db)+"/db.fasta.glst",
+						 "-m",os.path.abspath(args.db)+"/db.fasta.multi",
 						 "-i",os.path.abspath(curTMP)+"/sample.trans_second.bam",
 						 "-s",os.path.abspath(args.db)+"/db.genome.header",
 						 "-o",os.path.abspath(curTMP)+"/sample.trans2genome_second.bam"])
