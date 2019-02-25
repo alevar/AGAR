@@ -65,7 +65,8 @@ GffTranscript::GffTranscript(const std::string& tline){
     } //while exons
 }
 
-Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::string& multiFP, const std::string& glstFP){
+Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::string& multiFP, const std::string& glstFP, const bool& multi_flag){
+    this->multi_flag=multi_flag;
     tlststream.open(tlstFP.c_str(),std::ios::in);
     if (!tlststream.good()){
         std::cerr<<"FATAL: Couldn't open trascript data: "<<tlstFP<<std::endl;
@@ -86,138 +87,140 @@ Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::
     std::cout<<"Loaded Transcript Data"<<std::endl;
 
     // reading in the multiFP file
-    multistream.open(multiFP.c_str(),std::ios::in);
-    if(!multistream.good()){
-        std::cerr<<"FATAL: Couldn't open multimapper data: "<<multiFP<<std::endl;
-        exit(1);
-    }
-
-    std::ios::sync_with_stdio(false);
-    std::cout<<"Reading the Multimapper data: "<<multiFP<<std::endl;
-    
-    // GffTranscript t=transcripts[0]// single gfftranscript record used to access the chromosome map
-    std::string mline;
-
-    std::pair< std::map<
-                    std::vector< std::pair< int,int> >,
-                    std::vector<const std::vector<std::pair<int,int> >*>
-                >::iterator,bool> exists_cur_coord;
-
-    std::pair<std::unordered_map<std::string,int>::iterator,bool> exists_ri;
-    std::pair<std::unordered_map<int,std::string>::iterator,bool> exists_ir;
-
-    std::vector<std::pair<int,int> > cur_coords1,cur_coords2;
-    std::stringstream ss(""),sub_ss("");
-    std::string pretab,posttab,sub;
-    int chrid,strand,start,end;
-
-    int max_chrID=0;
-    int count=0;
-    while (std::getline(multistream,mline)){
-        count++;
-        if(count%10000==0){
-            std::cout<<count<<std::endl;
+    if(multi_flag){
+        multistream.open(multiFP.c_str(),std::ios::in);
+        if(!multistream.good()){
+            std::cerr<<"FATAL: Couldn't open multimapper data: "<<multiFP<<std::endl;
+            exit(1);
         }
-        ss.str(mline);
-        ss.clear();
 
-        std::getline(ss,pretab,'\t');
-        std::getline(ss,posttab,'\t');
+        std::ios::sync_with_stdio(false);
+        std::cout<<"Reading the Multimapper data: "<<multiFP<<std::endl;
+        
+        // GffTranscript t=transcripts[0]// single gfftranscript record used to access the chromosome map
+        std::string mline;
 
-        ss.str(pretab);
-        ss.clear();
-        std::getline(ss,pretab,':');
-        exists_ri=this->ref_to_id_mult.insert(std::make_pair(pretab,max_chrID));
-        if(exists_ri.second){
-            exists_ir=this->id_to_ref_mult.insert(std::make_pair(max_chrID,pretab));
-            if(!exists_ir.second){
-                std::cerr<<"ERROR. chromosome IDs messed up"<<std::endl;
+        std::pair< std::map<
+                        std::vector< std::pair< int,int> >,
+                        std::vector<const std::vector<std::pair<int,int> >*>
+                    >::iterator,bool> exists_cur_coord;
 
+        std::pair<std::unordered_map<std::string,int>::iterator,bool> exists_ri;
+        std::pair<std::unordered_map<int,std::string>::iterator,bool> exists_ir;
+
+        std::vector<std::pair<int,int> > cur_coords1,cur_coords2;
+        std::stringstream ss(""),sub_ss("");
+        std::string pretab,posttab,sub;
+        int chrid,strand,start,end;
+
+        int max_chrID=0;
+        int count=0;
+        while (std::getline(multistream,mline)){
+            count++;
+            if(count%10000==0){
+                std::cout<<count<<std::endl;
             }
-            max_chrID++;
-        }
-        std::getline(ss,pretab,'@');
+            ss.str(mline);
+            ss.clear();
 
-        // unordered
-        strand=int(pretab[0]);
-        cur_coords1.push_back(std::make_pair(exists_ri.first->second,strand));
-        // 3. get the coordinates
-        while(std::getline(ss,pretab,',')){
-            sub_ss.str(pretab);
-            sub_ss.clear();
-            // get start coordinate
-            std::getline(sub_ss,sub,'-');
-            start=atoi(sub.c_str());
-            // get end coordinate
-            std::getline(sub_ss,sub,'-');
-            end=atoi(sub.c_str());
-            cur_coords1.push_back(std::make_pair(start,end));
-        }
-        //now for the matched kmer coordinates
-        ss.str(posttab);
-        ss.clear();
-        std::getline(ss,posttab,':');
-        exists_ri=this->ref_to_id_mult.insert(std::make_pair(posttab,max_chrID));
-        if(exists_ri.second){
-            exists_ir=this->id_to_ref_mult.insert(std::make_pair(max_chrID,posttab));
-            if(!exists_ir.second){
-                std::cerr<<"ERROR. chromosome IDs messed up"<<std::endl;
+            std::getline(ss,pretab,'\t');
+            std::getline(ss,posttab,'\t');
 
+            ss.str(pretab);
+            ss.clear();
+            std::getline(ss,pretab,':');
+            exists_ri=this->ref_to_id_mult.insert(std::make_pair(pretab,max_chrID));
+            if(exists_ri.second){
+                exists_ir=this->id_to_ref_mult.insert(std::make_pair(max_chrID,pretab));
+                if(!exists_ir.second){
+                    std::cerr<<"ERROR. chromosome IDs messed up"<<std::endl;
+
+                }
+                max_chrID++;
             }
-            max_chrID++;
+            std::getline(ss,pretab,'@');
+
+            // unordered
+            strand=int(pretab[0]);
+            cur_coords1.push_back(std::make_pair(exists_ri.first->second,strand));
+            // 3. get the coordinates
+            while(std::getline(ss,pretab,',')){
+                sub_ss.str(pretab);
+                sub_ss.clear();
+                // get start coordinate
+                std::getline(sub_ss,sub,'-');
+                start=atoi(sub.c_str());
+                // get end coordinate
+                std::getline(sub_ss,sub,'-');
+                end=atoi(sub.c_str());
+                cur_coords1.push_back(std::make_pair(start,end));
+            }
+            //now for the matched kmer coordinates
+            ss.str(posttab);
+            ss.clear();
+            std::getline(ss,posttab,':');
+            exists_ri=this->ref_to_id_mult.insert(std::make_pair(posttab,max_chrID));
+            if(exists_ri.second){
+                exists_ir=this->id_to_ref_mult.insert(std::make_pair(max_chrID,posttab));
+                if(!exists_ir.second){
+                    std::cerr<<"ERROR. chromosome IDs messed up"<<std::endl;
+
+                }
+                max_chrID++;
+            }
+            std::getline(ss,posttab,'@');
+            strand=int(posttab[0]);
+            cur_coords2.push_back(std::make_pair(exists_ri.first->second,strand));
+            // 3. get the coordinates
+            while(std::getline(ss,posttab,',')){
+                sub_ss.str(posttab);
+                sub_ss.clear();
+                // get start coordinate
+                std::getline(sub_ss,sub,'-');
+                start=atoi(sub.c_str());
+                // get end coordinate
+                std::getline(sub_ss,sub,'-');
+                end=atoi(sub.c_str());
+                cur_coords2.push_back(std::make_pair(start,end));
+            }
+
+            std::vector<std::pair<int,int>>* new_coords=new std::vector<std::pair<int,int>>(cur_coords2);
+            exists_cur_coord=this->multimappers.insert(std::pair<std::vector<std::pair<int,int>>,std::vector<const std::vector<std::pair<int,int> >* > >(cur_coords1,{}));
+            exists_cur_coord.first->second.push_back(new_coords);
+            cur_coords1.clear();
+            cur_coords2.clear();
         }
-        std::getline(ss,posttab,'@');
-        strand=int(posttab[0]);
-        cur_coords2.push_back(std::make_pair(exists_ri.first->second,strand));
-        // 3. get the coordinates
-        while(std::getline(ss,posttab,',')){
-            sub_ss.str(posttab);
-            sub_ss.clear();
-            // get start coordinate
-            std::getline(sub_ss,sub,'-');
-            start=atoi(sub.c_str());
-            // get end coordinate
-            std::getline(sub_ss,sub,'-');
-            end=atoi(sub.c_str());
-            cur_coords2.push_back(std::make_pair(start,end));
+        multistream.close();
+        std::cout<<"Loaded Multimapper Data"<<std::endl;
+
+        // reading in the gene coordinate file
+        glststream.open(glstFP.c_str(),std::ios::in);
+        if(!glststream.good()){
+            std::cerr<<"FATAL: Couldn't open gene coordinate data: "<<glstFP<<std::endl;
+            exit(1);
         }
 
-        std::vector<std::pair<int,int>>* new_coords=new std::vector<std::pair<int,int>>(cur_coords2);
-        exists_cur_coord=this->multimappers.insert(std::pair<std::vector<std::pair<int,int>>,std::vector<const std::vector<std::pair<int,int> >* > >(cur_coords1,{}));
-        exists_cur_coord.first->second.push_back(new_coords);
-        cur_coords1.clear();
-        cur_coords2.clear();
-    }
-    multistream.close();
-    std::cout<<"Loaded Multimapper Data"<<std::endl;
+        std::ios::sync_with_stdio(false);
+        std::cout<<"Reading the Gene Coordinate data: "<<glstFP<<std::endl;
+        
+        // GffTranscript t=transcripts[0]// single gfftranscript record used to access the chromosome map
+        std::string gline;
+        count=0;
+        std::string geneID,gstrand,gstart,gend;
+        while (std::getline(glststream,gline)){
+            ss.str(gline);
+            ss.clear();
 
-    // reading in the gene coordinate file
-    glststream.open(glstFP.c_str(),std::ios::in);
-    if(!glststream.good()){
-        std::cerr<<"FATAL: Couldn't open gene coordinate data: "<<glstFP<<std::endl;
-        exit(1);
+            std::getline(ss,geneID,'\t');
+            std::getline(ss,gstrand,'\t');
+            std::getline(ss,gstart,'\t');
+            std::getline(ss,gend,'\t');
+            this->gene_coords.insert(std::make_pair(make_coord_range(atoi(gstrand.c_str()),atoi(gstart.c_str()),atoi(gend.c_str())),count));
+            count++;
+        }
+        glststream.close();
+        std::cout<<"Loaded Gene Coordinate Data"<<std::endl;
     }
-
-    std::ios::sync_with_stdio(false);
-    std::cout<<"Reading the Gene Coordinate data: "<<glstFP<<std::endl;
-    
-    // GffTranscript t=transcripts[0]// single gfftranscript record used to access the chromosome map
-    std::string gline;
-    count=0;
-    std::string geneID,gstrand,gstart,gend;
-    while (std::getline(glststream,gline)){
-        ss.str(gline);
-        ss.clear();
-
-        std::getline(ss,geneID,'\t');
-        std::getline(ss,gstrand,'\t');
-        std::getline(ss,gstart,'\t');
-        std::getline(ss,gend,'\t');
-        this->gene_coords.insert(std::make_pair(make_coord_range(atoi(gstrand.c_str()),atoi(gstart.c_str()),atoi(gend.c_str())),count));
-        count++;
-    }
-    glststream.close();
-    std::cout<<"Loaded Gene Coordinate Data"<<std::endl;
 
     // let's access the chromosome map through the transcript data as
     // p_trans->names.getSeqName()
@@ -527,7 +530,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
     bool start=true;
 
     while(sam_read1(al,al_hdr,curAl)>0){
-        std::cout<<bam_get_qname(curAl)<<std::endl;
+        // std::cout<<bam_get_qname(curAl)<<std::endl;
         std::string newReadName=bam_get_qname(curAl);
         // std::cout<<newReadName<<std::endl;
         if (newReadName.compare(curReadName)==0 || start){
@@ -642,24 +645,26 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                 std::pair<std::vector<std::pair<int,int>>, std::vector<std::pair<int,int>>> tmpKey=std::make_pair(al_coords,mr->coords);
                                 if (curReadGroup_paired.find(tmpKey)==curReadGroup_paired.end()){
                                     curReadGroup_paired[tmpKey]=new MatePair(bam_dup1(curAl),bam_dup1(mr->al));
-                                    // this is where it now needs to search for the multimappers
-                                    exists_al_coord_mate1=this->multimappers.find(al_coords);
-                                    if(this->exists_al_coord_mate1!=this->multimappers.end()){ // found multimappers for one mate
-                                        exists_al_coord_mate2=this->multimappers.find(mr->coords);
-                                        if(this->exists_al_coord_mate2!=this->multimappers.end()){ // found multimappers for the second mate as well
-                                            // now need to identify matches that belong to the same gene
-                                            for(auto cor1:this->exists_al_coord_mate1->second){
-                                                for(auto cor2:this->exists_al_coord_mate2->second){
-                                                    this->exists_geneID_mate1=gene_coords.find(make_coord_range(cor1->operator[](0).second,cor1->operator[](1).first,cor1->operator[](1).first));
-                                                    this->exists_geneID_mate2=gene_coords.find(make_coord_range(cor2->operator[](0).second,cor2->operator[](1).first,cor2->operator[](1).first));
-                                                    if(this->exists_geneID_mate1!=this->gene_coords.end() &&
-                                                       this->exists_geneID_mate2!=this->gene_coords.end() &&
-                                                       this->exists_geneID_mate1->second==this->exists_geneID_mate2->second){ // both identified, and geneIDs match
-                                                        // can now safely add to the multimappers
-                                                        // std::cout<<"ADDING PAIR MULTI #1"<<std::endl;
-                                                        add_multimapper_pair(cor1,cor2,curAl,mr->al);
-                                                    }
-                                                }                                            
+                                    if(this->multi_flag){
+                                        // this is where it now needs to search for the multimappers
+                                        exists_al_coord_mate1=this->multimappers.find(al_coords);
+                                        if(this->exists_al_coord_mate1!=this->multimappers.end()){ // found multimappers for one mate
+                                            exists_al_coord_mate2=this->multimappers.find(mr->coords);
+                                            if(this->exists_al_coord_mate2!=this->multimappers.end()){ // found multimappers for the second mate as well
+                                                // now need to identify matches that belong to the same gene
+                                                for(auto cor1:this->exists_al_coord_mate1->second){
+                                                    for(auto cor2:this->exists_al_coord_mate2->second){
+                                                        this->exists_geneID_mate1=gene_coords.find(make_coord_range(cor1->operator[](0).second,cor1->operator[](1).first,cor1->operator[](1).first));
+                                                        this->exists_geneID_mate2=gene_coords.find(make_coord_range(cor2->operator[](0).second,cor2->operator[](1).first,cor2->operator[](1).first));
+                                                        if(this->exists_geneID_mate1!=this->gene_coords.end() &&
+                                                           this->exists_geneID_mate2!=this->gene_coords.end() &&
+                                                           this->exists_geneID_mate1->second==this->exists_geneID_mate2->second){ // both identified, and geneIDs match
+                                                            // can now safely add to the multimappers
+                                                            // std::cout<<"ADDING PAIR MULTI #1"<<std::endl;
+                                                            add_multimapper_pair(cor1,cor2,curAl,mr->al);
+                                                        }
+                                                    }                                            
+                                                }
                                             }
                                         }
                                     }
@@ -688,24 +693,26 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                 std::pair<std::vector<std::pair<int,int>>, std::vector<std::pair<int,int>>> tmpKey=std::make_pair(mr->coords,al_coords);
                                 if (curReadGroup_paired.find(tmpKey)==curReadGroup_paired.end()){
                                     curReadGroup_paired[tmpKey]=new MatePair(bam_dup1(mr->al),bam_dup1(curAl));
+                                    if(this->multi_flag){
                                     // this is where it now needs to search for the multimappers
                                     exists_al_coord_mate2=this->multimappers.find(mr->coords);
-                                    if(this->exists_al_coord_mate2!=this->multimappers.end()){ // found multimappers for one mate
-                                        exists_al_coord_mate1=this->multimappers.find(al_coords);
-                                        if(this->exists_al_coord_mate1!=this->multimappers.end()){ // found multimappers for the second mate as well
-                                            // now need to identify matches that belong to the same gene
-                                            for(auto cor2:this->exists_al_coord_mate2->second){
-                                                for(auto cor1:this->exists_al_coord_mate1->second){
-                                                    this->exists_geneID_mate2=gene_coords.find(make_coord_range(cor2->operator[](0).second,cor2->operator[](1).first,cor2->operator[](1).first));
-                                                    this->exists_geneID_mate1=gene_coords.find(make_coord_range(cor1->operator[](0).second,cor1->operator[](1).first,cor1->operator[](1).first));
-                                                    if(this->exists_geneID_mate2!=this->gene_coords.end() &&
-                                                       this->exists_geneID_mate1!=this->gene_coords.end() &&
-                                                       this->exists_geneID_mate2->second==this->exists_geneID_mate1->second){ // both identified, and geneIDs match
-                                                        // can now safely add to the multimappers
-                                                        // std::cout<<"ADDING PAIR MULTI #2"<<std::endl;
-                                                        add_multimapper_pair(cor2,cor1,mr->al,curAl);
-                                                    }
-                                                }                                            
+                                        if(this->exists_al_coord_mate2!=this->multimappers.end()){ // found multimappers for one mate
+                                            exists_al_coord_mate1=this->multimappers.find(al_coords);
+                                            if(this->exists_al_coord_mate1!=this->multimappers.end()){ // found multimappers for the second mate as well
+                                                // now need to identify matches that belong to the same gene
+                                                for(auto cor2:this->exists_al_coord_mate2->second){
+                                                    for(auto cor1:this->exists_al_coord_mate1->second){
+                                                        this->exists_geneID_mate2=gene_coords.find(make_coord_range(cor2->operator[](0).second,cor2->operator[](1).first,cor2->operator[](1).first));
+                                                        this->exists_geneID_mate1=gene_coords.find(make_coord_range(cor1->operator[](0).second,cor1->operator[](1).first,cor1->operator[](1).first));
+                                                        if(this->exists_geneID_mate2!=this->gene_coords.end() &&
+                                                           this->exists_geneID_mate1!=this->gene_coords.end() &&
+                                                           this->exists_geneID_mate2->second==this->exists_geneID_mate1->second){ // both identified, and geneIDs match
+                                                            // can now safely add to the multimappers
+                                                            // std::cout<<"ADDING PAIR MULTI #2"<<std::endl;
+                                                            add_multimapper_pair(cor2,cor1,mr->al,curAl);
+                                                        }
+                                                    }                                            
+                                                }
                                             }
                                         }
                                     }
@@ -728,135 +735,137 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                 }
                 else{
                     curReadGroup[al_coords]=bam_dup1(curAl);
-                    // now add the multimappers to the dictionary
-                    //first check if any exist in the map
-                    this->exists_al_coord=this->multimappers.find(al_coords);
-                    if(this->exists_al_coord!=this->multimappers.end()){ // found multimappers and need to add them to the current groups
-                        // first need to somehow evaluate whether both mates of the pair have been identified
-                        for(auto cor:this->exists_al_coord->second){ // add each of the multimappers to the group
-                            exists_curReadGroup=curReadGroup.insert(std::make_pair(*cor,bam_dup1(curAl)));
-                            if(exists_curReadGroup.second){ // if the key did not previously exist - we can modify the alignment record and insert it into the map
-                                // first change the read start, chromosome - no need to modify the reverse/non-reverse in flag right now, since multimappers don't take that into account
-                                curReadGroup[*cor]->core.pos=cor->operator[](1).first; //read start
-                                curReadGroup[*cor]->core.tid=ref_to_id[id_to_ref_mult[cor->operator[](0).first]];
-                                // second need to change cigar string
+                    if(this->multi_flag){
+                        // now add the multimappers to the dictionary
+                        //first check if any exist in the map
+                        this->exists_al_coord=this->multimappers.find(al_coords);
+                        if(this->exists_al_coord!=this->multimappers.end()){ // found multimappers and need to add them to the current groups
+                            // first need to somehow evaluate whether both mates of the pair have been identified
+                            for(auto cor:this->exists_al_coord->second){ // add each of the multimappers to the group
+                                exists_curReadGroup=curReadGroup.insert(std::make_pair(*cor,bam_dup1(curAl)));
+                                if(exists_curReadGroup.second){ // if the key did not previously exist - we can modify the alignment record and insert it into the map
+                                    // first change the read start, chromosome - no need to modify the reverse/non-reverse in flag right now, since multimappers don't take that into account
+                                    curReadGroup[*cor]->core.pos=cor->operator[](1).first; //read start
+                                    curReadGroup[*cor]->core.tid=ref_to_id[id_to_ref_mult[cor->operator[](0).first]];
+                                    // second need to change cigar string
 
-                                int mult_num_cigars=0; // defines the current position in the cigar string to which we are adding
-                                int mult_cigars[MAX_CIGARS];
-                                uint32_t *cigar_full=bam_get_cigar(curAl);
-                                int opcode=bam_cigar_op(cigar_full[0]);
-                                int oplength=0;
-                                if(opcode==BAM_CSOFT_CLIP){ // first see if there is soft clipping at the start of the read
-                                    oplength=bam_cigar_oplen(cigar_full[0]);
-                                    mult_cigars[mult_num_cigars]=opcode|(oplength<<BAM_CIGAR_SHIFT);
-                                    mult_num_cigars++;
-                                }
-                                //next see if there is soft clipping at the end of the read
-                                opcode=bam_cigar_op(cigar_full[curAl->core.n_cigar]);
-                                int last_oplength=0;
-                                if(opcode==BAM_CSOFT_CLIP){
-                                    last_oplength=bam_cigar_oplen(cigar_full[curAl->core.n_cigar]);
-                                    // this soft clipping should be added at the very end
-                                }
-                                // now modify the end of the multimapper coordinates to accomodate for the potential soft clipping at the end
-                                std::pair<int,int> cur_pair;
-                                int last_pos=cor->at(cor->size()-1).second;
-                                int num_unused_seg=0;
-                                for(int curPairPos=cor->size()-1;curPairPos>0;curPairPos--){ //move back through exons, and record the position of where the end is
-                                    cur_pair=cor->operator[](curPairPos);
-                                    int cur_seg_length=cur_pair.second-cur_pair.first;
-                                    if(cur_seg_length>last_oplength){
-                                        // cor->at(curPairPos).second-=last_oplength;
-                                        last_pos=cor->at(curPairPos).second-last_oplength;
-                                        break;
+                                    int mult_num_cigars=0; // defines the current position in the cigar string to which we are adding
+                                    int mult_cigars[MAX_CIGARS];
+                                    uint32_t *cigar_full=bam_get_cigar(curAl);
+                                    int opcode=bam_cigar_op(cigar_full[0]);
+                                    int oplength=0;
+                                    if(opcode==BAM_CSOFT_CLIP){ // first see if there is soft clipping at the start of the read
+                                        oplength=bam_cigar_oplen(cigar_full[0]);
+                                        mult_cigars[mult_num_cigars]=opcode|(oplength<<BAM_CIGAR_SHIFT);
+                                        mult_num_cigars++;
                                     }
-                                    else{
-                                        last_oplength-=(cur_pair.second-cur_pair.first);
-                                        num_unused_seg++;
-                                        // cor->pop_back();
+                                    //next see if there is soft clipping at the end of the read
+                                    opcode=bam_cigar_op(cigar_full[curAl->core.n_cigar]);
+                                    int last_oplength=0;
+                                    if(opcode==BAM_CSOFT_CLIP){
+                                        last_oplength=bam_cigar_oplen(cigar_full[curAl->core.n_cigar]);
+                                        // this soft clipping should be added at the very end
                                     }
-                                }
-
-                                // the rest between the coordinates, should be filled in with the values from the multimapping coordinate vector
-                                // int bases_seen=oplength; // keep track of the number of bases of a multimapper that have been encountered so far
-                                bool firstmatch=true;
-                                for(int i=1;i<cor->size()-num_unused_seg;i++){
-                                    cur_pair=cor->operator[](i);
-                                    if(oplength+cur_pair.first>=cur_pair.second){
-                                        oplength=oplength-(cur_pair.second-cur_pair.first);
-                                        continue;
-                                    }
-                                    else{
-                                        if(!firstmatch){
-                                            mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|((cor->operator[](i-1).second-cur_pair.first)<<BAM_CIGAR_SHIFT);
-                                            mult_num_cigars++;
-                                            // bases_seen+=(cor->operator[](i-1).second-cur_pair.first);
+                                    // now modify the end of the multimapper coordinates to accomodate for the potential soft clipping at the end
+                                    std::pair<int,int> cur_pair;
+                                    int last_pos=cor->at(cor->size()-1).second;
+                                    int num_unused_seg=0;
+                                    for(int curPairPos=cor->size()-1;curPairPos>0;curPairPos--){ //move back through exons, and record the position of where the end is
+                                        cur_pair=cor->operator[](curPairPos);
+                                        int cur_seg_length=cur_pair.second-cur_pair.first;
+                                        if(cur_seg_length>last_oplength){
+                                            // cor->at(curPairPos).second-=last_oplength;
+                                            last_pos=cor->at(curPairPos).second-last_oplength;
+                                            break;
                                         }
-                                        int cur_pair_len=((cur_pair.second-cur_pair.first)-oplength);
-                                        if(i==cor->size()-1){ // test if we've reached the last seq in coordinate vector and account for the possible soft clipping
+                                        else{
+                                            last_oplength-=(cur_pair.second-cur_pair.first);
+                                            num_unused_seg++;
+                                            // cor->pop_back();
+                                        }
+                                    }
+
+                                    // the rest between the coordinates, should be filled in with the values from the multimapping coordinate vector
+                                    // int bases_seen=oplength; // keep track of the number of bases of a multimapper that have been encountered so far
+                                    bool firstmatch=true;
+                                    for(int i=1;i<cor->size()-num_unused_seg;i++){
+                                        cur_pair=cor->operator[](i);
+                                        if(oplength+cur_pair.first>=cur_pair.second){
+                                            oplength=oplength-(cur_pair.second-cur_pair.first);
+                                            continue;
+                                        }
+                                        else{
+                                            if(!firstmatch){
+                                                mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|((cor->operator[](i-1).second-cur_pair.first)<<BAM_CIGAR_SHIFT);
+                                                mult_num_cigars++;
+                                                // bases_seen+=(cor->operator[](i-1).second-cur_pair.first);
+                                            }
+                                            int cur_pair_len=((cur_pair.second-cur_pair.first)-oplength);
+                                            if(i==cor->size()-1){ // test if we've reached the last seq in coordinate vector and account for the possible soft clipping
+                                                mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
+                                                // bases_seen+=cur_pair_len;
+                                                oplength=0; // reset since it has been used
+                                                mult_num_cigars++;
+                                                firstmatch=false;
+                                            }
                                             mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
                                             // bases_seen+=cur_pair_len;
                                             oplength=0; // reset since it has been used
                                             mult_num_cigars++;
-                                            firstmatch=false;
+                                            firstmatch=false; // next time we get here - we need to add an exon
                                         }
-                                        mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
-                                        // bases_seen+=cur_pair_len;
-                                        oplength=0; // reset since it has been used
-                                        mult_num_cigars++;
-                                        firstmatch=false; // next time we get here - we need to add an exon
                                     }
+                                    if(last_oplength>0){
+                                        mult_cigars[mult_num_cigars]=BAM_CSOFT_CLIP|(last_oplength<<BAM_CIGAR_SHIFT);
+                                        mult_num_cigars++;
+                                    }
+
+                                    int data_len=curReadGroup[*cor]->l_data+4*(mult_num_cigars-curAl->core.n_cigar);
+                                    int m_data=std::max(data_len,(int)curReadGroup[*cor]->m_data);
+                                    kroundup32(m_data);
+
+                                    uint8_t* data = (uint8_t*)calloc(m_data,1);
+
+                                    int copy1_len = (uint8_t*)bam_get_cigar(curReadGroup[*cor]) - curReadGroup[*cor]->data;
+                                    memcpy(data, curReadGroup[*cor]->data, copy1_len);
+
+                                    int copy2_len = mult_num_cigars * 4;
+                                    memcpy(data + copy1_len, mult_cigars, copy2_len);
+
+                                    int copy3_len = curReadGroup[*cor]->l_data - copy1_len - (curAl->core.n_cigar * 4);
+                                    memcpy(data + copy1_len + copy2_len, bam_get_seq(curReadGroup[*cor]), copy3_len);
+
+                                    curReadGroup[*cor]->core.n_cigar = mult_num_cigars;
+
+                                    free(curReadGroup[*cor]->data);
+                                    curReadGroup[*cor]->data = data;
+                                    curReadGroup[*cor]->l_data = data_len;
+                                    curReadGroup[*cor]->m_data = m_data;
                                 }
-                                if(last_oplength>0){
-                                    mult_cigars[mult_num_cigars]=BAM_CSOFT_CLIP|(last_oplength<<BAM_CIGAR_SHIFT);
-                                    mult_num_cigars++;
-                                }
-
-                                int data_len=curReadGroup[*cor]->l_data+4*(mult_num_cigars-curAl->core.n_cigar);
-                                int m_data=std::max(data_len,(int)curReadGroup[*cor]->m_data);
-                                kroundup32(m_data);
-
-                                uint8_t* data = (uint8_t*)calloc(m_data,1);
-
-                                int copy1_len = (uint8_t*)bam_get_cigar(curReadGroup[*cor]) - curReadGroup[*cor]->data;
-                                memcpy(data, curReadGroup[*cor]->data, copy1_len);
-
-                                int copy2_len = mult_num_cigars * 4;
-                                memcpy(data + copy1_len, mult_cigars, copy2_len);
-
-                                int copy3_len = curReadGroup[*cor]->l_data - copy1_len - (curAl->core.n_cigar * 4);
-                                memcpy(data + copy1_len + copy2_len, bam_get_seq(curReadGroup[*cor]), copy3_len);
-
-                                curReadGroup[*cor]->core.n_cigar = mult_num_cigars;
-
-                                free(curReadGroup[*cor]->data);
-                                curReadGroup[*cor]->data = data;
-                                curReadGroup[*cor]->l_data = data_len;
-                                curReadGroup[*cor]->m_data = m_data;
+                                // std::cout<<this->id_to_ref_mult[cor->operator[](0).first]<<" "<<cor->operator[](0).second<<std::endl;
                             }
-                            // std::cout<<this->id_to_ref_mult[cor->operator[](0).first]<<" "<<cor->operator[](0).second<<std::endl;
-                        }
 
-                        // std::cout<<"hello"<<std::endl;
-                        // int cpt=0; //counter of the total number of bases
-                        // bool cptf=false; //has the first value passed?
-                        // for(auto v: al_coords){
-                        //     if (cptf){
-                        //         for(int ygh=v.first;ygh<v.second+1;ygh++){
-                        //             cpt++;
-                        //         }
-                        //     }
-                        //     else{
-                        //         cptf=true;
-                        //     }
-                        // }
-                        // std::cout<<"\n================ "<<p_trans->gffID<<std::endl;
-                        // std::cout<<cpt<<" xxx ";
-                        // std::cout<<read_start<<" : "<<cigar_str<<std::endl;
-                        // for(auto v: al_coords){
-                        //     std::cout<<v.first<<":"<<v.second<<" ; ";
-                        // }
-                        // std::cout<<std::endl;
+                            // std::cout<<"hello"<<std::endl;
+                            // int cpt=0; //counter of the total number of bases
+                            // bool cptf=false; //has the first value passed?
+                            // for(auto v: al_coords){
+                            //     if (cptf){
+                            //         for(int ygh=v.first;ygh<v.second+1;ygh++){
+                            //             cpt++;
+                            //         }
+                            //     }
+                            //     else{
+                            //         cptf=true;
+                            //     }
+                            // }
+                            // std::cout<<"\n================ "<<p_trans->gffID<<std::endl;
+                            // std::cout<<cpt<<" xxx ";
+                            // std::cout<<read_start<<" : "<<cigar_str<<std::endl;
+                            // for(auto v: al_coords){
+                            //     std::cout<<v.first<<":"<<v.second<<" ; ";
+                            // }
+                            // std::cout<<std::endl;
+                        }
                     }
                 }
             }
@@ -1113,135 +1122,137 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                 else{
                     // std::string tmpKey=p_trans->refID+"$"+std::to_string(read_start)+"_"+cigar_str;
                     curReadGroup[al_coords]=bam_dup1(curAl);
-                    // now add the multimappers to the dictionary
-                    //first check if any exist in the map
-                    this->exists_al_coord=this->multimappers.find(al_coords);
-                    if(this->exists_al_coord!=this->multimappers.end()){ // found multimappers and need to add them to the current groups
-                        // first need to somehow evaluate whether both mates of the pair have been identified
-                        for(auto cor:this->exists_al_coord->second){ // add each of the multimappers to the group
-                            exists_curReadGroup=curReadGroup.insert(std::make_pair(*cor,bam_dup1(curAl)));
-                            if(exists_curReadGroup.second){ // if the key did not previously exist - we can modify the alignment record and insert it into the map
-                                // first change the read start, chromosome - no need to modify the reverse/non-reverse in flag right now, since multimappers don't take that into account
-                                curReadGroup[*cor]->core.pos=cor->operator[](1).first; //read start
-                                curReadGroup[*cor]->core.tid=ref_to_id[id_to_ref_mult[cor->operator[](0).first]];
-                                // second need to change cigar string
+                    if(this->multi_flag){
+                        // now add the multimappers to the dictionary
+                        //first check if any exist in the map
+                        this->exists_al_coord=this->multimappers.find(al_coords);
+                        if(this->exists_al_coord!=this->multimappers.end()){ // found multimappers and need to add them to the current groups
+                            // first need to somehow evaluate whether both mates of the pair have been identified
+                            for(auto cor:this->exists_al_coord->second){ // add each of the multimappers to the group
+                                exists_curReadGroup=curReadGroup.insert(std::make_pair(*cor,bam_dup1(curAl)));
+                                if(exists_curReadGroup.second){ // if the key did not previously exist - we can modify the alignment record and insert it into the map
+                                    // first change the read start, chromosome - no need to modify the reverse/non-reverse in flag right now, since multimappers don't take that into account
+                                    curReadGroup[*cor]->core.pos=cor->operator[](1).first; //read start
+                                    curReadGroup[*cor]->core.tid=ref_to_id[id_to_ref_mult[cor->operator[](0).first]];
+                                    // second need to change cigar string
 
-                                int mult_num_cigars=0; // defines the current position in the cigar string to which we are adding
-                                int mult_cigars[MAX_CIGARS];
-                                uint32_t *cigar_full=bam_get_cigar(curAl);
-                                int opcode=bam_cigar_op(cigar_full[0]);
-                                int oplength=0;
-                                if(opcode==BAM_CSOFT_CLIP){ // first see if there is soft clipping at the start of the read
-                                    oplength=bam_cigar_oplen(cigar_full[0]);
-                                    mult_cigars[mult_num_cigars]=opcode|(oplength<<BAM_CIGAR_SHIFT);
-                                    mult_num_cigars++;
-                                }
-                                //next see if there is soft clipping at the end of the read
-                                opcode=bam_cigar_op(cigar_full[curAl->core.n_cigar]);
-                                int last_oplength=0;
-                                if(opcode==BAM_CSOFT_CLIP){
-                                    last_oplength=bam_cigar_oplen(cigar_full[curAl->core.n_cigar]);
-                                    // this soft clipping should be added at the very end
-                                }
-                                // now modify the end of the multimapper coordinates to accomodate for the potential soft clipping at the end
-                                std::pair<int,int> cur_pair;
-                                int last_pos=cor->at(cor->size()-1).second;
-                                int num_unused_seg=0;
-                                for(int curPairPos=cor->size()-1;curPairPos>0;curPairPos--){ //move back through exons, and record the position of where the end is
-                                    cur_pair=cor->operator[](curPairPos);
-                                    int cur_seg_length=cur_pair.second-cur_pair.first;
-                                    if(cur_seg_length>last_oplength){
-                                        // cor->at(curPairPos).second-=last_oplength;
-                                        last_pos=cor->at(curPairPos).second-last_oplength;
-                                        break;
+                                    int mult_num_cigars=0; // defines the current position in the cigar string to which we are adding
+                                    int mult_cigars[MAX_CIGARS];
+                                    uint32_t *cigar_full=bam_get_cigar(curAl);
+                                    int opcode=bam_cigar_op(cigar_full[0]);
+                                    int oplength=0;
+                                    if(opcode==BAM_CSOFT_CLIP){ // first see if there is soft clipping at the start of the read
+                                        oplength=bam_cigar_oplen(cigar_full[0]);
+                                        mult_cigars[mult_num_cigars]=opcode|(oplength<<BAM_CIGAR_SHIFT);
+                                        mult_num_cigars++;
                                     }
-                                    else{
-                                        last_oplength-=(cur_pair.second-cur_pair.first);
-                                        num_unused_seg++;
-                                        // cor->pop_back();
+                                    //next see if there is soft clipping at the end of the read
+                                    opcode=bam_cigar_op(cigar_full[curAl->core.n_cigar]);
+                                    int last_oplength=0;
+                                    if(opcode==BAM_CSOFT_CLIP){
+                                        last_oplength=bam_cigar_oplen(cigar_full[curAl->core.n_cigar]);
+                                        // this soft clipping should be added at the very end
                                     }
-                                }
-
-                                // the rest between the coordinates, should be filled in with the values from the multimapping coordinate vector
-                                // int bases_seen=oplength; // keep track of the number of bases of a multimapper that have been encountered so far
-                                bool firstmatch=true;
-                                for(int i=1;i<cor->size()-num_unused_seg;i++){
-                                    cur_pair=cor->operator[](i);
-                                    if(oplength+cur_pair.first>=cur_pair.second){
-                                        oplength=oplength-(cur_pair.second-cur_pair.first);
-                                        continue;
-                                    }
-                                    else{
-                                        if(!firstmatch){
-                                            mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|((cor->operator[](i-1).second-cur_pair.first)<<BAM_CIGAR_SHIFT);
-                                            mult_num_cigars++;
-                                            // bases_seen+=(cor->operator[](i-1).second-cur_pair.first);
+                                    // now modify the end of the multimapper coordinates to accomodate for the potential soft clipping at the end
+                                    std::pair<int,int> cur_pair;
+                                    int last_pos=cor->at(cor->size()-1).second;
+                                    int num_unused_seg=0;
+                                    for(int curPairPos=cor->size()-1;curPairPos>0;curPairPos--){ //move back through exons, and record the position of where the end is
+                                        cur_pair=cor->operator[](curPairPos);
+                                        int cur_seg_length=cur_pair.second-cur_pair.first;
+                                        if(cur_seg_length>last_oplength){
+                                            // cor->at(curPairPos).second-=last_oplength;
+                                            last_pos=cor->at(curPairPos).second-last_oplength;
+                                            break;
                                         }
-                                        int cur_pair_len=((cur_pair.second-cur_pair.first)-oplength);
-                                        if(i==cor->size()-1){ // test if we've reached the last seq in coordinate vector and account for the possible soft clipping
+                                        else{
+                                            last_oplength-=(cur_pair.second-cur_pair.first);
+                                            num_unused_seg++;
+                                            // cor->pop_back();
+                                        }
+                                    }
+
+                                    // the rest between the coordinates, should be filled in with the values from the multimapping coordinate vector
+                                    // int bases_seen=oplength; // keep track of the number of bases of a multimapper that have been encountered so far
+                                    bool firstmatch=true;
+                                    for(int i=1;i<cor->size()-num_unused_seg;i++){
+                                        cur_pair=cor->operator[](i);
+                                        if(oplength+cur_pair.first>=cur_pair.second){
+                                            oplength=oplength-(cur_pair.second-cur_pair.first);
+                                            continue;
+                                        }
+                                        else{
+                                            if(!firstmatch){
+                                                mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|((cor->operator[](i-1).second-cur_pair.first)<<BAM_CIGAR_SHIFT);
+                                                mult_num_cigars++;
+                                                // bases_seen+=(cor->operator[](i-1).second-cur_pair.first);
+                                            }
+                                            int cur_pair_len=((cur_pair.second-cur_pair.first)-oplength);
+                                            if(i==cor->size()-1){ // test if we've reached the last seq in coordinate vector and account for the possible soft clipping
+                                                mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
+                                                // bases_seen+=cur_pair_len;
+                                                oplength=0; // reset since it has been used
+                                                mult_num_cigars++;
+                                                firstmatch=false;
+                                            }
                                             mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
                                             // bases_seen+=cur_pair_len;
                                             oplength=0; // reset since it has been used
                                             mult_num_cigars++;
-                                            firstmatch=false;
+                                            firstmatch=false; // next time we get here - we need to add an exon
                                         }
-                                        mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
-                                        // bases_seen+=cur_pair_len;
-                                        oplength=0; // reset since it has been used
-                                        mult_num_cigars++;
-                                        firstmatch=false; // next time we get here - we need to add an exon
                                     }
+                                    if(last_oplength>0){
+                                        mult_cigars[mult_num_cigars]=BAM_CSOFT_CLIP|(last_oplength<<BAM_CIGAR_SHIFT);
+                                        mult_num_cigars++;
+                                    }
+
+                                    int data_len=curReadGroup[*cor]->l_data+4*(mult_num_cigars-curAl->core.n_cigar);
+                                    int m_data=std::max(data_len,(int)curReadGroup[*cor]->m_data);
+                                    kroundup32(m_data);
+
+                                    uint8_t* data = (uint8_t*)calloc(m_data,1);
+
+                                    int copy1_len = (uint8_t*)bam_get_cigar(curReadGroup[*cor]) - curReadGroup[*cor]->data;
+                                    memcpy(data, curReadGroup[*cor]->data, copy1_len);
+
+                                    int copy2_len = mult_num_cigars * 4;
+                                    memcpy(data + copy1_len, mult_cigars, copy2_len);
+
+                                    int copy3_len = curReadGroup[*cor]->l_data - copy1_len - (curAl->core.n_cigar * 4);
+                                    memcpy(data + copy1_len + copy2_len, bam_get_seq(curReadGroup[*cor]), copy3_len);
+
+                                    curReadGroup[*cor]->core.n_cigar = mult_num_cigars;
+
+                                    free(curReadGroup[*cor]->data);
+                                    curReadGroup[*cor]->data = data;
+                                    curReadGroup[*cor]->l_data = data_len;
+                                    curReadGroup[*cor]->m_data = m_data;
                                 }
-                                if(last_oplength>0){
-                                    mult_cigars[mult_num_cigars]=BAM_CSOFT_CLIP|(last_oplength<<BAM_CIGAR_SHIFT);
-                                    mult_num_cigars++;
-                                }
-
-                                int data_len=curReadGroup[*cor]->l_data+4*(mult_num_cigars-curAl->core.n_cigar);
-                                int m_data=std::max(data_len,(int)curReadGroup[*cor]->m_data);
-                                kroundup32(m_data);
-
-                                uint8_t* data = (uint8_t*)calloc(m_data,1);
-
-                                int copy1_len = (uint8_t*)bam_get_cigar(curReadGroup[*cor]) - curReadGroup[*cor]->data;
-                                memcpy(data, curReadGroup[*cor]->data, copy1_len);
-
-                                int copy2_len = mult_num_cigars * 4;
-                                memcpy(data + copy1_len, mult_cigars, copy2_len);
-
-                                int copy3_len = curReadGroup[*cor]->l_data - copy1_len - (curAl->core.n_cigar * 4);
-                                memcpy(data + copy1_len + copy2_len, bam_get_seq(curReadGroup[*cor]), copy3_len);
-
-                                curReadGroup[*cor]->core.n_cigar = mult_num_cigars;
-
-                                free(curReadGroup[*cor]->data);
-                                curReadGroup[*cor]->data = data;
-                                curReadGroup[*cor]->l_data = data_len;
-                                curReadGroup[*cor]->m_data = m_data;
+                                // std::cout<<this->id_to_ref_mult[cor->operator[](0).first]<<" "<<cor->operator[](0).second<<std::endl;
                             }
-                            // std::cout<<this->id_to_ref_mult[cor->operator[](0).first]<<" "<<cor->operator[](0).second<<std::endl;
-                        }
 
-                        // std::cout<<"hello"<<std::endl;
-                        // int cpt=0; //counter of the total number of bases
-                        // bool cptf=false; //has the first value passed?
-                        // for(auto v: al_coords){
-                        //     if (cptf){
-                        //         for(int ygh=v.first;ygh<v.second+1;ygh++){
-                        //             cpt++;
-                        //         }
-                        //     }
-                        //     else{
-                        //         cptf=true;
-                        //     }
-                        // }
-                        // std::cout<<"\n================ "<<p_trans->gffID<<std::endl;
-                        // std::cout<<cpt<<" xxx ";
-                        // std::cout<<read_start<<" : "<<cigar_str<<std::endl;
-                        // for(auto v: al_coords){
-                        //     std::cout<<v.first<<":"<<v.second<<" ; ";
-                        // }
-                        // std::cout<<std::endl;
+                            // std::cout<<"hello"<<std::endl;
+                            // int cpt=0; //counter of the total number of bases
+                            // bool cptf=false; //has the first value passed?
+                            // for(auto v: al_coords){
+                            //     if (cptf){
+                            //         for(int ygh=v.first;ygh<v.second+1;ygh++){
+                            //             cpt++;
+                            //         }
+                            //     }
+                            //     else{
+                            //         cptf=true;
+                            //     }
+                            // }
+                            // std::cout<<"\n================ "<<p_trans->gffID<<std::endl;
+                            // std::cout<<cpt<<" xxx ";
+                            // std::cout<<read_start<<" : "<<cigar_str<<std::endl;
+                            // for(auto v: al_coords){
+                            //     std::cout<<v.first<<":"<<v.second<<" ; ";
+                            // }
+                            // std::cout<<std::endl;
+                        }
                     }
                 }
             }

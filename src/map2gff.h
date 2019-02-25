@@ -122,7 +122,7 @@ struct coord_cmp {
 
 class Map2GFF{
     public:
-        Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::string& multiFP, const std::string& glstFP);
+        Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::string& multiFP, const std::string& glstFP, const bool& multi_flag);
         ~Map2GFF();
 
         void convert_coords(const std::string& outFP, const std::string& genome_header);
@@ -135,6 +135,8 @@ class Map2GFF{
         void add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, const std::vector<std::pair<int,int>> *cor2, bam1_t *al1, bam1_t *al2);
         
         // coord_range make_coord_range(int strand, int lower, int upper);
+
+        bool multi_flag=false;
 
         GPVec<GffTranscript> transcripts;
         std::unordered_map<std::string,GffTranscript*> tidx_to_t;

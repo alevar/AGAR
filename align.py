@@ -174,17 +174,17 @@ def main(args):
 		if os.path.exists(os.path.abspath(curTMP)+"/sample.trans.un_first.fq"):
 			os.remove(os.path.abspath(curTMP)+"/sample.trans.un_first.fq")
 
-	#samtools view -h -b 
+	# samtools view -h -b 
 	# these can be outsourced to a different thread for removal
 	# in order to save some time
-	# print("converting alignments to BAM and sorting by read name")
-	# subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_first.bam",os.path.abspath(curTMP)+"/sample.trans_first.sam"])
-	# if not args.keep:
-	# 	os.remove(os.path.abspath(curTMP)+"/sample.trans_first.sam")
-	# if alignmentStage==2:
-	# 	subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_second.bam",os.path.abspath(curTMP)+"/sample.trans_second.sam"])
-	# 	if not args.keep:
-	# 		os.remove(os.path.abspath(curTMP)+"/sample.trans_second.sam")
+	print("converting alignments to BAM and sorting by read name")
+	subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_first.bam",os.path.abspath(curTMP)+"/sample.trans_first.sam"])
+	if not args.keep:
+		os.remove(os.path.abspath(curTMP)+"/sample.trans_first.sam")
+	if alignmentStage==2:
+		subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_second.bam",os.path.abspath(curTMP)+"/sample.trans_second.sam"])
+		if not args.keep:
+			os.remove(os.path.abspath(curTMP)+"/sample.trans_second.sam")
 	
 	#trans2genome
 	print("converting coordinates to genomic")
@@ -192,7 +192,7 @@ def main(args):
 					 "-t",os.path.abspath(args.db)+"/db.fasta.tlst",
 					 "-g",os.path.abspath(args.db)+"/db.fasta.glst",
 					 "-m",os.path.abspath(args.db)+"/db.fasta.multi",
-					 "-i",os.path.abspath(curTMP)+"/sample.trans_first.sam", #"-i",os.path.abspath(curTMP)+"/sample.trans_first.bam",
+					 "-i",os.path.abspath(curTMP)+"/sample.trans_first.bam",
 					 "-s",os.path.abspath(args.db)+"/db.genome.header",
 					 "-o",os.path.abspath(curTMP)+"/sample.trans2genome_first.bam"])
 	if os.path.exists(os.path.abspath(curTMP)+"/sample.trans_first.sam") and not args.keep:
