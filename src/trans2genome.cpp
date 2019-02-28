@@ -24,7 +24,7 @@ enum Opt {TLST_FP   = 't',
 
 int main(int argc, char** argv) {
 
-    ArgParse args("Map2GFF");
+    ArgParse args("trans2genome");
     args.add_string(Opt::TLST_FP,"tlst","","");
     args.add_string(Opt::IN_AL,"input","","");
     args.add_string(Opt::OUT_AL,"output","","");
