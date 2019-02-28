@@ -316,6 +316,7 @@ void Map2GFF::add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, 
     std::pair<std::vector<std::pair<int,int>>,std::vector<std::pair<int,int>>> coor_key=std::make_pair(*cor1,*cor2);
     this->exists_curReadGroup_paired=curReadGroup_paired.insert(std::make_pair(coor_key,new MatePair(bam_dup1(al1),bam_dup1(al2))));
     if(exists_curReadGroup_paired.second){ // if the key did not previously exist - we can modify the alignment record and insert it into the map
+        std::cout<<"adding pairs: "<<bam_get_qname(this->curReadGroup_paired[coor_key]->firstMate)<<std::endl;
         // first change the read start, chromosome - no need to modify the reverse/non-reverse in flag right now, since multimappers don't take that into account
         this->curReadGroup_paired[coor_key]->firstMate->core.pos=cor1->operator[](1).first; // set read start
         this->curReadGroup_paired[coor_key]->secondMate->core.pos=cor2->operator[](1).first; // set read start
