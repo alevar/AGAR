@@ -25,8 +25,9 @@ def main(args):
 
 	# gtf_to_fasta
 	print("Extracting fasta from gtf")
-	print(" ".join(["/home/avaraby1/genomicTools/tophat-2.1.2/src/gtf_to_fasta",str(args.kmerlen),args.gff,args.ref,os.path.abspath(args.output)+"/db.fasta"]))
-	subprocess.call(["/home/avaraby1/genomicTools/tophat-2.1.2/src/gtf_to_fasta",str(args.kmerlen),args.gff,args.ref,os.path.abspath(args.output)+"/db.fasta"])
+	gtf_to_fasta_path=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'gtf_to_fasta') # get path to the gtf_to_fasta that was compiled with the package
+	print(" ".join([gtf_to_fasta,str(args.kmerlen),args.gff,args.ref,os.path.abspath(args.output)+"/db.fasta"]))
+	subprocess.call([gtf_to_fasta,str(args.kmerlen),args.gff,args.ref,os.path.abspath(args.output)+"/db.fasta"])
 	# buildGenomeHeader.py
 	print("Building genome header file")
 	buildHeader(os.path.abspath(args.ref)+".fai",os.path.abspath(args.output)+"/db.genome.header")
