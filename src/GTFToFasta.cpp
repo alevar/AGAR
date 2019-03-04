@@ -206,15 +206,16 @@ void GTFToFasta::make_transcriptome(std::string out_fname, int kmer_length)
     tlst_fname.append(".tlst");
     std::ofstream tlst(tlst_fname.c_str());
     std::string multimap_fname(out_fname);
-    multimap_fname.append(".multi");
-    std::ofstream multimap(multimap_fname.c_str());
     FastaRecord cur_contig;
-
-    std::map<std::string,std::tuple<int,int,int>> geneMap; // stores minimum and maximum gene coordinates of transcripts in a given gene
-    std::pair< std::map<
-                std::string,
-                std::tuple<int,int,int>
-            >::iterator,bool> exists_cur_gene;
+    if(this->multi){
+        multimap_fname.append(".multi");
+        std::ofstream multimap(multimap_fname.c_str());
+        std::map<std::string,std::tuple<int,int,int>> geneMap; // stores minimum and maximum gene coordinates of transcripts in a given gene
+        std::pair< std::map<
+                    std::string,
+                    std::tuple<int,int,int>
+                >::iterator,bool> exists_cur_gene;
+    }
     while (fastaReader.good()) {
 
         fastaReader.next(cur_contig);
@@ -282,17 +283,19 @@ void GTFToFasta::make_transcriptome(std::string out_fname, int kmer_length)
     multimap.close();
 
     // write genes to file
-    std::string gene_fname(out_fname);
-    gene_fname.append(".glst");
-    std::ofstream genefp(gene_fname.c_str());
+    if (this->multi){
+        std::string gene_fname(out_fname);
+        gene_fname.append(".glst");
+        std::ofstream genefp(gene_fname.c_str());
 
-    std::map<std::string,std::tuple<int,int,int>>::iterator it=geneMap.begin();
-    while(it!=geneMap.end()){
-        genefp<<it->first<<"\t"<<std::get<0>(it->second)<<"\t"<<std::get<1>(it->second)<<"\t"<<std::get<2>(it->second)<<std::endl;
-        // std::cout<<it->first<<"\t"<<std::get<0>(it->second)<<"\t"<<std::get<1>(it->second)<<"\t"<<std::get<2>(it->second)<<std::endl;
-        it++;
+        std::map<std::string,std::tuple<int,int,int>>::iterator it=geneMap.begin();
+        while(it!=geneMap.end()){
+            genefp<<it->first<<"\t"<<std::get<0>(it->second)<<"\t"<<std::get<1>(it->second)<<"\t"<<std::get<2>(it->second)<<std::endl;
+            // std::cout<<it->first<<"\t"<<std::get<0>(it->second)<<"\t"<<std::get<1>(it->second)<<"\t"<<std::get<2>(it->second)<<std::endl;
+            it++;
+        }
+        genefp.close();
     }
-    genefp.close();
 }
 
 void GTFToFasta::transcript_map()
@@ -358,6 +361,7 @@ int main(int argc, char *argv[])
     args.add_string(Opt::REF_FA,"ref","","");
     args.add_string(Opt::OUT_FA,"output","","");
     args.add_int(Opt::KMER_LEN,"kmer",76,"");
+    args.add_flag(Opt::MULTI_FLAG,"mf","");
     
     args.parse_args(argc,argv);
     
@@ -365,6 +369,7 @@ int main(int argc, char *argv[])
     std::string gtf_fname(args.get_string(Opt::GFF_FP));
     std::string genome_fname(args.get_string(Opt::REF_FA));
     std::string out_fname(args.get_string(Opt::OUT_FA));
+    this->multi=args.get_flag(Opt::MULTI_FLAG);
 
     GTFToFasta gtfToFasta(gtf_fname, genome_fname);
     gtfToFasta.make_transcriptome(out_fname, kmer_length);
