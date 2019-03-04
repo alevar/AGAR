@@ -42,7 +42,7 @@ public:
     // for debugging
     void print_mapping();
 private:
-    bool multi=false;
+    // bool multi=false;
     GffReader gtfReader_;
     // The genome_fhandle_ isn't used anywhere after being
     // initialized, and double opening the fasta file means that pipes
