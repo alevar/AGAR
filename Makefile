@@ -1,5 +1,6 @@
 CC=g++
 CFLAGS=-Wall -std=c++11 -O3
+CXXFLAGS=-Wall -std=c++11 -O3
 TOPDIR := ./
 SRCDIR := $(TOPDIR)src/
 

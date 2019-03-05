@@ -342,7 +342,7 @@ void GTFToFasta::print_mapping()
 
 void gtf2fasta_print_usage() 
 {
-    std::cerr << "Usage: gtf_to_fasta kmer_length transcripts.gtf genome.fa out_file" << std::endl;
+    std::cerr << "Usage: gtf_to_fasta kmer_length transcripts.gtf genome.fa out_file multimapper_flag" << std::endl;
 }
 
 enum Opt {GFF_FP   = 'a',
