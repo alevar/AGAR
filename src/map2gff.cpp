@@ -97,7 +97,6 @@ Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::
         std::ios::sync_with_stdio(false);
         std::cout<<"Reading the Multimapper data: "<<multiFP<<std::endl;
         
-        // GffTranscript t=transcripts[0]// single gfftranscript record used to access the chromosome map
         std::string mline;
 
         std::pair< std::map<
@@ -203,7 +202,6 @@ Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::
         std::ios::sync_with_stdio(false);
         std::cout<<"Reading the Gene Coordinate data: "<<glstFP<<std::endl;
         
-        // GffTranscript t=transcripts[0]// single gfftranscript record used to access the chromosome map
         std::string gline;
         count=0;
         std::string geneID,gstrand,gstart,gend;
@@ -223,7 +221,6 @@ Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::
     }
 
     // let's access the chromosome map through the transcript data as
-    // p_trans->names.getSeqName()
     
     // now initialize the sam file
     al=hts_open(alFP.c_str(),"r");
@@ -281,7 +278,6 @@ int Map2GFF::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_e
                     ++num_cigars;
                 }
                 if (i+1>=exon_list.Count()){
-                    // std::cout<<"hola"<<std::endl;
                     coords.back().second=cur_total_pos;
                     return 0;
                 }
@@ -294,7 +290,6 @@ int Map2GFF::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_e
                 cigars[num_cigars]=BAM_CREF_SKIP | (miss_length <<BAM_CIGAR_SHIFT);
                 cigar_str+=std::to_string(bam_cigar_oplen(cigars[num_cigars]));
                 cigar_str+=bam_cigar_opchr(bam_cigar_op(cigars[num_cigars]));
-                // std::cout<<"added: "<<bam_cigar_opchr(bam_cigar_op(cigars[num_cigars]))<<std::endl;
                 ++num_cigars;
 
                 cur_pos+=match_length+miss_length;
@@ -425,7 +420,6 @@ void Map2GFF::add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, 
         this->curReadGroup_paired[coor_key]->firstMate->m_data = m_data;
         memset(mult_cigars,0,sizeof(mult_cigars));
 
-        // print_cigar(this->curReadGroup_paired[coor_key]->firstMate);
         //========================================
         // Now repeat for mate 2
         //========================================
@@ -489,7 +483,6 @@ void Map2GFF::add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, 
         this->curReadGroup_paired[coor_key]->secondMate->data = data;
         this->curReadGroup_paired[coor_key]->secondMate->l_data = data_len;
         this->curReadGroup_paired[coor_key]->secondMate->m_data = m_data;
-        // print_cigar(this->curReadGroup_paired[coor_key]->secondMate);
     }
 }
 
@@ -513,13 +506,8 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
     bool start=true;
 
     while(sam_read1(al,al_hdr,curAl)>0){
-        // std::cout<<bam_get_qname(curAl)<<std::endl;
         std::string newReadName=bam_get_qname(curAl);
-        // std::cout<<newReadName<<std::endl;
         if (newReadName.compare(curReadName)==0 || start){
-            // if (newReadName.compare("read21068/1304")==0){
-            //     std::cout<<"HELLO READ"<<std::endl;
-            // }
             curReadName=newReadName;
             start=false;
             size_t read_start=0;
@@ -539,7 +527,6 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
             if (!ret_val){
                 std::cerr<<"SOMETHING WRONG WITH GETTING GENOMIC READ START"<<std::endl;
             }
-            // std::cout<<curAl->core.pos<<"\t"<<read_start<<std::endl;
 
             std::string cigar_str="";
             std::vector<std::pair<int,int>> al_coords={}; //coordinate vector of current alignment for lookup in multimappers
@@ -554,11 +541,6 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                 const char *mate_target_name=al_hdr->target_name[curAl->core.mtid];
                 mate_p_trans=tidx_to_t[mate_target_name];
                 bool mate_ret_val=Map2GFF::get_read_start(exon_list,curAl->core.mpos,mate_read_start,mate_i);
-                // std::cout<<curAl->core.mpos<<"\t"<<mate_read_start<<std::endl;
-                // if (!mate_ret_val){
-                //     std::cerr<<"SOMETHING WRONG WITH GETTING GENOMIC MATE READ START"<<std::endl;
-                //     // need aditional cases here
-                // }
 
                 int origRefID=curAl->core.tid, origPos=curAl->core.pos, origMPos=curAl->core.mpos;
                 curAl->core.tid=ref_to_id[p_trans->refID];
@@ -805,27 +787,6 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                 }
                                 // std::cout<<this->id_to_ref_mult[cor->operator[](0).first]<<" "<<cor->operator[](0).second<<std::endl;
                             }
-
-                            // std::cout<<"hello"<<std::endl;
-                            // int cpt=0; //counter of the total number of bases
-                            // bool cptf=false; //has the first value passed?
-                            // for(auto v: al_coords){
-                            //     if (cptf){
-                            //         for(int ygh=v.first;ygh<v.second+1;ygh++){
-                            //             cpt++;
-                            //         }
-                            //     }
-                            //     else{
-                            //         cptf=true;
-                            //     }
-                            // }
-                            // std::cout<<"\n================ "<<p_trans->gffID<<std::endl;
-                            // std::cout<<cpt<<" xxx ";
-                            // std::cout<<read_start<<" : "<<cigar_str<<std::endl;
-                            // for(auto v: al_coords){
-                            //     std::cout<<v.first<<":"<<v.second<<" ; ";
-                            // }
-                            // std::cout<<std::endl;
                         }
                     }
                 }
@@ -834,12 +795,6 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
         else{
             if (!curReadGroup_paired.empty()){
                 if (curReadGroup_tmp.empty()){ // Make sure nothing is left in the tmp group
-                    // // first process to append multimappers
-                    // for (std::pair<std::string,MatePair*> kv: curReadGroup_paired){
-                    //     // get multimappers of both mates
-                    //     exists_mate1=this->multimappers.find(kv.second->firstMate.coords);
-                    //     exists_mate2=this->multimappers.find(kv.second->firstMate.coords);
-                    // }
                     int nh=curReadGroup_paired.size();
                     bool prim=true;
                     for (std::pair<std::pair<std::vector<std::pair<int,int>>, std::vector<std::pair<int,int>>>,MatePair*> kv: curReadGroup_paired){
@@ -854,21 +809,12 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                         
                         // set first alignment as primary and the rest to secondary
                         if (prim){
-                            // if (nh>=2){
-                            //     std::cout<<"FIRST "<<nh<<" "<<bam_get_qname(kv.second->firstMate)<<" "<<bam_flag2str(kv.second->firstMate->core.flag)<<" new: ";
-                            // }
                             kv.second->firstMate->core.flag &= ~BAM_FSECONDARY;
                         }
                         else{
-                            // if (nh>=2){
-                            //     std::cout<<"SECOND "<<bam_get_qname(kv.second->firstMate)<<" "<<bam_flag2str(kv.second->firstMate->core.flag)<<" new: ";
-                            // }
                             kv.second->firstMate->core.flag |= BAM_FSECONDARY;
                         }
                         int ret_sam=sam_write1(outSAM,genome_al_hdr,kv.second->firstMate);
-                        // if (nh>=2){
-                        //     std::cout<<bam_flag2str(kv.second->firstMate->core.flag)<<std::endl;
-                        // }
 
                         // Now process second mate
                         uint8_t* ptr_nh_2=bam_aux_get(kv.second->secondMate,"NH");
@@ -954,32 +900,6 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
             uint32_t *cur_cigar_full=bam_get_cigar(curAl);
             int cigar_ret_val=Map2GFF::convert_cigar(i,cur_intron_len,miss_length,next_exon,match_length,exon_list,num_cigars,read_start,curAl,cigar_str,cigars,al_coords);
 
-            // test al_coords
-            // if (al_coords.size()>2){
-            //     int cpt=0; //counter of the total number of bases
-            //     bool cptf=false; //has the first value passed?
-            //     for(auto v: al_coords){
-            //         if (cptf){
-            //             for(int ygh=v.first;ygh<v.second+1;ygh++){
-            //                 cpt++;
-            //             }
-            //         }
-            //         else{
-            //             cptf=true;
-            //         }
-            //     }
-            //     std::string si="I";
-            //     std::string sd="D";
-            //     if((cpt!=77) && (cigar_str.find(si) == std::string::npos) && (cigar_str.find(sd) == std::string::npos)){
-            //         std::cout<<"\n================ "<<p_trans->gffID<<std::endl;
-            //         std::cout<<cpt<<" xxx ";
-            //         std::cout<<read_start<<" : "<<cigar_str<<std::endl;
-            //         for(auto v: al_coords){
-            //             std::cout<<v.first<<":"<<v.second<<" ; ";
-            //         }
-            //     }
-            // }
-
             if (cigar_ret_val){
                 bool paired=curAl->core.flag           &    1;
                 bool pairedly_aligned=curAl->core.flag &    2;
@@ -988,10 +908,6 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                 const char *mate_target_name=al_hdr->target_name[curAl->core.mtid];
                 mate_p_trans=tidx_to_t[mate_target_name];
                 bool mate_ret_val=Map2GFF::get_read_start(exon_list,curAl->core.mpos,mate_read_start,mate_i);
-                // if (!mate_ret_val){
-                //     std::cerr<<"SOMETHING WRONG WITH GETTING GENOMIC MATE READ START"<<std::endl;
-                //     // need aditional cases here
-                // }
 
                 int origRefID=curAl->core.tid, origPos=curAl->core.pos, origMPos=curAl->core.mpos;
                 curAl->core.tid=ref_to_id[p_trans->refID];
@@ -1053,28 +969,10 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                     if (curAl->core.flag&64){
                         std::string tmpKey_pre=std::to_string(origRefID)+"$"+std::to_string(origPos)+"_"+std::to_string(origMPos);
                         curReadGroup_tmp[tmpKey_pre]=new MateRead(bam_dup1(curAl),read_start,cigar_str,al_coords,cur_cigar_full);
-                        // now add the multimappers to the dictionary
-                        //first check if any exist in the map
-                        // this->exists_al_coord=this->multimappers.find(al_coords);
-                        // if(this->exists_al_coord!=this->multimappers.end()){ // found multimappers and need to add them to the current groups
-                        //     // first need to somehow evaluate whether both mates of the pair have been identified
-                        // }
                     }
                     else if (curAl->core.flag&128){
                         std::string tmpKey_pre=std::to_string(origRefID)+"$"+std::to_string(origMPos)+"_"+std::to_string(origPos);
                         curReadGroup_tmp[tmpKey_pre]=new MateRead(bam_dup1(curAl),read_start,cigar_str,al_coords,cur_cigar_full);
-                        // now add the multimappers to the dictionary
-                        //first check if any exist in the map
-                        // this->exists_al_coord=this->multimappers.find(al_coords);
-                        // if(this->exists_al_coord!=this->multimappers.end()){ // found multimappers and need to add them to the current groups
-                        //     // first need to somehow evaluate whether both mates of the pair have been identified
-
-                        //     // when searching for the mate - can do the following
-                        //     // extract the transcript id of the original multimapper and of the mate multimapper
-                        //     // if both exist then need to figure out if the distance is good enough to be considered a multimapper
-                        //     // we can see if they start position of the mate is within the coordinates of the first multimapper
-                        //     // if so, then we can check the distance between them, to be smaller than n (max intron length)
-                        // }
                     }
                     else{
                         std::cerr<<"mate_error"<<std::endl;
@@ -1182,27 +1080,6 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                 }
                                 // std::cout<<this->id_to_ref_mult[cor->operator[](0).first]<<" "<<cor->operator[](0).second<<std::endl;
                             }
-
-                            // std::cout<<"hello"<<std::endl;
-                            // int cpt=0; //counter of the total number of bases
-                            // bool cptf=false; //has the first value passed?
-                            // for(auto v: al_coords){
-                            //     if (cptf){
-                            //         for(int ygh=v.first;ygh<v.second+1;ygh++){
-                            //             cpt++;
-                            //         }
-                            //     }
-                            //     else{
-                            //         cptf=true;
-                            //     }
-                            // }
-                            // std::cout<<"\n================ "<<p_trans->gffID<<std::endl;
-                            // std::cout<<cpt<<" xxx ";
-                            // std::cout<<read_start<<" : "<<cigar_str<<std::endl;
-                            // for(auto v: al_coords){
-                            //     std::cout<<v.first<<":"<<v.second<<" ; ";
-                            // }
-                            // std::cout<<std::endl;
                         }
                     }
                 }
