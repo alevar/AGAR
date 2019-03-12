@@ -280,6 +280,12 @@ void GTFToFasta::make_transcriptome(std::string out_fname, int kmer_length)
     tlst.close();
     multimap.close();
 
+    for(auto it: this->kmers){
+        if(it.second.size()>1){
+            std::cout<<it.first<<"\t"<<it.second.size()<<std::endl;
+        }
+    }
+
     // write genes to file
     std::string gene_fname(out_fname);
     gene_fname.append(".glst");
@@ -342,14 +348,13 @@ void GTFToFasta::print_mapping()
 
 void gtf2fasta_print_usage() 
 {
-    std::cerr << "Usage: gtf_to_fasta kmer_length transcripts.gtf genome.fa out_file multimapper_flag" << std::endl;
+    std::cerr << "Usage: gtf_to_fasta kmer_length transcripts.gtf genome.fa out_file" << std::endl;
 }
 
 enum Opt {GFF_FP   = 'a',
           REF_FA     = 'r',
           OUT_FA    = 'o',
-          KMER_LEN     = 'k',
-          MULTI_FLAG = 'm'};
+          KMER_LEN     = 'k'};
 
 int main(int argc, char *argv[])
 {
@@ -358,7 +363,6 @@ int main(int argc, char *argv[])
     args.add_string(Opt::REF_FA,"ref","","");
     args.add_string(Opt::OUT_FA,"output","","");
     args.add_int(Opt::KMER_LEN,"kmer",76,"");
-    args.add_flag(Opt::MULTI_FLAG,"mf","");
     
     args.parse_args(argc,argv);
     

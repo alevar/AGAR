@@ -117,7 +117,7 @@ Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::
         int count=0;
         while (std::getline(multistream,mline)){
             count++;
-            if(count%10000==0){
+            if(count%5000000==0){
                 std::cout<<count<<std::endl;
             }
             ss.str(mline);
@@ -322,14 +322,25 @@ void print_cigar(bam1_t *al){
     std::cout<<std::endl;
 }
 
-void Map2GFF::add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, const std::vector<std::pair<int,int>> *cor2, bam1_t *al1, bam1_t *al2){
+void Map2GFF::add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, const std::vector<std::pair<int,int>> *cor2, bam1_t *al1, bam1_t *al2, uint32_t *cur_cigar_full1,uint32_t *cur_cigar_full2){
     std::pair<std::vector<std::pair<int,int>>,std::vector<std::pair<int,int>>> coor_key=std::make_pair(*cor1,*cor2);
     this->exists_curReadGroup_paired=curReadGroup_paired.insert(std::make_pair(coor_key,new MatePair(bam_dup1(al1),bam_dup1(al2))));
     if(exists_curReadGroup_paired.second){ // if the key did not previously exist - we can modify the alignment record and insert it into the map
-        // std::cout<<"adding pairs: "<<bam_get_qname(this->curReadGroup_paired[coor_key]->firstMate)<<std::endl;
-        // print_cigar(this->curReadGroup_paired[coor_key]->firstMate);
-        // std::cout<<"adding pairs: "<<bam_get_qname(al1)<<std::endl;
-        // print_cigar(al1);
+        // std::string nr1=bam_get_qname(this->curReadGroup_paired[coor_key]->firstMate);
+        // std::cout<<nr1<<std::endl;
+        // std::string nr2="SRR2135407.606697";
+        // if (nr1.compare(nr2)==0){
+        //     std::cout<<"adding pairs: "<<nr1<<std::endl;
+        //     print_cigar(this->curReadGroup_paired[coor_key]->firstMate);
+        //     std::cout<<"adding pairs: "<<bam_get_qname(al1)<<std::endl;
+        //     print_cigar(al1);
+        //     for (int c=0;c<3;++c){
+        //         int opcode=bam_cigar_op(cur_cigar_full1[c]);
+        //         int length=bam_cigar_oplen(cur_cigar_full1[c]);
+        //         std::cout<<length<<bam_cigar_opchr(opcode);
+        //     }
+        //     std::cout<<std::endl;
+        // }
 
         // first change the read start, chromosome - no need to modify the reverse/non-reverse in flag right now, since multimappers don't take that into account
         this->curReadGroup_paired[coor_key]->firstMate->core.pos=cor1->operator[](1).first-1; // set read start
@@ -341,84 +352,54 @@ void Map2GFF::add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, 
 
         int mult_num_cigars=0; // defines the current position in the cigar string to which we are adding
         int mult_cigars[MAX_CIGARS];
-        uint32_t *cigar_full=bam_get_cigar(al1);
-        int opcode=bam_cigar_op(cigar_full[0]);
-        int oplength=0;
-        if(opcode==BAM_CSOFT_CLIP){ // first see if there is soft clipping at the start of the read
-            oplength=bam_cigar_oplen(cigar_full[0]);
-            mult_cigars[mult_num_cigars]=opcode|(oplength<<BAM_CIGAR_SHIFT);
-            mult_num_cigars++;
-        }
-        // std::cout<<mult_num_cigars<<std::endl;
-        //next see if there is soft clipping at the end of the read
-        opcode=bam_cigar_op(cigar_full[al1->core.n_cigar-1]);
-        int last_oplength=0;
-        if(opcode==BAM_CSOFT_CLIP){
-            last_oplength=bam_cigar_oplen(cigar_full[al1->core.n_cigar-1]);
-            // this soft clipping should be added at the very end
-        }
-        // now modify the end of the multimapper coordinates to accomodate for the potential soft clipping at the end
-        std::pair<int,int> cur_pair;
-        int last_pos=cor1->at(cor1->size()-1).second;
-        int num_unused_seg=0;
-        for(int curPairPos=cor1->size()-1;curPairPos>0;curPairPos--){ //move back through exons, and record the position of where the end is
-            cur_pair=cor1->operator[](curPairPos);
-            int cur_seg_length=cur_pair.second-cur_pair.first;
-            if(cur_seg_length>last_oplength){
-                last_pos=cor1->at(curPairPos).second-last_oplength;
-                break;
-            }
-            else{
-                last_oplength-=(cur_pair.second-cur_pair.first);
-                num_unused_seg++;
-            }
-        }
 
-        // the rest between the coordinates, should be filled in with the values from the multimapping coordinate vector
-        // int bases_seen=oplength; // keep track of the number of bases of a multimapper that have been encountered so far
-        bool firstmatch=true;
-        for(int i=1;i<cor1->size()-num_unused_seg;i++){
+        std::pair<int,int> cur_pair;
+        int curQueryPos1=0; // keeps track of the position within query on the transcriptome side of the cigar string
+        int curQueryPos2=0; // keep strack of position within query on the genome side
+        int idx1=0; // index of the current position in the original cigar
+        int cql,cqo; // current length and type of cigar position
+        int ntleft=0; // number of nucleotides left from previous operation
+        int intron_len=0; // length of an intron
+        for(int i=1;i<cor1->size();i++){
             cur_pair=cor1->operator[](i);
-            if(oplength+cur_pair.first>=cur_pair.second){
-                oplength=oplength-(cur_pair.second-cur_pair.first);
-                continue;
-            }
-            else{
-                if(!firstmatch){
-                    mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|((cor1->operator[](i-1).second-cur_pair.first)<<BAM_CIGAR_SHIFT);
+            curQueryPos2=curQueryPos2+1+(cur_pair.second-cur_pair.first);
+            while(curQueryPos1<=curQueryPos2){
+                cql=bam_cigar_oplen(cur_cigar_full1[idx1]);
+                cqo=bam_cigar_op(cur_cigar_full1[idx1]);
+                curQueryPos1=curQueryPos1+cql;
+                idx1++;
+                if(curQueryPos1<curQueryPos2){
+                    mult_cigars[mult_num_cigars]=cqo|(cql<<BAM_CIGAR_SHIFT);
                     mult_num_cigars++;
-                    // bases_seen+=(cor->operator[](i-1).second-cur_pair.first);
-                }
-                int cur_pair_len=((cur_pair.second-cur_pair.first)-oplength);
-                if(i==cor1->size()-1){ // test if we've reached the last seq in coordinate vector and account for the possible soft clipping
-                    mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
-                    // bases_seen+=cur_pair_len;
-                    oplength=0; // reset since it has been used
-                    mult_num_cigars++;
-                    firstmatch=false;
                 }
                 else{
-                    mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
-                    // bases_seen+=cur_pair_len;
-                    oplength=0; // reset since it has been used
-                    mult_num_cigars++;
-                    firstmatch=false; // next time we get here - we need to add an exon
+                    idx1--;
+                    ntleft=curQueryPos2-(curQueryPos1-cql);
+                    if(ntleft>0){
+                        mult_cigars[mult_num_cigars]=cqo|(ntleft<<BAM_CIGAR_SHIFT);
+                        mult_num_cigars++;
+                        break;
+                    }
                 }
             }
+            if(i<(cor1->size()-1)){
+                intron_len=cor1->operator[](i+1).first-cur_pair.second;
+                mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|(intron_len<<BAM_CIGAR_SHIFT);
+                mult_num_cigars++;
+            }
         }
-        if(last_oplength>0){
-            // std::cout<<"last oplength: "<<last_oplength<<std::endl;
-            mult_cigars[mult_num_cigars]=BAM_CSOFT_CLIP|(last_oplength<<BAM_CIGAR_SHIFT);
-            mult_num_cigars++;
-        }
+        mult_num_cigars--;
+
         // debug
-        // std::cout<<mult_num_cigars<<" : "<<sizeof(mult_cigars)/sizeof(mult_cigars[0])<<std::endl;
-        // for (int c=0;c<mult_num_cigars;++c){
-        //     int o=bam_cigar_op(mult_cigars[c]);
-        //     int l=bam_cigar_oplen(mult_cigars[c]);
-        //     std::cout<<l<<bam_cigar_opchr(o);
+        // if (nr1.compare(nr2)==0){
+        //     // std::cout<<mult_num_cigars<<" : "<<sizeof(mult_cigars)/sizeof(mult_cigars[0])<<std::endl;
+        //     for (int c=0;c<=mult_num_cigars;++c){
+        //         int o=bam_cigar_op(mult_cigars[c]);
+        //         int l=bam_cigar_oplen(mult_cigars[c]);
+        //         std::cout<<l<<bam_cigar_opchr(o);
+        //     }
+        //     std::cout<<std::endl;
         // }
-        // std::cout<<std::endl;
         //end debug
 
         int data_len=this->curReadGroup_paired[coor_key]->firstMate->l_data+4*(mult_num_cigars-al1->core.n_cigar);
@@ -450,73 +431,42 @@ void Map2GFF::add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, 
         //========================================
 
         mult_num_cigars=0; // defines the current position in the cigar string to which we are adding
-        cigar_full=bam_get_cigar(al2);
-        opcode=bam_cigar_op(cigar_full[0]);
-        oplength=0;
-        if(opcode==BAM_CSOFT_CLIP){ // first see if there is soft clipping at the start of the read
-            oplength=bam_cigar_oplen(cigar_full[0]);
-            mult_cigars[mult_num_cigars]=opcode|(oplength<<BAM_CIGAR_SHIFT);
-            mult_num_cigars++;
-        }
-        //next see if there is soft clipping at the end of the read
-        opcode=bam_cigar_op(cigar_full[al2->core.n_cigar-1]);
-        last_oplength=0;
-        if(opcode==BAM_CSOFT_CLIP){
-            last_oplength=bam_cigar_oplen(cigar_full[al2->core.n_cigar-1]);
-            // this soft clipping should be added at the very end
-        }
-        // now modify the end of the multimapper coordinates to accomodate for the potential soft clipping at the end
-        last_pos=cor2->at(cor2->size()-1).second;
-        num_unused_seg=0;
-        for(int curPairPos=cor2->size()-1;curPairPos>0;curPairPos--){ //move back through exons, and record the position of where the end is
-            cur_pair=cor2->operator[](curPairPos);
-            int cur_seg_length=cur_pair.second-cur_pair.first;
-            if(cur_seg_length>last_oplength){
-                last_pos=cor2->at(curPairPos).second-last_oplength;
-                break;
-            }
-            else{
-                last_oplength-=(cur_pair.second-cur_pair.first);
-                num_unused_seg++;
-            }
-        }
-
-        // the rest between the coordinates, should be filled in with the values from the multimapping coordinate vector
-        // int bases_seen=oplength; // keep track of the number of bases of a multimapper that have been encountered so far
-        firstmatch=true;
-        for(int i=1;i<cor2->size()-num_unused_seg;i++){
+        curQueryPos1=0; // keeps track of the position within query on the transcriptome side of the cigar string
+        curQueryPos2=0; // keep strack of position within query on the genome side
+        idx1=0; // index of the current position in the original cigar
+        cql=0;
+        cqo=0; // current length and type of cigar position
+        ntleft=0; // number of nucleotides left from previous operation
+        intron_len=0; // length of an intron
+        for(int i=1;i<cor2->size();i++){
             cur_pair=cor2->operator[](i);
-            if(oplength+cur_pair.first>=cur_pair.second){
-                oplength=oplength-(cur_pair.second-cur_pair.first);
-                continue;
-            }
-            else{
-                if(!firstmatch){
-                    mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|((cor2->operator[](i-1).second-cur_pair.first)<<BAM_CIGAR_SHIFT);
+            curQueryPos2=curQueryPos2+1+(cur_pair.second-cur_pair.first);
+            while(curQueryPos1<=curQueryPos2){
+                cql=bam_cigar_oplen(cur_cigar_full2[idx1]);
+                cqo=bam_cigar_op(cur_cigar_full2[idx1]);
+                curQueryPos1=curQueryPos1+cql;
+                idx1++;
+                if(curQueryPos1<curQueryPos2){
+                    mult_cigars[mult_num_cigars]=cqo|(cql<<BAM_CIGAR_SHIFT);
                     mult_num_cigars++;
-                    // bases_seen+=(cor->operator[](i-1).second-cur_pair.first);
-                }
-                int cur_pair_len=((cur_pair.second-cur_pair.first)-oplength);
-                if(i==cor2->size()-1){ // test if we've reached the last seq in coordinate vector and account for the possible soft clipping
-                    mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
-                    // bases_seen+=cur_pair_len;
-                    oplength=0; // reset since it has been used
-                    mult_num_cigars++;
-                    firstmatch=false;
                 }
                 else{
-                    mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
-                    // bases_seen+=cur_pair_len;
-                    oplength=0; // reset since it has been used
-                    mult_num_cigars++;
-                    firstmatch=false; // next time we get here - we need to add an exon
+                    idx1--;
+                    ntleft=curQueryPos2-(curQueryPos1-cql);
+                    if(ntleft>0){
+                        mult_cigars[mult_num_cigars]=cqo|(ntleft<<BAM_CIGAR_SHIFT);
+                        mult_num_cigars++;
+                        break;
+                    }
                 }
             }
+            if(i<(cor2->size()-1)){
+                intron_len=cor2->operator[](i+1).first-cur_pair.second;
+                mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|(intron_len<<BAM_CIGAR_SHIFT);
+                mult_num_cigars++;
+            }
         }
-        if(last_oplength>0){
-            mult_cigars[mult_num_cigars]=BAM_CSOFT_CLIP|(last_oplength<<BAM_CIGAR_SHIFT);
-            mult_num_cigars++;
-        }
+        mult_num_cigars--;
 
         data_len=this->curReadGroup_paired[coor_key]->secondMate->l_data+4*(mult_num_cigars-al2->core.n_cigar);
         m_data=std::max(data_len,(int)this->curReadGroup_paired[coor_key]->secondMate->m_data);
@@ -594,6 +544,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
             std::string cigar_str="";
             std::vector<std::pair<int,int>> al_coords={}; //coordinate vector of current alignment for lookup in multimappers
             al_coords.push_back(std::make_pair(ref_to_id_mult[p_trans->refID],p_trans->strand));
+            uint32_t *cur_cigar_full=bam_get_cigar(curAl);
             int cigar_ret_val=Map2GFF::convert_cigar(i,cur_intron_len,miss_length,next_exon,match_length,exon_list,num_cigars,read_start,curAl,cigar_str,cigars,al_coords);
             if (cigar_ret_val){
                 bool paired=curAl->core.flag           &    1;
@@ -669,7 +620,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                     if (curAl->core.flag&64){
                         std::string tmpKey_pre=std::to_string(origRefID)+"$"+std::to_string(origPos)+"_"+std::to_string(origMPos);
                         if (curReadGroup_tmp.find(tmpKey_pre)==curReadGroup_tmp.end()){
-                            curReadGroup_tmp[tmpKey_pre]=new MateRead(bam_dup1(curAl),read_start,cigar_str,al_coords);
+                            curReadGroup_tmp[tmpKey_pre]=new MateRead(bam_dup1(curAl),read_start,cigar_str,al_coords,cur_cigar_full);
                         }
                         else{
                             MateRead *mr=curReadGroup_tmp[tmpKey_pre];
@@ -694,7 +645,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                                            this->exists_geneID_mate1->second==this->exists_geneID_mate2->second){ // both identified, and geneIDs match
                                                             // can now safely add to the multimappers
                                                             // std::cout<<"ADDING PAIR MULTI #1"<<std::endl;
-                                                            add_multimapper_pair(cor1,cor2,curAl,mr->al);
+                                                            add_multimapper_pair(cor1,cor2,curAl,mr->al,cur_cigar_full,mr->cigar_full);
                                                         }
                                                     }                                            
                                                 }
@@ -716,7 +667,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                     else if (curAl->core.flag&128){
                         std::string tmpKey_pre=std::to_string(origRefID)+"$"+std::to_string(origMPos)+"_"+std::to_string(origPos);
                         if (curReadGroup_tmp.find(tmpKey_pre)==curReadGroup_tmp.end()){
-                            curReadGroup_tmp[tmpKey_pre]=new MateRead(bam_dup1(curAl),read_start,cigar_str,al_coords);
+                            curReadGroup_tmp[tmpKey_pre]=new MateRead(bam_dup1(curAl),read_start,cigar_str,al_coords,cur_cigar_full);
                         }
                         else{
                             // now write data where need be
@@ -742,7 +693,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                                            this->exists_geneID_mate2->second==this->exists_geneID_mate1->second){ // both identified, and geneIDs match
                                                             // can now safely add to the multimappers
                                                             // std::cout<<"ADDING PAIR MULTI #2"<<std::endl;
-                                                            add_multimapper_pair(cor2,cor1,mr->al,curAl);
+                                                            add_multimapper_pair(cor2,cor1,mr->al,curAl,mr->cigar_full,cur_cigar_full);
                                                         }
                                                     }                                            
                                                 }
@@ -777,6 +728,14 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                             for(auto cor:this->exists_al_coord->second){ // add each of the multimappers to the group
                                 exists_curReadGroup=curReadGroup.insert(std::make_pair(*cor,bam_dup1(curAl)));
                                 if(exists_curReadGroup.second){ // if the key did not previously exist - we can modify the alignment record and insert it into the map
+                                    // std::string nr1=bam_get_qname(curReadGroup[*cor]);
+                                    // std::cout<<nr1<<std::endl;
+                                    // std::string nr2="SRR2135407.606697";
+                                    // if (nr1.compare(nr2)==0){
+                                    //     std::cout<<"adding pairs: "<<nr1<<std::endl;
+                                    //     print_cigar(curReadGroup[*cor]);
+                                    // }
+
                                     // first change the read start, chromosome - no need to modify the reverse/non-reverse in flag right now, since multimappers don't take that into account
                                     curReadGroup[*cor]->core.pos=cor->operator[](1).first-1; //read start
                                     curReadGroup[*cor]->core.tid=ref_to_id[id_to_ref_mult[cor->operator[](0).first]];
@@ -784,76 +743,43 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
 
                                     int mult_num_cigars=0; // defines the current position in the cigar string to which we are adding
                                     int mult_cigars[MAX_CIGARS];
-                                    uint32_t *cigar_full=bam_get_cigar(curAl);
-                                    int opcode=bam_cigar_op(cigar_full[0]);
-                                    int oplength=0;
-                                    if(opcode==BAM_CSOFT_CLIP){ // first see if there is soft clipping at the start of the read
-                                        oplength=bam_cigar_oplen(cigar_full[0]);
-                                        mult_cigars[mult_num_cigars]=opcode|(oplength<<BAM_CIGAR_SHIFT);
-                                        mult_num_cigars++;
-                                    }
-                                    //next see if there is soft clipping at the end of the read
-                                    opcode=bam_cigar_op(cigar_full[curAl->core.n_cigar-1]);
-                                    int last_oplength=0;
-                                    if(opcode==BAM_CSOFT_CLIP){
-                                        last_oplength=bam_cigar_oplen(cigar_full[curAl->core.n_cigar-1]);
-                                        // this soft clipping should be added at the very end
-                                    }
-                                    // now modify the end of the multimapper coordinates to accomodate for the potential soft clipping at the end
+                                    
                                     std::pair<int,int> cur_pair;
-                                    int last_pos=cor->at(cor->size()-1).second;
-                                    int num_unused_seg=0;
-                                    for(int curPairPos=cor->size()-1;curPairPos>0;curPairPos--){ //move back through exons, and record the position of where the end is
-                                        cur_pair=cor->operator[](curPairPos);
-                                        int cur_seg_length=cur_pair.second-cur_pair.first;
-                                        if(cur_seg_length>last_oplength){
-                                            // cor->at(curPairPos).second-=last_oplength;
-                                            last_pos=cor->at(curPairPos).second-last_oplength;
-                                            break;
-                                        }
-                                        else{
-                                            last_oplength-=(cur_pair.second-cur_pair.first);
-                                            num_unused_seg++;
-                                            // cor->pop_back();
-                                        }
-                                    }
-
-                                    // the rest between the coordinates, should be filled in with the values from the multimapping coordinate vector
-                                    // int bases_seen=oplength; // keep track of the number of bases of a multimapper that have been encountered so far
-                                    bool firstmatch=true;
-                                    for(int i=1;i<cor->size()-num_unused_seg;i++){
+                                    int curQueryPos1=0; // keeps track of the position within query on the transcriptome side of the cigar string
+                                    int curQueryPos2=0; // keep strack of position within query on the genome side
+                                    int idx1=0; // index of the current position in the original cigar
+                                    int cql,cqo; // current length and type of cigar position
+                                    int ntleft=0; // number of nucleotides left from previous operation
+                                    int intron_len=0; // length of an intron
+                                    for(int i=1;i<cor->size();i++){
                                         cur_pair=cor->operator[](i);
-                                        if(oplength+cur_pair.first>=cur_pair.second){
-                                            oplength=oplength-(cur_pair.second-cur_pair.first);
-                                            continue;
-                                        }
-                                        else{
-                                            if(!firstmatch){
-                                                mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|((cor->operator[](i-1).second-cur_pair.first)<<BAM_CIGAR_SHIFT);
+                                        curQueryPos2=curQueryPos2+1+(cur_pair.second-cur_pair.first);
+                                        while(curQueryPos1<=curQueryPos2){
+                                            cql=bam_cigar_oplen(cur_cigar_full[idx1]);
+                                            cqo=bam_cigar_op(cur_cigar_full[idx1]);
+                                            curQueryPos1=curQueryPos1+cql;
+                                            idx1++;
+                                            if(curQueryPos1<curQueryPos2){
+                                                mult_cigars[mult_num_cigars]=cqo|(cql<<BAM_CIGAR_SHIFT);
                                                 mult_num_cigars++;
-                                                // bases_seen+=(cor->operator[](i-1).second-cur_pair.first);
-                                            }
-                                            int cur_pair_len=((cur_pair.second-cur_pair.first)-oplength);
-                                            if(i==cor->size()-1){ // test if we've reached the last seq in coordinate vector and account for the possible soft clipping
-                                                mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
-                                                // bases_seen+=cur_pair_len;
-                                                oplength=0; // reset since it has been used
-                                                mult_num_cigars++;
-                                                firstmatch=false;
                                             }
                                             else{
-                                                mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
-                                                // bases_seen+=cur_pair_len;
-                                                oplength=0; // reset since it has been used
-                                                mult_num_cigars++;
-                                                firstmatch=false; // next time we get here - we need to add an exon
+                                                idx1--;
+                                                ntleft=curQueryPos2-(curQueryPos1-cql);
+                                                if(ntleft>0){
+                                                    mult_cigars[mult_num_cigars]=cqo|(ntleft<<BAM_CIGAR_SHIFT);
+                                                    mult_num_cigars++;
+                                                    break;
+                                                }
                                             }
                                         }
+                                        if(i<(cor->size()-1)){
+                                            intron_len=cor->operator[](i+1).first-cur_pair.second;
+                                            mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|(intron_len<<BAM_CIGAR_SHIFT);
+                                            mult_num_cigars++;
+                                        }
                                     }
-                                    if(last_oplength>0){
-                                        mult_cigars[mult_num_cigars]=BAM_CSOFT_CLIP|(last_oplength<<BAM_CIGAR_SHIFT);
-                                        mult_num_cigars++;
-                                    }
+                                    mult_num_cigars--;
 
                                     int data_len=curReadGroup[*cor]->l_data+4*(mult_num_cigars-curAl->core.n_cigar);
                                     int m_data=std::max(data_len,(int)curReadGroup[*cor]->m_data);
@@ -1025,6 +951,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
             std::string cigar_str="";
             std::vector<std::pair<int,int>> al_coords={}; //coordinate vector of current alignment for lookup in multimappers
             al_coords.push_back(std::make_pair(ref_to_id_mult[p_trans->refID],p_trans->strand));
+            uint32_t *cur_cigar_full=bam_get_cigar(curAl);
             int cigar_ret_val=Map2GFF::convert_cigar(i,cur_intron_len,miss_length,next_exon,match_length,exon_list,num_cigars,read_start,curAl,cigar_str,cigars,al_coords);
 
             // test al_coords
@@ -1125,7 +1052,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                 if (mate_ret_val && paired && pairedly_aligned){
                     if (curAl->core.flag&64){
                         std::string tmpKey_pre=std::to_string(origRefID)+"$"+std::to_string(origPos)+"_"+std::to_string(origMPos);
-                        curReadGroup_tmp[tmpKey_pre]=new MateRead(bam_dup1(curAl),read_start,cigar_str,al_coords);
+                        curReadGroup_tmp[tmpKey_pre]=new MateRead(bam_dup1(curAl),read_start,cigar_str,al_coords,cur_cigar_full);
                         // now add the multimappers to the dictionary
                         //first check if any exist in the map
                         // this->exists_al_coord=this->multimappers.find(al_coords);
@@ -1135,7 +1062,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                     }
                     else if (curAl->core.flag&128){
                         std::string tmpKey_pre=std::to_string(origRefID)+"$"+std::to_string(origMPos)+"_"+std::to_string(origPos);
-                        curReadGroup_tmp[tmpKey_pre]=new MateRead(bam_dup1(curAl),read_start,cigar_str,al_coords);
+                        curReadGroup_tmp[tmpKey_pre]=new MateRead(bam_dup1(curAl),read_start,cigar_str,al_coords,cur_cigar_full);
                         // now add the multimappers to the dictionary
                         //first check if any exist in the map
                         // this->exists_al_coord=this->multimappers.find(al_coords);
@@ -1166,6 +1093,17 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                             for(auto cor:this->exists_al_coord->second){ // add each of the multimappers to the group
                                 exists_curReadGroup=curReadGroup.insert(std::make_pair(*cor,bam_dup1(curAl)));
                                 if(exists_curReadGroup.second){ // if the key did not previously exist - we can modify the alignment record and insert it into the map
+                                    // std::cout<<"hello"<<std::endl;
+                                    // std::string nr1=bam_get_qname(curReadGroup[*cor]);
+                                    // std::cout<<nr1<<std::endl;
+                                    // std::cout<<nr1<<std::endl;
+                                    // std::string nr2="SRR2135407.606697";
+                                    // if (nr1.compare(nr2)==0){
+                                    //     std::cout<<"adding single multi last: "<<nr1<<std::endl;
+                                    //     std::cout<<bam_get_seq(curReadGroup[*cor])<<std::endl;
+                                    //     print_cigar(curReadGroup[*cor]);
+                                    // }
+
                                     // first change the read start, chromosome - no need to modify the reverse/non-reverse in flag right now, since multimappers don't take that into account
                                     curReadGroup[*cor]->core.pos=cor->operator[](1).first-1; //read start
                                     curReadGroup[*cor]->core.tid=ref_to_id[id_to_ref_mult[cor->operator[](0).first]];
@@ -1173,76 +1111,46 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
 
                                     int mult_num_cigars=0; // defines the current position in the cigar string to which we are adding
                                     int mult_cigars[MAX_CIGARS];
-                                    uint32_t *cigar_full=bam_get_cigar(curAl);
-                                    int opcode=bam_cigar_op(cigar_full[0]);
-                                    int oplength=0;
-                                    if(opcode==BAM_CSOFT_CLIP){ // first see if there is soft clipping at the start of the read
-                                        oplength=bam_cigar_oplen(cigar_full[0]);
-                                        mult_cigars[mult_num_cigars]=opcode|(oplength<<BAM_CIGAR_SHIFT);
-                                        mult_num_cigars++;
-                                    }
-                                    //next see if there is soft clipping at the end of the read
-                                    opcode=bam_cigar_op(cigar_full[curAl->core.n_cigar-1]);
-                                    int last_oplength=0;
-                                    if(opcode==BAM_CSOFT_CLIP){
-                                        last_oplength=bam_cigar_oplen(cigar_full[curAl->core.n_cigar-1]);
-                                        // this soft clipping should be added at the very end
-                                    }
-                                    // now modify the end of the multimapper coordinates to accomodate for the potential soft clipping at the end
-                                    std::pair<int,int> cur_pair;
-                                    int last_pos=cor->at(cor->size()-1).second;
-                                    int num_unused_seg=0;
-                                    for(int curPairPos=cor->size()-1;curPairPos>0;curPairPos--){ //move back through exons, and record the position of where the end is
-                                        cur_pair=cor->operator[](curPairPos);
-                                        int cur_seg_length=cur_pair.second-cur_pair.first;
-                                        if(cur_seg_length>last_oplength){
-                                            // cor->at(curPairPos).second-=last_oplength;
-                                            last_pos=cor->at(curPairPos).second-last_oplength;
-                                            break;
-                                        }
-                                        else{
-                                            last_oplength-=(cur_pair.second-cur_pair.first);
-                                            num_unused_seg++;
-                                            // cor->pop_back();
-                                        }
-                                    }
-
+                                    // uint32_t *cigar_full=bam_get_cigar(curAl);
+                                    
                                     // the rest between the coordinates, should be filled in with the values from the multimapping coordinate vector
                                     // int bases_seen=oplength; // keep track of the number of bases of a multimapper that have been encountered so far
-                                    bool firstmatch=true;
-                                    for(int i=1;i<cor->size()-num_unused_seg;i++){
+                                    std::pair<int,int> cur_pair;
+                                    int curQueryPos1=0; // keeps track of the position within query on the transcriptome side of the cigar string
+                                    int curQueryPos2=0; // keep strack of position within query on the genome side
+                                    int idx1=0; // index of the current position in the original cigar
+                                    int cql,cqo; // current length and type of cigar position
+                                    int ntleft=0; // number of nucleotides left from previous operation
+                                    int intron_len=0; // length of an intron
+                                    for(int i=1;i<cor->size();i++){
                                         cur_pair=cor->operator[](i);
-                                        if(oplength+cur_pair.first>=cur_pair.second){
-                                            oplength=oplength-(cur_pair.second-cur_pair.first);
-                                            continue;
-                                        }
-                                        else{
-                                            if(!firstmatch){
-                                                mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|((cor->operator[](i-1).second-cur_pair.first)<<BAM_CIGAR_SHIFT);
+                                        curQueryPos2=curQueryPos2+1+(cur_pair.second-cur_pair.first);
+                                        while(curQueryPos1<=curQueryPos2){
+                                            cql=bam_cigar_oplen(cur_cigar_full[idx1]);
+                                            cqo=bam_cigar_op(cur_cigar_full[idx1]);
+                                            curQueryPos1=curQueryPos1+cql;
+                                            idx1++;
+                                            if(curQueryPos1<curQueryPos2){
+                                                mult_cigars[mult_num_cigars]=cqo|(cql<<BAM_CIGAR_SHIFT);
                                                 mult_num_cigars++;
-                                                // bases_seen+=(cor->operator[](i-1).second-cur_pair.first);
-                                            }
-                                            int cur_pair_len=((cur_pair.second-cur_pair.first)-oplength);
-                                            if(i==cor->size()-1){ // test if we've reached the last seq in coordinate vector and account for the possible soft clipping
-                                                mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
-                                                // bases_seen+=cur_pair_len;
-                                                oplength=0; // reset since it has been used
-                                                mult_num_cigars++;
-                                                firstmatch=false;
                                             }
                                             else{
-                                                mult_cigars[mult_num_cigars]=BAM_CMATCH|(cur_pair_len<<BAM_CIGAR_SHIFT);
-                                                // bases_seen+=cur_pair_len;
-                                                oplength=0; // reset since it has been used
-                                                mult_num_cigars++;
-                                                firstmatch=false; // next time we get here - we need to add an exon
+                                                idx1--;
+                                                ntleft=curQueryPos2-(curQueryPos1-cql);
+                                                if(ntleft>0){
+                                                    mult_cigars[mult_num_cigars]=cqo|(ntleft<<BAM_CIGAR_SHIFT);
+                                                    mult_num_cigars++;
+                                                    break;
+                                                }
                                             }
                                         }
+                                        if(i<(cor->size()-1)){
+                                            intron_len=cor->operator[](i+1).first-cur_pair.second;
+                                            mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|(intron_len<<BAM_CIGAR_SHIFT);
+                                            mult_num_cigars++;
+                                        }
                                     }
-                                    if(last_oplength>0){
-                                        mult_cigars[mult_num_cigars]=BAM_CSOFT_CLIP|(last_oplength<<BAM_CIGAR_SHIFT);
-                                        mult_num_cigars++;
-                                    }
+                                    mult_num_cigars--;
 
                                     int data_len=curReadGroup[*cor]->l_data+4*(mult_num_cigars-curAl->core.n_cigar);
                                     int m_data=std::max(data_len,(int)curReadGroup[*cor]->m_data);
@@ -1265,6 +1173,12 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                     curReadGroup[*cor]->data = data;
                                     curReadGroup[*cor]->l_data = data_len;
                                     curReadGroup[*cor]->m_data = m_data;
+
+                                    // if (nr1.compare(nr2)==0){
+                                    //     std::cout<<"post adding single multi last: "<<nr1<<std::endl;
+                                    //     std::cout<<bam_get_seq(curReadGroup[*cor])<<std::endl;
+                                    //     print_cigar(curReadGroup[*cor]);
+                                    // }
                                 }
                                 // std::cout<<this->id_to_ref_mult[cor->operator[](0).first]<<" "<<cor->operator[](0).second<<std::endl;
                             }
