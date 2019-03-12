@@ -110,7 +110,7 @@ Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::
         std::vector<std::pair<int,int> > cur_coords1,cur_coords2;
         std::stringstream ss(""),sub_ss("");
         std::string pretab,posttab,sub;
-        int chrid,strand,start,end;
+        int strand,start,end;
 
         int max_chrID=0;
         int count=0;
@@ -235,7 +235,7 @@ int Map2GFF::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_e
 
     int cur_total_pos=read_start; // same as cur_pos but includes the soft clipping bases
     int cur_pos=read_start;
-    for (int c=0;c<curAl->core.n_cigar;++c){
+    for (uint8_t c=0;c<curAl->core.n_cigar;++c){
         uint32_t *cigar_full=bam_get_cigar(curAl);
         int opcode=bam_cigar_op(cigar_full[c]);
         int length=bam_cigar_oplen(cigar_full[c]);
@@ -308,7 +308,7 @@ int Map2GFF::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_e
 }
 
 void print_cigar(bam1_t *al){
-    for (int c=0;c<al->core.n_cigar;++c){
+    for (uint8_t c=0;c<al->core.n_cigar;++c){
         uint32_t *cigar_full=bam_get_cigar(al);
         int opcode=bam_cigar_op(cigar_full[c]);
         int length=bam_cigar_oplen(cigar_full[c]);
@@ -355,7 +355,7 @@ void Map2GFF::add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, 
         int cql,cqo; // current length and type of cigar position
         int ntleft=0; // number of nucleotides left from previous operation
         int intron_len=0; // length of an intron
-        for(int i=1;i<cor1->size();i++){
+        for(uint8_t i=1;i<cor1->size();i++){
             cur_pair=cor1->operator[](i);
             curQueryPos2=curQueryPos2+1+(cur_pair.second-cur_pair.first);
             while(curQueryPos1<=curQueryPos2){
@@ -432,7 +432,7 @@ void Map2GFF::add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, 
         cqo=0; // current length and type of cigar position
         ntleft=0; // number of nucleotides left from previous operation
         intron_len=0; // length of an intron
-        for(int i=1;i<cor2->size();i++){
+        for(uint8_t i=1;i<cor2->size();i++){
             cur_pair=cor2->operator[](i);
             curQueryPos2=curQueryPos2+1+(cur_pair.second-cur_pair.first);
             while(curQueryPos1<=curQueryPos2){
@@ -494,7 +494,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
     bam_hdr_t *outSAM_header=bam_hdr_init();
     
     outSAM_header=bam_hdr_dup(genome_al_hdr);
-    int res=sam_hdr_write(outSAM,outSAM_header);
+    sam_hdr_write(outSAM,outSAM_header);
     for (int i=0;i<genome_al_hdr->n_targets;++i){
         ref_to_id[genome_al_hdr->target_name[i]]=i;
     }
@@ -521,7 +521,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
             GSeg *next_exon=NULL;
             int cigars[MAX_CIGARS];
 
-            int cur_pos,match_length,miss_length,cur_intron_len=0,i=0,num_cigars=0;
+            int match_length,miss_length,cur_intron_len=0,i=0,num_cigars=0;
 
             bool ret_val=Map2GFF::get_read_start(exon_list,curAl->core.pos,read_start,i);
             if (!ret_val){
@@ -733,7 +733,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                     int cql,cqo; // current length and type of cigar position
                                     int ntleft=0; // number of nucleotides left from previous operation
                                     int intron_len=0; // length of an intron
-                                    for(int i=1;i<cor->size();i++){
+                                    for(uint8_t i=1;i<cor->size();i++){
                                         cur_pair=cor->operator[](i);
                                         curQueryPos2=curQueryPos2+1+(cur_pair.second-cur_pair.first);
                                         while(curQueryPos1<=curQueryPos2){
@@ -814,7 +814,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                         else{
                             kv.second->firstMate->core.flag |= BAM_FSECONDARY;
                         }
-                        int ret_sam=sam_write1(outSAM,genome_al_hdr,kv.second->firstMate);
+                        sam_write1(outSAM,genome_al_hdr,kv.second->firstMate);
 
                         // Now process second mate
                         uint8_t* ptr_nh_2=bam_aux_get(kv.second->secondMate,"NH");
@@ -832,7 +832,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                         else{
                             kv.second->secondMate->core.flag |= BAM_FSECONDARY;
                         }
-                        ret_sam=sam_write1(outSAM,genome_al_hdr,kv.second->secondMate);
+                        sam_write1(outSAM,genome_al_hdr,kv.second->secondMate);
 
                         delete kv.second;
                         prim=false;
@@ -859,7 +859,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                     else{
                         kv.second->core.flag |= BAM_FSECONDARY;
                     }
-                    int ret_sam=sam_write1(outSAM,genome_al_hdr,kv.second);
+                    sam_write1(outSAM,genome_al_hdr,kv.second);
                     delete kv.second;
                     prim=false;
                 }
@@ -887,7 +887,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
             GSeg *next_exon=NULL;
             int cigars[MAX_CIGARS];
 
-            int cur_pos,match_length,miss_length,cur_intron_len=0,i=0,num_cigars=0;
+            int match_length,miss_length,cur_intron_len=0,i=0,num_cigars=0;
 
             bool ret_val=Map2GFF::get_read_start(exon_list,curAl->core.pos,read_start,i);
             if (!ret_val){
@@ -1020,7 +1020,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                     int cql,cqo; // current length and type of cigar position
                                     int ntleft=0; // number of nucleotides left from previous operation
                                     int intron_len=0; // length of an intron
-                                    for(int i=1;i<cor->size();i++){
+                                    for(uint8_t i=1;i<cor->size();i++){
                                         cur_pair=cor->operator[](i);
                                         curQueryPos2=curQueryPos2+1+(cur_pair.second-cur_pair.first);
                                         while(curQueryPos1<=curQueryPos2){
