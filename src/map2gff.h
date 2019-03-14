@@ -53,13 +53,15 @@ struct MateRead{
     std::vector<std::pair<int,int>> coords;
     int pos;
     uint32_t cigar_full[MAX_CIGARS];
+    int n_cigar;
     std::string cigar;
-    MateRead(bam1_t* curAl,int pos, std::string cigar,std::vector<std::pair<int,int>> al_coords,uint32_t *cf){
+    MateRead(bam1_t* curAl,int pos, std::string cigar,std::vector<std::pair<int,int>> al_coords,uint32_t *cf,int nc){
         this->al=curAl;
         this->pos=pos;
         this->cigar=cigar;
         this->coords=al_coords;
         memcpy(this->cigar_full,cf,MAX_CIGARS);
+        this->n_cigar=nc;
         // this->cigar_full=cf;
     }
     ~MateRead(){
@@ -136,7 +138,9 @@ class Map2GFF{
         void add_to_group();
         int convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_exon,int match_length,GVec<GSeg>& exon_list,
                           int &num_cigars,int read_start,bam1_t* curAl,std::string &cigar_str,int cigars[MAX_CIGARS],std::vector<std::pair<int,int>> &coords);
-        void add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, const std::vector<std::pair<int,int>> *cor2, bam1_t *al1, bam1_t *al2,uint32_t *cur_cigar_full1,uint32_t *cur_cigar_full2);
+        void add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, const std::vector<std::pair<int,int>> *cor2, bam1_t *al1, bam1_t *al2,
+                          uint32_t *cur_cigar_full1,uint32_t *cur_cigar_full2, int n_cigar1, int n_cigar2);
+        void merge_cigar(const std::vector<std::pair<int,int>> *cor,bam1_t *al, uint32_t *cur_cigar_full, int n_cigar);
         
         // coord_range make_coord_range(int strand, int lower, int upper);
 
