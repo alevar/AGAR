@@ -140,7 +140,7 @@ class Map2GFF{
                           int &num_cigars,int read_start,bam1_t* curAl,std::string &cigar_str,int cigars[MAX_CIGARS],std::vector<std::pair<int,int>> &coords);
         void add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, const std::vector<std::pair<int,int>> *cor2, bam1_t *al1, bam1_t *al2,
                           uint32_t *cur_cigar_full1,uint32_t *cur_cigar_full2, int n_cigar1, int n_cigar2);
-        void merge_cigar(const std::vector<std::pair<int,int>> *cor,bam1_t *al, uint32_t *cur_cigar_full, int n_cigar);
+        int merge_cigar(const std::vector<std::pair<int,int>> *cor,bam1_t *al, uint32_t *cur_cigar_full, int n_cigar);
         
         // coord_range make_coord_range(int strand, int lower, int upper);
 
