@@ -327,131 +327,6 @@ int Map2GFF::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_e
     return 1;
 }
 
-// int Map2GFF::merge_cigar(const std::vector<std::pair<int,int>> *cor,bam1_t *al, uint32_t *cigar_full, int n_cigar){
-//     // std::string nr1=bam_get_qname(al);
-//     // std::string nr2="SRR1093930.7206";
-//     // if (nr1.compare(nr2)==0){
-//     //     std::cout<<"adding read: "<<nr1<<std::endl;
-//     //     print_cigar(al);
-//     // }
-
-//     // first change the read start, chromosome - no need to modify the reverse/non-reverse in flag right now, since multimappers don't take that into account
-//     al->core.pos=cor->operator[](1).first-1; // set read start
-
-//     al->core.tid=this->ref_to_id[this->id_to_ref_mult[cor->operator[](0).first]]; // set sequence id
-
-//     int num_cigars=0; // defines the current position in the cigar string to which we are adding
-//     int cigars[MAX_CIGARS];
-
-//     int cur_total_pos=cor->operator[](1).first; // same as cur_pos but includes the soft clipping bases
-//     int cur_pos=cor->operator[](1).first;
-    
-//     int remaining_length=0,i=1,num_pairs=cor->size(),match_length=0,miss_length=0,cur_intron_len=0;
-//     std::pair<int,int> cur_pair,next_pair;
-
-//     for (uint8_t c=0;c<n_cigar;++c){
-//         int opcode=bam_cigar_op(cigar_full[c]);
-//         int length=bam_cigar_oplen(cigar_full[c]);
-        
-//         if (opcode==BAM_CINS){
-//             cigars[num_cigars]=opcode|(length<<BAM_CIGAR_SHIFT);
-//             ++num_cigars;
-//         }
-//         if (opcode==BAM_CSOFT_CLIP){
-//             cigars[num_cigars]=opcode|(length<<BAM_CIGAR_SHIFT);
-//             ++num_cigars;
-//             cur_total_pos+=bam_cigar_oplen(cigars[num_cigars]);
-//         }
-//         if (opcode != BAM_CMATCH && opcode != BAM_CDEL){
-//             continue;
-//         }
-//         remaining_length=length;
-//         for (;i<num_pairs;++i){
-//             cur_pair=cor->operator[](i);
-//             if (cur_pos>=cur_pair.first && cur_pos+remaining_length-1<=cur_pair.second){
-//                 cigars[num_cigars]=opcode | (remaining_length <<BAM_CIGAR_SHIFT);
-//                 ++num_cigars;
-//                 cur_pos+=remaining_length;
-//                 cur_total_pos+=remaining_length;
-//                 break;
-//             }
-//             else if (cur_pos >= cur_pair.first && cur_pos+remaining_length-1>cur_pair.second){
-//                 match_length=cur_pair.second-cur_pos+1;
-//                 if (match_length>0){
-//                     cigars[num_cigars]=opcode | (match_length << BAM_CIGAR_SHIFT);
-//                     ++num_cigars;
-//                 }
-//                 if (i+1>=num_pairs){
-//                     std::cout<<"exiting out"<<std::endl;
-//                     return 0;
-//                 }
-//                 else{
-//                     next_pair=cor->operator[](i+1);
-//                 }
-//                 miss_length=next_pair.first-cur_pair.second-1;
-//                 cur_intron_len+=miss_length;
-                
-//                 cigars[num_cigars]=BAM_CREF_SKIP | (miss_length <<BAM_CIGAR_SHIFT);
-//                 ++num_cigars;
-
-//                 cur_pos+=match_length+miss_length;
-//                 cur_total_pos+=match_length+miss_length;
-
-//                 remaining_length-=match_length;
-//                 assert(cur_pos == next_pair.first);
-//             }
-//         }
-//     }
-
-//     int data_len=al->l_data+4*(num_cigars-n_cigar);
-//     int m_data=std::max(data_len,(int)al->m_data);
-//     kroundup32(m_data);
-
-//     uint8_t* data = (uint8_t*)calloc(m_data,1);
-
-//     int copy1_len = (uint8_t*)bam_get_cigar(al) - al->data;
-//     memcpy(data, al->data, copy1_len);
-
-//     int copy2_len = num_cigars * 4;
-//     memcpy(data + copy1_len, cigars, copy2_len);
-
-//     int copy3_len = al->l_data - copy1_len - (n_cigar * 4);
-//     memcpy(data + copy1_len + copy2_len, bam_get_seq(al), copy3_len);
-
-//     al->core.n_cigar = num_cigars;
-
-//     free(al->data);
-//     al->data = data;
-//     al->l_data = data_len;
-//     al->m_data = m_data;
-//     memset(cigars,0,sizeof(cigars));
-
-//     uint8_t* ptr=bam_aux_get(al,"XS");
-//     if(ptr){
-//         bam_aux_del(al,ptr);
-//     }
-//     if (cor->operator[](0).second=='-'){
-//         bam_aux_append(al,"XS",'A',1,(const unsigned char*)"-");
-//     }
-//     if (cor->operator[](0).second=='+'){
-//         bam_aux_append(al,"XS",'A',1,(const unsigned char*)"+");
-//     }
-
-//     // add optional tag with transcript ID
-//     uint8_t* ptr_op=bam_aux_get(al,"OP");
-//     if(ptr_op){
-//         bam_aux_del(al,ptr_op);
-//     }
-//     // no need to add transcript id here
-
-//     // if (nr1.compare(nr2)==0){
-//     //     std::cout<<"post adding read: "<<nr1<<std::endl;
-//     //     print_cigar(al);
-//     // }
-
-//     return 1;
-// }
-
 int Map2GFF::merge_cigar(const std::vector<std::pair<int,int>> *cor,bam1_t *al, uint32_t *cur_cigar_full, int n_cigar){
     // std::string nr1=bam_get_qname(al);
     // std::string nr2="SRR1093930.7206";
@@ -585,25 +460,7 @@ void Map2GFF::add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, 
 void print_aux(bam1_t *al) {
   uint8_t *s= bam_get_aux(al);
   uint8_t *sStop = s+bam_get_l_aux(al);
-  
-  // while (s < sStop) {
-  //   uint8_t type;
-  //   int doRet =0;
-  //   if(s[0]=='X'&&s[1]=='0')
-  //     doRet = 1;
-
-  //   s += 2; type = *s; ++s;
-  //   if (type == 'A') {if(doRet) return (int) *s ;else  ++s; }
-  //   else if (type == 'C') {if(doRet) return *s;else ++s; }
-  //   else if (type == 'c') {if(doRet) return *(int8_t*)s; else  ++s; }
-  //   else if (type == 'S') {if(doRet) return *(uint16_t*)s; else s += 2; }
-  //   else if (type == 's') {if(doRet) return *(int16_t*)s; else  s += 2; }
-  //   else if (type == 'I') {if(doRet) return *(uint32_t*)s;else  s += 4; }
-  //   else if (type == 'i') {if(doRet) return *(int32_t*)s; else  s += 4; }
-  //   else if (type == 'f') { s += 4; continue; }
-  //   else if (type == 'd') {s += 8;continue; }
-  //   else if (type == 'Z' || type == 'H') return retVal;
-  // }
+  std::cout<<*sStop<<std::endl;
 }
 
 void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome_header){
@@ -627,7 +484,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
 
     while(sam_read1(al,al_hdr,curAl)>0){
         std::string newReadName=bam_get_qname(curAl);
-        if (newReadName.compare(curReadName)==0 || start){
+        if (newReadName == curReadName || start){
             curReadName=newReadName;
             start=false;
             size_t read_start=0;

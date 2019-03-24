@@ -135,7 +135,6 @@ class Map2GFF{
     
     private:
         bool get_read_start(GVec<GSeg>& exon_list,size_t gff_start, size_t& genome_start,int& exon_idx);
-        void add_to_group();
         int convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_exon,int match_length,GVec<GSeg>& exon_list,
                           int &num_cigars,int read_start,bam1_t* curAl,std::string &cigar_str,int cigars[MAX_CIGARS],std::vector<std::pair<int,int>> &coords);
         void add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, const std::vector<std::pair<int,int>> *cor2, bam1_t *al1, bam1_t *al2,
