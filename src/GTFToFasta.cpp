@@ -6,9 +6,7 @@
 //
 #include "GTFToFasta.h"
 
-std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,
-                                FastaRecord &rec, std::string& coords, int kmer_length, std::ofstream& multimap)
-{
+std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::string& coords, int kmer_length, std::ofstream& multimap){
     GList<GffExon>& exon_list = p_trans.exons;
 
     std::string exon_seq;
@@ -175,7 +173,6 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,
     coords = ss.str().substr(1);
     return exon_seq;
 }
-
 
 GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname)
 {

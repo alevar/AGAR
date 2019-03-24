@@ -41,13 +41,14 @@ def main(args):
 	unalignedR2=""
 	unalignedS =""
 	alignmentStage=0 # indicates how many stages have been performed on the current run - important for the cleanup
+	transcriptome_process=None; # process in which transcriptome alignment is performed. it opens a pipe to samtools
+	genome_process=None; # process in which genome alignment is performed. it also opens a pipe to samtools
 	#hisat2
 	if args.type=="hisat":
 		print("aligning with hisat2 against transcriptome")
 		# perform a two-pass alignment one for less redundant transcripts and one for more redundant alignments with the "-a" option enabled
 		hisat2_cmd_trans_noA=["hisat2",
 						      "--no-spliced-alignment",
-						      "--very-sensitive",
 						      "--end-to-end",
 						      "--no-unal",
 						      "-x",os.path.abspath(args.db)+"/db",
@@ -58,12 +59,14 @@ def main(args):
 						 			 "-2",args.m2))
 		if (not args.single==None):
 			hisat2_cmd_trans_noA.extend(("-U",args.single))
-		hisat2_cmd_trans_noA.extend(("-S",os.path.abspath(curTMP)+"/sample.trans_first.sam",
-									 "--un-conc",os.path.abspath(curTMP)+"/sample.trans.unconc_first.fq",
+		# hisat2_cmd_trans_noA.extend(("-S",os.path.abspath(curTMP)+"/sample.trans_first.sam",
+		# 							 "--un-conc",os.path.abspath(curTMP)+"/sample.trans.unconc_first.fq",
+		# 							 "--un",os.path.abspath(curTMP)+"/sample.trans.un_first.fq"))
+		hisat2_cmd_trans_noA.extend(("--un-conc",os.path.abspath(curTMP)+"/sample.trans.unconc_first.fq",
 									 "--un",os.path.abspath(curTMP)+"/sample.trans.un_first.fq"))
 		if (args.hisat):
 			hisat2_cmd_trans_noA.extend(args.hisat)
-		subprocess.call(hisat2_cmd_trans_noA)
+		transcriptome_process=subprocess.Popen(hisat2_cmd_trans_noA,stdout=subprocess.PIPE)
 		unalignedR1=os.path.abspath(curTMP)+"/sample.trans.unconc_first.1.fq"
 		unalignedR2=os.path.abspath(curTMP)+"/sample.trans.unconc_first.2.fq"
 		unalignedS =os.path.abspath(curTMP)+"/sample.trans.un_first.fq"
@@ -73,7 +76,6 @@ def main(args):
 			print("Aligning with hisat2 against transcriptome with -a")
 			hisat2_cmd_trans_A=["hisat2",
 							    "--no-spliced-alignment",
-							    "--very-sensitive",
 							    "--end-to-end",
 							    "--no-unal",
 							    "-a",
@@ -99,7 +101,6 @@ def main(args):
 		print("aligning with bowtie2 against transcriptome")
 		# perform a two-pass alignment one for less redundant transcripts and one for more redundant alignments with the "-a" option enabled
 		bowtie2_cmd_trans_noA=["bowtie2",
-						      "--very-sensitive",
 						      "--end-to-end",
 						      "--no-unal",
 						      "-x",os.path.abspath(args.db)+"/db",
@@ -113,12 +114,14 @@ def main(args):
 						 			 "-2",args.m2))
 		if (not args.single==None):
 			bowtie2_cmd_trans_noA.extend(("-U",args.single))
-		bowtie2_cmd_trans_noA.extend(("-S",os.path.abspath(curTMP)+"/sample.trans_first.sam",
-									 "--un-conc",os.path.abspath(curTMP)+"/sample.trans.unconc_first.fq",
+		# bowtie2_cmd_trans_noA.extend(("-S",os.path.abspath(curTMP)+"/sample.trans_first.sam",
+		# 							 "--un-conc",os.path.abspath(curTMP)+"/sample.trans.unconc_first.fq",
+		# 							 "--un",os.path.abspath(curTMP)+"/sample.trans.un_first.fq"))
+		bowtie2_cmd_trans_noA.extend(("--un-conc",os.path.abspath(curTMP)+"/sample.trans.unconc_first.fq",
 									 "--un",os.path.abspath(curTMP)+"/sample.trans.un_first.fq"))
 		if (args.bowtie):
 			bowtie2_cmd_trans_noA.extend(args.bowtie)
-		subprocess.call(bowtie2_cmd_trans_noA)
+		transcriptome_process=subprocess.Popen(bowtie2_cmd_trans_noA,stdout=subprocess.PIPE)
 		unalignedR1=os.path.abspath(curTMP)+"/sample.trans.unconc_first.1.fq"
 		unalignedR2=os.path.abspath(curTMP)+"/sample.trans.unconc_first.2.fq"
 		unalignedS =os.path.abspath(curTMP)+"/sample.trans.un_first.fq"
@@ -127,7 +130,6 @@ def main(args):
 		if args.all:
 			print("Aligning with bowtie2 against transcriptome with -a")
 			bowtie2_cmd_trans_A=["bowtie2",
-							    "--very-sensitive",
 							    "--end-to-end",
 							    "--no-unal",
 							    "-a",
@@ -149,10 +151,13 @@ def main(args):
 			unalignedS =os.path.abspath(curTMP)+"/sample.trans.un.fq"
 			alignmentStage=2
 
+	subprocess.Popen(["samtools","view","-h","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_first.bam"],stdin=transcriptome_process.stdout)
+	transcriptome_process.wait()
+	transcriptome_process.stdout.close()
+
 	print("aligning with hisat2 against the genome")
 	hisat2_cmd_genome=["hisat2",
                        "--dta",
-					   #  "--very-sensitive",
 					    "--no-unal",
 					   "-x",os.path.abspath(args.genome_db),
 					   "-p",args.threads]
@@ -160,11 +165,13 @@ def main(args):
 		hisat2_cmd_genome.append("-f")
 	hisat2_cmd_genome.extend(("-1",unalignedR1,
 							  "-2",unalignedR2,
-							  "-U",unalignedS,
-							  "-S",os.path.abspath(curTMP)+"/sample.genome.sam"))
+							  "-U",unalignedS))
 	if (args.hisat):
 		hisat2_cmd_genome.extend(args.hisat)
-	subprocess.call(hisat2_cmd_genome)
+	genome_process=subprocess.Popen(hisat2_cmd_genome,stdout=subprocess.PIPE)
+	subprocess.Popen(["samtools","view","-h","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.genome.bam"],stdin=genome_process.stdout)
+	genome_process.wait()
+	genome_process.stdout.close()
 
 	if not args.keep:
 		if os.path.exists(os.path.abspath(curTMP)+"/sample.trans.unconc_first.1.fq"):
@@ -177,12 +184,14 @@ def main(args):
 	# samtools view -h -b 
 	# these can be outsourced to a different thread for removal
 	# in order to save some time
-	print("converting alignments to BAM and sorting by read name")
-	subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_first.bam",os.path.abspath(curTMP)+"/sample.trans_first.sam"])
-	if not args.keep:
-		os.remove(os.path.abspath(curTMP)+"/sample.trans_first.sam")
+	# print("converting alignments to BAM and sorting by read name")
+	# subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_first.bam",os.path.abspath(curTMP)+"/sample.trans_first.sam"])
+	
+	# if not args.keep:
+	# 	os.remove(os.path.abspath(curTMP)+"/sample.trans_first.sam")
 	if alignmentStage==2:
-		subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_second.bam",os.path.abspath(curTMP)+"/sample.trans_second.sam"])
+		# subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_second.bam",os.path.abspath(curTMP)+"/sample.trans_second.sam"])
+		subprocess.call(["samtools","view","-h","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_second.bam",os.path.abspath(curTMP)+"/sample.trans_second.sam"])
 		if not args.keep:
 			os.remove(os.path.abspath(curTMP)+"/sample.trans_second.sam")
 	
@@ -223,11 +232,7 @@ def main(args):
 	if os.path.exists(os.path.abspath(curTMP)+"/sample.trans2genome_second.bam"):
 		merge_cmd.append(os.path.abspath(curTMP)+"/sample.trans2genome_second.bam")
 
-	if os.path.exists(os.path.abspath(curTMP)+"/sample.genome.sam"):
-		subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.genome.bam",os.path.abspath(curTMP)+"/sample.genome.sam"])
-		if not args.keep:
-			os.remove(os.path.abspath(curTMP)+"/sample.genome.sam")
-		merge_cmd.append(os.path.abspath(curTMP)+"/sample.genome.bam")
+	merge_cmd.append(os.path.abspath(curTMP)+"/sample.genome.bam")
 
 	if len(merge_cmd)>6:
 		subprocess.call(merge_cmd)
