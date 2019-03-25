@@ -59,9 +59,6 @@ def main(args):
 						 			 "-2",args.m2))
 		if (not args.single==None):
 			hisat2_cmd_trans_noA.extend(("-U",args.single))
-		# hisat2_cmd_trans_noA.extend(("-S",os.path.abspath(curTMP)+"/sample.trans_first.sam",
-		# 							 "--un-conc",os.path.abspath(curTMP)+"/sample.trans.unconc_first.fq",
-		# 							 "--un",os.path.abspath(curTMP)+"/sample.trans.un_first.fq"))
 		hisat2_cmd_trans_noA.extend(("--un-conc",os.path.abspath(curTMP)+"/sample.trans.unconc_first.fq",
 									 "--un",os.path.abspath(curTMP)+"/sample.trans.un_first.fq"))
 		if (args.hisat):
@@ -114,9 +111,6 @@ def main(args):
 						 			 "-2",args.m2))
 		if (not args.single==None):
 			bowtie2_cmd_trans_noA.extend(("-U",args.single))
-		# bowtie2_cmd_trans_noA.extend(("-S",os.path.abspath(curTMP)+"/sample.trans_first.sam",
-		# 							 "--un-conc",os.path.abspath(curTMP)+"/sample.trans.unconc_first.fq",
-		# 							 "--un",os.path.abspath(curTMP)+"/sample.trans.un_first.fq"))
 		bowtie2_cmd_trans_noA.extend(("--un-conc",os.path.abspath(curTMP)+"/sample.trans.unconc_first.fq",
 									 "--un",os.path.abspath(curTMP)+"/sample.trans.un_first.fq"))
 		if (args.bowtie):
@@ -181,16 +175,7 @@ def main(args):
 		if os.path.exists(os.path.abspath(curTMP)+"/sample.trans.un_first.fq"):
 			os.remove(os.path.abspath(curTMP)+"/sample.trans.un_first.fq")
 
-	# samtools view -h -b 
-	# these can be outsourced to a different thread for removal
-	# in order to save some time
-	# print("converting alignments to BAM and sorting by read name")
-	# subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_first.bam",os.path.abspath(curTMP)+"/sample.trans_first.sam"])
-	
-	# if not args.keep:
-	# 	os.remove(os.path.abspath(curTMP)+"/sample.trans_first.sam")
 	if alignmentStage==2:
-		# subprocess.call(["samtools","sort","-n","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_second.bam",os.path.abspath(curTMP)+"/sample.trans_second.sam"])
 		subprocess.call(["samtools","view","-h","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_second.bam",os.path.abspath(curTMP)+"/sample.trans_second.sam"])
 		if not args.keep:
 			os.remove(os.path.abspath(curTMP)+"/sample.trans_second.sam")
@@ -209,8 +194,6 @@ def main(args):
 	subprocess.call(trans2genome_cmd)
 	if os.path.exists(os.path.abspath(curTMP)+"/sample.trans_first.sam") and not args.keep:
 		os.remove(os.path.abspath(curTMP)+"/sample.trans_first.sam")
-	# if os.path.exists(os.path.abspath(curTMP)+"/sample.trans_first.bam") and not args.keep:
-	# 	os.remove(os.path.abspath(curTMP)+"/sample.trans_first.bam")
 
 	if os.path.exists(os.path.abspath(curTMP)+"/sample.trans_second.bam"):
 		trans2genome_a_cmd=["/home/avaraby1/genomicTools/trans2genome/trans2genome",

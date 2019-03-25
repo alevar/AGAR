@@ -114,80 +114,96 @@ Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::
 
         int max_chrID=0;
         int count=0;
-        while (std::getline(multistream,mline)){
-            count++;
-            if(count%5000000==0){
-                std::cout<<count<<std::endl;
-            }
-            ss.str(mline);
-            ss.clear();
+        #pragma omp parallel private(exists_ri,exists_ri,cur_coords1,cur_coords2,exists_cur_coord,ss,sub_ss,pretab,posttab,sub,strand,start,end) shared(count,max_chrID)
+        {
+            #pragma omp master
+            while (std::getline(multistream,mline)){
+                #pragma omp task
+                {
+                    count++;
+                    if(count%5000000==0){
+                        std::cout<<count<<std::endl;
+                    }
+                    ss.str(mline);
+                    ss.clear();
 
-            std::getline(ss,pretab,'\t');
-            std::getline(ss,posttab,'\t');
+                    std::getline(ss,pretab,'\t');
+                    std::getline(ss,posttab,'\t');
 
-            ss.str(pretab);
-            ss.clear();
-            std::getline(ss,pretab,':');
-            exists_ri=this->ref_to_id_mult.insert(std::make_pair(pretab,max_chrID));
-            if(exists_ri.second){
-                exists_ir=this->id_to_ref_mult.insert(std::make_pair(max_chrID,pretab));
-                if(!exists_ir.second){
-                    std::cerr<<"ERROR. chromosome IDs messed up"<<std::endl;
+                    ss.str(pretab);
+                    ss.clear();
+                    std::getline(ss,pretab,':');
+                    #pragma omp critical
+                    {
+                        exists_ri=this->ref_to_id_mult.insert(std::make_pair(pretab,max_chrID));
+                        if(exists_ri.second){
+                            exists_ir=this->id_to_ref_mult.insert(std::make_pair(max_chrID,pretab));
+                            if(!exists_ir.second){
+                                std::cerr<<"ERROR. chromosome IDs messed up"<<std::endl;
+                            }
+                            max_chrID++;
+                        }
+                    }
+                    std::getline(ss,pretab,'@');
 
+                    // unordered
+                    strand=int(pretab[0]);
+                    cur_coords1.push_back(std::make_pair(exists_ri.first->second,strand));
+                    // 3. get the coordinates
+                    while(std::getline(ss,pretab,',')){
+                        sub_ss.str(pretab);
+                        sub_ss.clear();
+                        // get start coordinate
+                        std::getline(sub_ss,sub,'-');
+                        start=atoi(sub.c_str());
+                        // get end coordinate
+                        std::getline(sub_ss,sub,'-');
+                        end=atoi(sub.c_str());
+                        cur_coords1.push_back(std::make_pair(start,end));
+                    }
+                    //now for the matched kmer coordinates
+                    ss.str(posttab);
+                    ss.clear();
+                    std::getline(ss,posttab,':');
+                    #pragma omp critical
+                    {
+                        exists_ri=this->ref_to_id_mult.insert(std::make_pair(posttab,max_chrID));
+                        if(exists_ri.second){
+                            exists_ir=this->id_to_ref_mult.insert(std::make_pair(max_chrID,posttab));
+                            if(!exists_ir.second){
+                                std::cerr<<"ERROR. chromosome IDs messed up"<<std::endl;
+
+                            }
+                            max_chrID++;
+                        }
+                    }
+                    std::getline(ss,posttab,'@');
+                    strand=int(posttab[0]);
+                    cur_coords2.push_back(std::make_pair(exists_ri.first->second,strand));
+                    // 3. get the coordinates
+                    while(std::getline(ss,posttab,',')){
+                        sub_ss.str(posttab);
+                        sub_ss.clear();
+                        // get start coordinate
+                        std::getline(sub_ss,sub,'-');
+                        start=atoi(sub.c_str());
+                        // get end coordinate
+                        std::getline(sub_ss,sub,'-');
+                        end=atoi(sub.c_str());
+                        cur_coords2.push_back(std::make_pair(start,end));
+                    }
+
+                    std::vector<std::pair<int,int>>* new_coords=new std::vector<std::pair<int,int>>(cur_coords2);
+                    #pragma omp critical
+                    {
+                        exists_cur_coord=this->multimappers.insert(std::pair<std::vector<std::pair<int,int>>,std::vector<const std::vector<std::pair<int,int> >* > >(cur_coords1,{}));
+                    }
+                    exists_cur_coord.first->second.push_back(new_coords);
+                    cur_coords1.clear();
+                    cur_coords2.clear();
                 }
-                max_chrID++;
+                #pragma omp taskwait
             }
-            std::getline(ss,pretab,'@');
-
-            // unordered
-            strand=int(pretab[0]);
-            cur_coords1.push_back(std::make_pair(exists_ri.first->second,strand));
-            // 3. get the coordinates
-            while(std::getline(ss,pretab,',')){
-                sub_ss.str(pretab);
-                sub_ss.clear();
-                // get start coordinate
-                std::getline(sub_ss,sub,'-');
-                start=atoi(sub.c_str());
-                // get end coordinate
-                std::getline(sub_ss,sub,'-');
-                end=atoi(sub.c_str());
-                cur_coords1.push_back(std::make_pair(start,end));
-            }
-            //now for the matched kmer coordinates
-            ss.str(posttab);
-            ss.clear();
-            std::getline(ss,posttab,':');
-            exists_ri=this->ref_to_id_mult.insert(std::make_pair(posttab,max_chrID));
-            if(exists_ri.second){
-                exists_ir=this->id_to_ref_mult.insert(std::make_pair(max_chrID,posttab));
-                if(!exists_ir.second){
-                    std::cerr<<"ERROR. chromosome IDs messed up"<<std::endl;
-
-                }
-                max_chrID++;
-            }
-            std::getline(ss,posttab,'@');
-            strand=int(posttab[0]);
-            cur_coords2.push_back(std::make_pair(exists_ri.first->second,strand));
-            // 3. get the coordinates
-            while(std::getline(ss,posttab,',')){
-                sub_ss.str(posttab);
-                sub_ss.clear();
-                // get start coordinate
-                std::getline(sub_ss,sub,'-');
-                start=atoi(sub.c_str());
-                // get end coordinate
-                std::getline(sub_ss,sub,'-');
-                end=atoi(sub.c_str());
-                cur_coords2.push_back(std::make_pair(start,end));
-            }
-
-            std::vector<std::pair<int,int>>* new_coords=new std::vector<std::pair<int,int>>(cur_coords2);
-            exists_cur_coord=this->multimappers.insert(std::pair<std::vector<std::pair<int,int>>,std::vector<const std::vector<std::pair<int,int> >* > >(cur_coords1,{}));
-            exists_cur_coord.first->second.push_back(new_coords);
-            cur_coords1.clear();
-            cur_coords2.clear();
         }
         multistream.close();
         std::cout<<"Loaded Multimapper Data"<<std::endl;

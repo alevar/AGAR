@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <map>
 #include <set>
+#include <omp.h>
 // #include <boost/config.hpp>
 // #include <boost/container_hash/hash.hpp>
 
