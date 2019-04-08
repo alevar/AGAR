@@ -65,7 +65,9 @@ GffTranscript::GffTranscript(const std::string& tline){
     } //while exons
 }
 
-Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::string& multiFP, const std::string& glstFP, const bool& multi_flag){
+Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::string& multiFP, const std::string& glstFP, const bool& multi_flag, const int& threads){
+    this->numThreads=threads;
+    
     this->multi_flag=multi_flag;
     tlststream.open(tlstFP.c_str(),std::ios::in);
     if (!tlststream.good()){
@@ -149,6 +151,15 @@ Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::
                     // unordered
                     strand=int(pretab[0]);
                     cur_coords1.push_back(std::make_pair(exists_ri.first->second,strand));
+
+                    bool getEntryLength=true;
+                    if (this->db_entry_length == 0){ // if unknown
+                        getEntryLength=true;
+                    }
+                    else{
+                        getEntryLength=false;
+                    }
+
                     // 3. get the coordinates
                     while(std::getline(ss,pretab,',')){
                         sub_ss.str(pretab);
@@ -159,7 +170,13 @@ Map2GFF::Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::
                         // get end coordinate
                         std::getline(sub_ss,sub,'-');
                         end=atoi(sub.c_str());
+                        if(getEntryLength){ // if first entry - get length of the database
+                            this->db_entry_length=this->db_entry_length+(end-start);
+                        }
                         cur_coords1.push_back(std::make_pair(start,end));
+                    }
+                    if (getEntryLength){
+                        std::cout<<"entry size: "<<this->db_entry_length<<std::endl;
                     }
                     //now for the matched kmer coordinates
                     ss.str(posttab);
@@ -257,12 +274,12 @@ void print_cigar(bam1_t *al){
 int Map2GFF::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_exon,int match_length,GVec<GSeg>& exon_list,
                            int &num_cigars,int read_start,bam1_t* curAl,std::string &cigar_str,int cigars[MAX_CIGARS],std::vector<std::pair<int,int>> &coords){
     
-    // std::string nr1=bam_get_qname(curAl);
-    // std::string nr2="SRR1093930.7206";
-    // if (nr1.compare(nr2)==0){
-    //     std::cout<<"converting cigar: "<<nr1<<std::endl;
-    //     print_cigar(curAl);
-    // }
+    std::string nr1=bam_get_qname(curAl);
+    std::string nr2="SRR2135324.sra.conv.542715";
+    if (nr1.compare(nr2)==0){
+        std::cout<<"converting cigar: "<<nr1<<std::endl;
+        print_cigar(curAl);
+    }
 
     coords.push_back(std::make_pair(read_start,0)); // add read start to the list of coordinates. end of the segment will have to be changed later
 
@@ -336,27 +353,27 @@ int Map2GFF::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_e
             }
         }
     }
-    // if (nr1.compare(nr2)==0){
-    //     print_cigar(curAl);
-    // }
+    if (nr1.compare(nr2)==0){
+        print_cigar(curAl);
+    }
     coords.back().second=cur_total_pos; //add end of the read
     return 1;
 }
 
 int Map2GFF::merge_cigar(const std::vector<std::pair<int,int>> *cor,bam1_t *al, uint32_t *cur_cigar_full, int n_cigar){
-    // std::string nr1=bam_get_qname(al);
-    // std::string nr2="SRR1093930.7206";
-    // if (nr1.compare(nr2)==0){
-    //     std::cout<<"adding read: "<<n_cigar<<" "<<nr1<<std::endl;
-    //     print_cigar(al);
+    std::string nr1=bam_get_qname(al);
+    std::string nr2="SRR2135324.sra.conv.542715";
+    if (nr1.compare(nr2)==0){
+        std::cout<<"adding read: "<<n_cigar<<" "<<nr1<<std::endl;
+        print_cigar(al);
 
-    //     for (uint8_t c=0;c<n_cigar;++c){
-    //         int opcode=bam_cigar_op(cur_cigar_full[c]);
-    //         int length=bam_cigar_oplen(cur_cigar_full[c]);
-    //         std::cout<<length<<bam_cigar_opchr(opcode);
-    //     }
-    //     std::cout<<std::endl;
-    // }
+        for (uint8_t c=0;c<n_cigar;++c){
+            int opcode=bam_cigar_op(cur_cigar_full[c]);
+            int length=bam_cigar_oplen(cur_cigar_full[c]);
+            std::cout<<length<<bam_cigar_opchr(opcode);
+        }
+        std::cout<<std::endl;
+    }
 
     // first change the read start, chromosome - no need to modify the reverse/non-reverse in flag right now, since multimappers don't take that into account
     al->core.pos=cor->operator[](1).first-1; // set read start
@@ -439,10 +456,10 @@ int Map2GFF::merge_cigar(const std::vector<std::pair<int,int>> *cor,bam1_t *al, 
     al->m_data = m_data;
     memset(mult_cigars,0,sizeof(mult_cigars));
 
-    // if (nr1.compare(nr2)==0){
-    //     std::cout<<"post adding read: "<<nr1<<std::endl;
-    //     print_cigar(al);
-    // }
+    if (nr1.compare(nr2)==0){
+        std::cout<<"post adding read: "<<nr1<<std::endl;
+        print_cigar(al);
+    }
 
     return 1;
 }
@@ -451,17 +468,17 @@ void Map2GFF::add_multimapper_pair(const std::vector<std::pair<int,int>> *cor1, 
     std::pair<std::vector<std::pair<int,int>>,std::vector<std::pair<int,int>>> coor_key=std::make_pair(*cor1,*cor2);
     this->exists_curReadGroup_paired=curReadGroup_paired.insert(std::make_pair(coor_key,new MatePair(bam_dup1(al1),bam_dup1(al2))));
     if(exists_curReadGroup_paired.second){ // if the key did not previously exist - we can modify the alignment record and insert it into the map
-        // std::string nr1=bam_get_qname(al1);
-        // std::string nr2="SRR1093930.7206";
-        // if (nr1.compare(nr2)==0){
-        //     // std::cout<<"test1: "<<std::endl;
-        //     for (uint8_t c=0;c<n_cigar1;++c){
-        //         int opcode=bam_cigar_op(cur_cigar_full1[c]);
-        //         int length=bam_cigar_oplen(cur_cigar_full1[c]);
-        //         std::cout<<length<<bam_cigar_opchr(opcode);
-        //     }
-        //     std::cout<<std::endl;
-        // }
+        std::string nr1=bam_get_qname(al1);
+        std::string nr2="SRR2135324.sra.conv.542715";
+        if (nr1.compare(nr2)==0){
+            // std::cout<<"test1: "<<std::endl;
+            for (uint8_t c=0;c<n_cigar1;++c){
+                int opcode=bam_cigar_op(cur_cigar_full1[c]);
+                int length=bam_cigar_oplen(cur_cigar_full1[c]);
+                std::cout<<length<<bam_cigar_opchr(opcode);
+            }
+            std::cout<<std::endl;
+        }
 
         this->curReadGroup_paired[coor_key]->firstMate->core.pos=cor1->operator[](1).first-1; // set read start
         this->curReadGroup_paired[coor_key]->secondMate->core.pos=cor2->operator[](1).first-1; // set read start
@@ -498,8 +515,17 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
 
     bool start=true;
 
+    bool doMulti=true; // to look for multimappers or not
+
     while(sam_read1(al,al_hdr,curAl)>0){
         std::string newReadName=bam_get_qname(curAl);
+        if (this->db_entry_length != curAl->core.l_qseq){ // if read length is not the same as the one used in the database - do not add multimappers - just perform the conversion
+            doMulti=false;
+        }
+        else{
+            doMulti=true;
+        }
+
         if (newReadName == curReadName || start){
             curReadName=newReadName;
             start=false;
@@ -528,17 +554,17 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
             memcpy(cur_cigar_full,bam_get_cigar(curAl),MAX_CIGARS);
             int n_cigar=curAl->core.n_cigar;
 
-            // std::string nr1=bam_get_qname(curAl);
-            // std::string nr2="SRR1093930.7206";
-            // if (nr1.compare(nr2)==0){
-            //     std::cout<<"test1: "<<std::endl;
-            //     for (uint8_t c=0;c<n_cigar;++c){
-            //         int opcode=bam_cigar_op(cur_cigar_full[c]);
-            //         int length=bam_cigar_oplen(cur_cigar_full[c]);
-            //         std::cout<<length<<bam_cigar_opchr(opcode);
-            //     }
-            //     std::cout<<std::endl;
-            // }
+            std::string nr1=bam_get_qname(curAl);
+            std::string nr2="SRR2135324.sra.conv.542715";
+            if (nr1.compare(nr2)==0){
+                std::cout<<"test1: "<<std::endl;
+                for (uint8_t c=0;c<n_cigar;++c){
+                    int opcode=bam_cigar_op(cur_cigar_full[c]);
+                    int length=bam_cigar_oplen(cur_cigar_full[c]);
+                    std::cout<<length<<bam_cigar_opchr(opcode);
+                }
+                std::cout<<std::endl;
+            }
 
             int cigar_ret_val=Map2GFF::convert_cigar(i,cur_intron_len,miss_length,next_exon,match_length,exon_list,num_cigars,read_start,curAl,cigar_str,cigars,al_coords);
             if (cigar_ret_val){
@@ -619,7 +645,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                 std::pair<std::vector<std::pair<int,int>>, std::vector<std::pair<int,int>>> tmpKey=std::make_pair(al_coords,mr->coords);
                                 if (curReadGroup_paired.find(tmpKey)==curReadGroup_paired.end()){
                                     curReadGroup_paired[tmpKey]=new MatePair(bam_dup1(curAl),bam_dup1(mr->al));
-                                    if(this->multi_flag){
+                                    if(this->multi_flag && doMulti){
                                         // this is where it now needs to search for the multimappers
                                         exists_al_coord_mate1=this->multimappers.find(al_coords);
                                         if(this->exists_al_coord_mate1!=this->multimappers.end()){ // found multimappers for one mate
@@ -667,7 +693,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                                 std::pair<std::vector<std::pair<int,int>>, std::vector<std::pair<int,int>>> tmpKey=std::make_pair(mr->coords,al_coords);
                                 if (curReadGroup_paired.find(tmpKey)==curReadGroup_paired.end()){
                                     curReadGroup_paired[tmpKey]=new MatePair(bam_dup1(mr->al),bam_dup1(curAl));
-                                    if(this->multi_flag){
+                                    if(this->multi_flag && doMulti){
                                         // this is where it now needs to search for the multimappers
                                         exists_al_coord_mate2=this->multimappers.find(mr->coords);
                                         if(this->exists_al_coord_mate2!=this->multimappers.end()){ // found multimappers for one mate
@@ -709,7 +735,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                 }
                 else{
                     curReadGroup[al_coords]=bam_dup1(curAl);
-                    if(this->multi_flag){
+                    if(this->multi_flag && doMulti){
                         // now add the multimappers to the dictionary
                         //first check if any exist in the map
                         this->exists_al_coord=this->multimappers.find(al_coords);
@@ -718,17 +744,17 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                             for(auto cor:this->exists_al_coord->second){ // add each of the multimappers to the group
                                 exists_curReadGroup=curReadGroup.insert(std::make_pair(*cor,bam_dup1(curAl)));
                                 if(exists_curReadGroup.second){ // if the key did not previously exist - we can modify the alignment record and insert it into the map
-                                    // std::string nr1=bam_get_qname(curReadGroup[*cor]);
-                                    // std::string nr2="SRR1093930.7206";
-                                    // if (nr1.compare(nr2)==0){
-                                    //     std::cout<<"test1: ";
-                                    //     for (uint8_t c=0;c<n_cigar;++c){
-                                    //         int opcode=bam_cigar_op(cur_cigar_full[c]);
-                                    //         int length=bam_cigar_oplen(cur_cigar_full[c]);
-                                    //         std::cout<<length<<bam_cigar_opchr(opcode);
-                                    //     }
-                                    //     std::cout<<std::endl;
-                                    // }
+                                    std::string nr1=bam_get_qname(curReadGroup[*cor]);
+                                    std::string nr2="SRR2135324.sra.conv.542715";
+                                    if (nr1.compare(nr2)==0){
+                                        std::cout<<"test1: ";
+                                        for (uint8_t c=0;c<n_cigar;++c){
+                                            int opcode=bam_cigar_op(cur_cigar_full[c]);
+                                            int length=bam_cigar_oplen(cur_cigar_full[c]);
+                                            std::cout<<length<<bam_cigar_opchr(opcode);
+                                        }
+                                        std::cout<<std::endl;
+                                    }
                                     merge_cigar(cor,curReadGroup[*cor],cur_cigar_full,n_cigar);
                                 }
                                 // std::cout<<this->id_to_ref_mult[cor->operator[](0).first]<<" "<<cor->operator[](0).second<<std::endl;
@@ -847,29 +873,29 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
             memcpy(cur_cigar_full,bam_get_cigar(curAl),MAX_CIGARS);
             int n_cigar=curAl->core.n_cigar;
 
-            // std::string nr1=bam_get_qname(curAl);
-            // std::string nr2="SRR1093930.7206";
-            // if (nr1.compare(nr2)==0){
-            //     std::cout<<"test2: "<<std::endl;
-            //     for (uint8_t c=0;c<n_cigar;++c){
-            //         int opcode=bam_cigar_op(cur_cigar_full[c]);
-            //         int length=bam_cigar_oplen(cur_cigar_full[c]);
-            //         std::cout<<length<<bam_cigar_opchr(opcode);
-            //     }
-            //     std::cout<<std::endl;
-            // }
+            std::string nr1=bam_get_qname(curAl);
+            std::string nr2="SRR2135324.sra.conv.542715";
+            if (nr1.compare(nr2)==0){
+                std::cout<<"test2: "<<std::endl;
+                for (uint8_t c=0;c<n_cigar;++c){
+                    int opcode=bam_cigar_op(cur_cigar_full[c]);
+                    int length=bam_cigar_oplen(cur_cigar_full[c]);
+                    std::cout<<length<<bam_cigar_opchr(opcode);
+                }
+                std::cout<<std::endl;
+            }
 
             int cigar_ret_val=Map2GFF::convert_cigar(i,cur_intron_len,miss_length,next_exon,match_length,exon_list,num_cigars,read_start,curAl,cigar_str,cigars,al_coords);
 
-            // if (nr1.compare(nr2)==0){
-            //     std::cout<<"test3: "<<std::endl;
-            //     for (uint8_t c=0;c<n_cigar;++c){
-            //         int opcode=bam_cigar_op(cur_cigar_full[c]);
-            //         int length=bam_cigar_oplen(cur_cigar_full[c]);
-            //         std::cout<<length<<bam_cigar_opchr(opcode);
-            //     }
-            //     std::cout<<std::endl;
-            // }
+            if (nr1.compare(nr2)==0){
+                std::cout<<"test3: "<<std::endl;
+                for (uint8_t c=0;c<n_cigar;++c){
+                    int opcode=bam_cigar_op(cur_cigar_full[c]);
+                    int length=bam_cigar_oplen(cur_cigar_full[c]);
+                    std::cout<<length<<bam_cigar_opchr(opcode);
+                }
+                std::cout<<std::endl;
+            }
 
             if (cigar_ret_val){
                 bool paired=curAl->core.flag           &    1;
@@ -953,7 +979,7 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                 else{
                     // std::string tmpKey=p_trans->refID+"$"+std::to_string(read_start)+"_"+cigar_str;
                     curReadGroup[al_coords]=bam_dup1(curAl);
-                    if(this->multi_flag){
+                    if(this->multi_flag && doMulti){
                         // now add the multimappers to the dictionary
                         //first check if any exist in the map
                         this->exists_al_coord=this->multimappers.find(al_coords);
@@ -962,42 +988,42 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
                             for(auto cor:this->exists_al_coord->second){ // add each of the multimappers to the group
                                 exists_curReadGroup=curReadGroup.insert(std::make_pair(*cor,bam_dup1(curAl)));
                                 if(exists_curReadGroup.second){ // if the key did not previously exist - we can modify the alignment record and insert it into the map
-                                    // std::string nr1=bam_get_qname(curReadGroup[*cor]);
-                                    // std::string nr2="SRR1093930.7206";
-                                    // if (nr1.compare(nr2)==0){
-                                    //     std::cout<<"test2: ";
-                                    //     for (uint8_t c=0;c<n_cigar;++c){
-                                    //         int opcode=bam_cigar_op(cur_cigar_full[c]);
-                                    //         int length=bam_cigar_oplen(cur_cigar_full[c]);
-                                    //         std::cout<<length<<bam_cigar_opchr(opcode);
-                                    //     }
-                                    //     std::cout<<std::endl;
-                                    //     std::cout<<"cur test2: ";
-                                    //     for (uint8_t c=0;c<n_cigar;++c){
-                                    //         int opcode=bam_cigar_op(bam_get_cigar(curReadGroup[*cor])[c]);
-                                    //         int length=bam_cigar_oplen(bam_get_cigar(curReadGroup[*cor])[c]);
-                                    //         std::cout<<length<<bam_cigar_opchr(opcode);
-                                    //     }
-                                    //     std::cout<<std::endl;
-                                    //     for(auto v: *cor){
-                                    //         std::cout<<v.first<<"-"<<v.second<<",";
-                                    //     }
-                                    //     std::cout<<std::endl;
-                                    //     std::cout<<bam_get_l_aux(curReadGroup[*cor])<<std::endl;
-                                    // }
+                                    std::string nr1=bam_get_qname(curReadGroup[*cor]);
+                                    std::string nr2="SRR2135324.sra.conv.542715";
+                                    if (nr1.compare(nr2)==0){
+                                        std::cout<<"test2: ";
+                                        for (uint8_t c=0;c<n_cigar;++c){
+                                            int opcode=bam_cigar_op(cur_cigar_full[c]);
+                                            int length=bam_cigar_oplen(cur_cigar_full[c]);
+                                            std::cout<<length<<bam_cigar_opchr(opcode);
+                                        }
+                                        std::cout<<std::endl;
+                                        std::cout<<"cur test2: ";
+                                        for (uint8_t c=0;c<n_cigar;++c){
+                                            int opcode=bam_cigar_op(bam_get_cigar(curReadGroup[*cor])[c]);
+                                            int length=bam_cigar_oplen(bam_get_cigar(curReadGroup[*cor])[c]);
+                                            std::cout<<length<<bam_cigar_opchr(opcode);
+                                        }
+                                        std::cout<<std::endl;
+                                        for(auto v: *cor){
+                                            std::cout<<v.first<<"-"<<v.second<<",";
+                                        }
+                                        std::cout<<std::endl;
+                                        std::cout<<bam_get_l_aux(curReadGroup[*cor])<<std::endl;
+                                    }
                                     merge_cigar(cor,curReadGroup[*cor],cur_cigar_full,n_cigar);
-                                    // if (nr1.compare(nr2)==0){
-                                    //     std::cout<<"post test2: "<<curReadGroup[*cor]->core.n_cigar<<" ";
-                                    //     print_cigar(curReadGroup[*cor]);
-                                    //     std::cout<<std::endl;
-                                    //     for(auto v: *cor){
-                                    //         std::cout<<v.first<<"-"<<v.second<<",";
-                                    //     }
-                                    //     std::cout<<std::endl;
-                                    //     // uint8_t *aux=bam_get_aux(curReadGroup[*cor]);
-                                    //     std::cout<<bam_get_l_aux(curReadGroup[*cor])<<std::endl;
+                                    if (nr1.compare(nr2)==0){
+                                        std::cout<<"post test2: "<<curReadGroup[*cor]->core.n_cigar<<" ";
+                                        print_cigar(curReadGroup[*cor]);
+                                        std::cout<<std::endl;
+                                        for(auto v: *cor){
+                                            std::cout<<v.first<<"-"<<v.second<<",";
+                                        }
+                                        std::cout<<std::endl;
+                                        // uint8_t *aux=bam_get_aux(curReadGroup[*cor]);
+                                        std::cout<<bam_get_l_aux(curReadGroup[*cor])<<std::endl;
                                         
-                                    // }
+                                    }
                                 }
                                 // std::cout<<this->id_to_ref_mult[cor->operator[](0).first]<<" "<<cor->operator[](0).second<<std::endl;
                             }

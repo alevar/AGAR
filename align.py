@@ -151,10 +151,11 @@ def main(args):
 
 	print("aligning with hisat2 against the genome")
 	hisat2_cmd_genome=["hisat2",
+					   "--very-sensitive",
                        "--dta",
 					    "--no-unal",
 					   "-x",os.path.abspath(args.genome_db),
-					   "-p",args.threads]
+					   "-p",str(int(args.threads)-1)]
 	if (args.fasta):
 		hisat2_cmd_genome.append("-f")
 	hisat2_cmd_genome.extend(("-1",unalignedR1,
@@ -164,21 +165,6 @@ def main(args):
 		hisat2_cmd_genome.extend(args.hisat)
 	genome_process=subprocess.Popen(hisat2_cmd_genome,stdout=subprocess.PIPE)
 	subprocess.Popen(["samtools","view","-h","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.genome.bam"],stdin=genome_process.stdout)
-	genome_process.wait()
-	genome_process.stdout.close()
-
-	if not args.keep:
-		if os.path.exists(os.path.abspath(curTMP)+"/sample.trans.unconc_first.1.fq"):
-			os.remove(os.path.abspath(curTMP)+"/sample.trans.unconc_first.1.fq")
-		if os.path.exists(os.path.abspath(curTMP)+"/sample.trans.unconc_first.2.fq"):
-			os.remove(os.path.abspath(curTMP)+"/sample.trans.unconc_first.2.fq")
-		if os.path.exists(os.path.abspath(curTMP)+"/sample.trans.un_first.fq"):
-			os.remove(os.path.abspath(curTMP)+"/sample.trans.un_first.fq")
-
-	if alignmentStage==2:
-		subprocess.call(["samtools","view","-h","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_second.bam",os.path.abspath(curTMP)+"/sample.trans_second.sam"])
-		if not args.keep:
-			os.remove(os.path.abspath(curTMP)+"/sample.trans_second.sam")
 	
 	#trans2genome
 	print("converting coordinates to genomic")
@@ -206,6 +192,23 @@ def main(args):
 		if args.mf:
 			trans2genome_a_cmd.append("-f")
 		subprocess.call(trans2genome_a_cmd)
+
+
+	genome_process.wait() # allows trans2genome to run at the same time as hisat2
+	genome_process.stdout.close()
+
+	if not args.keep:
+		if os.path.exists(os.path.abspath(curTMP)+"/sample.trans.unconc_first.1.fq"):
+			os.remove(os.path.abspath(curTMP)+"/sample.trans.unconc_first.1.fq")
+		if os.path.exists(os.path.abspath(curTMP)+"/sample.trans.unconc_first.2.fq"):
+			os.remove(os.path.abspath(curTMP)+"/sample.trans.unconc_first.2.fq")
+		if os.path.exists(os.path.abspath(curTMP)+"/sample.trans.un_first.fq"):
+			os.remove(os.path.abspath(curTMP)+"/sample.trans.un_first.fq")
+
+	if alignmentStage==2:
+		subprocess.call(["samtools","view","-h","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_second.bam",os.path.abspath(curTMP)+"/sample.trans_second.sam"])
+		if not args.keep:
+			os.remove(os.path.abspath(curTMP)+"/sample.trans_second.sam")
 
 	print("merging all sub-alignments")
 	merge_cmd=["samtools","merge",

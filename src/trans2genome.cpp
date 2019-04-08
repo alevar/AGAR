@@ -20,7 +20,8 @@ enum Opt {TLST_FP   = 't',
           GEN_HDR   = 's',
           MULTI     = 'm',
           GLST_FP   = 'g',
-          MULTI_FLAG= 'f'};
+          MULTI_FLAG= 'f',
+          THREADS   = 't'};
 
 int main(int argc, char** argv) {
 
@@ -32,9 +33,10 @@ int main(int argc, char** argv) {
     args.add_string(Opt::MULTI,"multi","","");
     args.add_string(Opt::GLST_FP,"glst","","");
     args.add_flag(Opt::MULTI_FLAG,"mf","");
+    args.add_int(Opt::THREADS,"threads",1,"");
     
     args.parse_args(argc,argv);
-    Map2GFF gffMapper(args.get_string(Opt::TLST_FP),args.get_string(Opt::IN_AL),args.get_string(Opt::MULTI),args.get_string(Opt::GLST_FP),args.get_flag(Opt::MULTI_FLAG));
+    Map2GFF gffMapper(args.get_string(Opt::TLST_FP),args.get_string(Opt::IN_AL),args.get_string(Opt::MULTI),args.get_string(Opt::GLST_FP),args.get_flag(Opt::MULTI_FLAG),args.get_int(Opt::THREADS));
     gffMapper.convert_coords(args.get_string(Opt::OUT_AL),args.get_string(Opt::GEN_HDR));
     return 0;
 }

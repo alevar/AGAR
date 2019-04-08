@@ -129,7 +129,7 @@ struct coord_cmp {
 
 class Map2GFF{
     public:
-        Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::string& multiFP, const std::string& glstFP, const bool& multi_flag);
+        Map2GFF(const std::string& tlstFP, const std::string& alFP, const std::string& multiFP, const std::string& glstFP, const bool& multi_flag, const int& threads);
         ~Map2GFF();
 
         void convert_coords(const std::string& outFP, const std::string& genome_header);
@@ -145,6 +145,7 @@ class Map2GFF{
         // coord_range make_coord_range(int strand, int lower, int upper);
 
         bool multi_flag=false;
+        int numThreads=1;
 
         GPVec<GffTranscript> transcripts;
         std::unordered_map<std::string,GffTranscript*> tidx_to_t;
@@ -208,6 +209,8 @@ class Map2GFF{
         std::map<coord_range,int,coord_cmp> gene_coords;
         std::map<coord_range,int>::iterator exists_geneID_mate1;
         std::map<coord_range,int>::iterator exists_geneID_mate2;
+
+        int db_entry_length = 0;
 };
 
 #endif
