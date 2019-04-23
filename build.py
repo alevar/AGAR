@@ -38,5 +38,14 @@ def main(args):
 	elif args.type=="hisat":
 		print("Building transcriptome database for HISAT2")
 		subprocess.call(["hisat2-build","-p",args.threads,os.path.abspath(args.output)+"/db.fasta",os.path.abspath(args.output)+"/db"])
+	if args.locus is not None:
+		print("building a locus specific bowtie index for the second bowtie stage")
+		# first extract the locus information
+		subprocess.call["./extractLocus.py",args.gff,s.path.abspath(args.output)+"/db.locus.gff"]
+		# second run the bedtools
+		subprocess.call["bedtools","maskfasta","-fo",s.path.abspath(args.output)+"/db.locus.fasta","-fi",args.ref,"-bed",s.path.abspath(args.output)+"/db.locus.gff"]
+		# third build the index
+		subprocess.call(["bowtie2-build",os.path.abspath(args.output)+"/db.locus.fasta",os.path.abspath(args.output)+"/db.locus"])
+
 	else:
 		print("unknown aligner specified")

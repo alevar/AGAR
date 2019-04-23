@@ -52,6 +52,9 @@ def main(args):
 						type=int,
 						default=76,
 						help="kmer length to use in the search for multimappers")
+	parser_build.add_argument("--locus",
+							  action="store_true",
+							  help="build index for a second bowtie run to align against loci - parsimonious preMRNA mode")
 
 	parser_build.set_defaults(func=build.main)
 
@@ -131,6 +134,9 @@ def main(args):
 	parser_align.add_argument("--mf",
 						action="store_true",
 						help="use multimapper index to supplement alignments")
+	parser_align.add_argument("--locus",
+						action="store_true",
+						help="perform second bowtie run to align against loci - parsimonious preMRNA mode")
 
 	parser_align.set_defaults(func=align.main)
 

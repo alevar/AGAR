@@ -18,6 +18,10 @@ def main(args):
 	if args.type=="bowtie":
 		for fp in ["1.bt2","2.bt2","3.bt2","4.bt2","rev.1.bt2","rev.2.bt2"]:
 			assert os.path.exists(os.path.abspath(args.db)+"/db."+fp),args.db+"/db."+fp+" file not found"
+	if args.locus:
+		for fp in ["1.bt2","2.bt2","3.bt2","4.bt2","rev.1.bt2","rev.2.bt2"]:
+			assert os.path.exists(os.path.abspath(args.db)+"/db.locus."+fp),args.db+"/db."+fp+" file not found"
+	assert (bool(args.type=="hisat") != bool(args.bowtie2)), "can not define both type hisat and bowtie2"
 	for fp in ["fasta.tlst","fasta","genome.header"]:
 		assert os.path.exists(os.path.abspath(args.db)+"/db."+fp),args.db+"/db."+fp+" file not found"
 	for fp in ["1.ht2","2.ht2","3.ht2","4.ht2","5.ht2","6.ht2","7.ht2","8.ht2"]:
@@ -148,6 +152,32 @@ def main(args):
 	subprocess.Popen(["samtools","view","-h","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_first.bam"],stdin=transcriptome_process.stdout)
 	transcriptome_process.wait()
 	transcriptome_process.stdout.close()
+
+	if args.locus:
+		print("performing the locus lookup using bowtie")
+		bowtie2_cmd_locus=["bowtie2",
+					      "--end-to-end",
+					      "--no-unal",
+					      "-x",os.path.abspath(args.db)+"/db",
+					      "-p",args.threads]
+		if (args.k):
+			bowtie2_cmd_locus.extend(("-k",str(args.k)))
+
+		if (args.fasta):
+			bowtie2_cmd_locus.append("-f")
+		bowtie2_cmd_locus.extend(("-1",unalignedR1,
+						 			 "-2",unalignedR2,
+						 			 "-U",unalignedS))
+		bowtie2_cmd_locus.extend(("--un-conc",os.path.abspath(curTMP)+"/sample.trans.unconc_first.locus.fq",
+									 "--un",os.path.abspath(curTMP)+"/sample.trans.un_first.locus.fq"))
+		if (args.bowtie):
+			bowtie2_cmd_trans_noA.extend(args.bowtie)
+		transcriptome_process=subprocess.Popen(bowtie2_cmd_trans_noA,stdout=subprocess.PIPE)
+		unalignedR1=os.path.abspath(curTMP)+"/sample.trans.unconc_first.locus.1.fq"
+		unalignedR2=os.path.abspath(curTMP)+"/sample.trans.unconc_first.locus.2.fq"
+		unalignedS =os.path.abspath(curTMP)+"/sample.trans.un_first.locus.fq"
+		
+		["samtools","view","-h","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.genome.bam"]
 
 	print("aligning with hisat2 against the genome")
 	hisat2_cmd_genome=["hisat2",
