@@ -37,7 +37,7 @@ class GTFToFasta {
 public:
     GTFToFasta(std::string gtf_fname, std::string genome_fname);
     ~GTFToFasta();
-    void make_transcriptome(std::string out_fname, int kmer_length);
+    void make_transcriptome(const std::string& out_fname, int kmer_length);
 
     // for debugging
     void print_mapping();
@@ -55,7 +55,8 @@ private:
     FILE* gtf_fhandle_;
 
     //convert set to unordered set
-    std::set<std::vector<std::pair<int,int> > > kmer_coords; // genomic positions encountered
+    std::map<std::vector<std::pair<int,int> >, std::pair<std::string,int> > kmer_coords; //genomic positions encountered and counts of how many transcripts share a given position on the genome if the position is not a multimapper. The second feature in the value pointed to by the key shows the first transcript for which a position is defined. If only a single transcript contains the position, than it is its transcript id written
+//    std::set<std::vector<std::pair<int,int> > > kmer_coords; // genomic positions encountered
     std::unordered_map<std::string,std::vector<std::vector<std::pair<int,int>>>> kmers; // kmers and their positions for efficient lookup
 
     std::unordered_map<int,const char* const> int_to_chr; // conversion back from intigers to chromosomes

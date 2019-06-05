@@ -44,9 +44,9 @@ def main(args):
 	unalignedR1="" # keep track of the current unaligned reads governed by what stages of the run are active
 	unalignedR2=""
 	unalignedS =""
-	alignmentStage=0 # indicates how many stages have been performed on the current run - important for the cleanup
 	transcriptome_process=None; # process in which transcriptome alignment is performed. it opens a pipe to samtools
 	genome_process=None; # process in which genome alignment is performed. it also opens a pipe to samtools
+	locus_process = None # process in which alignment of non-transcriptomic reads is performed against loci (introns)
 	#hisat2
 	if args.type=="hisat":
 		print("aligning with hisat2 against transcriptome")
@@ -71,7 +71,6 @@ def main(args):
 		unalignedR1=os.path.abspath(curTMP)+"/sample.trans.unconc_first.1.fq"
 		unalignedR2=os.path.abspath(curTMP)+"/sample.trans.unconc_first.2.fq"
 		unalignedS =os.path.abspath(curTMP)+"/sample.trans.un_first.fq"
-		alignmentStage=1
 
 	elif args.type=="bowtie":
 		print("aligning with bowtie2 against transcriptome")
@@ -98,7 +97,6 @@ def main(args):
 		unalignedR1=os.path.abspath(curTMP)+"/sample.trans.unconc_first.1.fq"
 		unalignedR2=os.path.abspath(curTMP)+"/sample.trans.unconc_first.2.fq"
 		unalignedS =os.path.abspath(curTMP)+"/sample.trans.un_first.fq"
-		alignmentStage=1
 
 	subprocess.Popen(["samtools","view","-h","--output-fmt=BAM","-@",args.threads,"-o",os.path.abspath(curTMP)+"/sample.trans_first.bam"],stdin=transcriptome_process.stdout)
 	
@@ -119,7 +117,6 @@ def main(args):
 	trans2genome_process = subprocess.Popen(trans2genome_cmd)
 
 	# locus-level alignment
-	locus_process = None
 	bowtie2_cmd_locus = None
 	if args.locus and args.type == "bowtie":
 		print("performing the locus lookup using bowtie")
@@ -127,10 +124,9 @@ def main(args):
 					      "--end-to-end",
 					      "--no-unal",
 					      "--very-sensitive",
-					      "-x",os.path.abspath(args.db)+"/db",
+					      "-k","5",
+					      "-x",os.path.abspath(args.db)+"/db.locus",
 					      "-p",args.threads]
-		if (args.k):
-			bowtie2_cmd_locus.extend(("-k",str(args.k)))
 
 		if (args.fasta):
 			bowtie2_cmd_locus.append("-f")
@@ -156,10 +152,10 @@ def main(args):
 	print("aligning with hisat2 against the genome")
 	hisat2_cmd_genome=["hisat2",
 					   "--very-sensitive",
-                       "--dta",
 					    "--no-unal",
-					   "-x",os.path.abspath(args.genome_db),
-					   "-p",str(int(args.threads)-1)]
+					    "-k","30",
+					    "-x",os.path.abspath(args.genome_db),
+					    "-p",str(int(args.threads)-1)]
 	if (args.fasta):
 		hisat2_cmd_genome.append("-f")
 	hisat2_cmd_genome.extend(("-1",unalignedR1,

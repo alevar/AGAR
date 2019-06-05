@@ -1,3 +1,5 @@
+#include <utility>
+
 //
 //  gtfToFasta.cpp
 //  TopHat
@@ -21,7 +23,7 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
     std::vector<std::pair<int,int>> cur_coords; // the coordinates encountered from the previous exons
     int cur_len=0; // current length left from the previous exon
     int cur_pos=0;
-    std::pair<std::set<std::vector<std::pair<int,int>>>::iterator,bool> exists;
+    std::pair<std::map<std::vector<std::pair<int,int> >, std::pair<std::string,int> >::iterator,bool> exists;
     std::pair<std::unordered_map<std::string,std::vector<std::vector<std::pair<int,int>>>>::iterator,bool> exists2;
     std::string sub_seq;
     cur_coords.emplace_back(std::make_pair(p_trans.gseq_id,(int)p_trans.strand));
@@ -31,7 +33,7 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
         length = (cur_exon.end+1) - cur_exon.start;
 
         // get coordinates into the map
-        if (length>1){ // sanity check for 0 and 1 baes exons
+        if (length>1){ // sanity check for 0 and 1 base exons
             for(int j=0;j<length;j++){ // iterate over all kmers in the given exon
                 if ((length-j)+cur_len<kmer_length){ // not enough coordinates - need to look at the next exon
                     cur_coords.emplace_back(std::pair<int,int>(cur_exon.start+j,cur_exon.end));
@@ -43,8 +45,8 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
                         for (int g=kmer_length-cur_len;g<kmer_length;g++){ // build new sequences using past coordinates
                             sub_seq="";
                             cur_coords.emplace_back(std::make_pair(cur_exon.start+j,cur_exon.start+j+g-1));
-                            exists=this->kmer_coords.insert(cur_coords);
-                            if (exists.second){
+                            exists=this->kmer_coords.insert(std::make_pair(cur_coords,std::make_pair(p_trans.getID(),1)));
+                            if (exists.second){ // if this set of genomic coordinates was not previously observed, we can proceed to evaluate
                                 for (int d=1;d<cur_coords.size();d++){
                                     sub_seq+=rec.seq_.substr(cur_coords[d].first-1,(cur_coords[d].second+1)-cur_coords[d].first);
                                 }
@@ -88,6 +90,11 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
                                     }
                                 }
                             }
+                            else{ // this is where we can perform evaluation of the number of unique kmers per transcript
+                                // means that the genomic coordinates already existed before, and a counter needs to be updated
+//                                std::cout<<"inc"<<std::endl;
+                                exists.first->second.second++;
+                            }
                             cur_len-=1;
                             cur_coords.pop_back();
                             cur_coords[1].first+=1;
@@ -115,7 +122,7 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
                     }
                     else{
                         cur_coords.emplace_back(std::make_pair(cur_exon.start+j,cur_exon.start+j+kmer_length));
-                        exists=this->kmer_coords.insert(cur_coords);
+                        exists=this->kmer_coords.insert(std::make_pair(cur_coords,std::make_pair(p_trans.getID(),1)));
                         if (exists.second){ // was successfully inserted
                             // get sequence
                             sub_seq=rec.seq_.substr(cur_exon.start+j-1,kmer_length);
@@ -159,6 +166,9 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
                                 }
                             }
                         }
+                        else{
+                            exists.first->second.second++;
+                        }
                     }
                     // since we went into this conditional, that means no previously encountered exons are left
                     // and we can reset some things
@@ -178,7 +188,7 @@ GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname)
 {
     gtf_fname_ = gtf_fname;
     gtf_fhandle_ = fopen(gtf_fname_.c_str(), "r");
-    if (gtf_fhandle_ == NULL)
+    if (gtf_fhandle_ == nullptr)
     {
         std::cerr << "FATAL: Couldn't open annotation: " << gtf_fname_
         << std::endl;
@@ -204,7 +214,7 @@ GTFToFasta::~GTFToFasta()
 
 }
 
-void GTFToFasta::make_transcriptome(std::string out_fname, int kmer_length)
+void GTFToFasta::make_transcriptome(const std::string& out_fname, int kmer_length)
 {
     std::vector<int> *p_contig_vec;
 
@@ -222,6 +232,8 @@ void GTFToFasta::make_transcriptome(std::string out_fname, int kmer_length)
                 std::string,
                 std::tuple<int,int,int>
             >::iterator,bool> exists_cur_gene;
+
+    std::cerr<<"start"<<std::endl;
     while (fastaReader.good()) {
 
         fastaReader.next(cur_contig);
@@ -237,8 +249,7 @@ void GTFToFasta::make_transcriptome(std::string out_fname, int kmer_length)
         p_contig_vec = contigTransMap_[cur_contig.id_];
 
         FastaRecord out_rec;
-        for (size_t i = 0; i < p_contig_vec->size(); ++i) {
-            int trans_idx = (*p_contig_vec)[i];
+        for (int trans_idx : *p_contig_vec) {
             GffObj *p_trans = gtfReader_.gflst.Get(trans_idx);
             //if (p_trans->isDiscarded() || p_trans->exons.Count()==0) continue;
             std::string coordstr;
@@ -265,9 +276,9 @@ void GTFToFasta::make_transcriptome(std::string out_fname, int kmer_length)
             int nst=p_trans->start;
             int nen=p_trans->end;
             char* geneID=p_trans->getGeneID();
-            if(geneID==NULL){
+            if(geneID==nullptr){
                 geneID=p_trans->getGeneName();
-                if(geneID==NULL){
+                if(geneID==nullptr){
                     std::cout<<"wrong geneID"<<std::endl;
                     continue;
                 }
@@ -288,11 +299,33 @@ void GTFToFasta::make_transcriptome(std::string out_fname, int kmer_length)
     tlst.close();
     multimap.close();
 
-    for(auto it: this->kmers){
-        if(it.second.size()>1){
-            std::cout<<it.first<<"\t"<<it.second.size()<<std::endl;
+    std::cerr<<"end"<<std::endl;
+    std::cerr<<"total number of kmers: "<<this->kmers.size()<<std::endl;
+
+    // now time to write the unique kmers for transcripts
+    std::unordered_map<std::string,int> uniq_cnt; // counts of unique kmers per transcript
+    std::pair<std::unordered_map<std::string,int>::iterator,bool> ex_ucnt; // exists or not
+
+    auto it_unq = kmer_coords.begin();
+    while(it_unq!=kmer_coords.end()){
+        if(it_unq->second.second == 1){ // if only one instance was observed - write out
+            ex_ucnt = uniq_cnt.insert(std::make_pair(it_unq->second.first,1));
+            if(!ex_ucnt.second){ // did not exist
+                ex_ucnt.first->second++;
+            }
         }
+        it_unq++;
     }
+
+    std::string unique_fname(out_fname);
+    unique_fname.append(".unq");
+    std::ofstream uniquefp(unique_fname.c_str());
+    auto it_unq_cnt = uniq_cnt.begin();
+    while(it_unq_cnt!=uniq_cnt.end()){
+        uniquefp<<it_unq_cnt->first<<","<<it_unq_cnt->second<<std::endl;
+        it_unq_cnt++;
+    }
+    uniquefp.close();
 
     // write genes to file
     std::string gene_fname(out_fname);
@@ -362,17 +395,19 @@ void gtf2fasta_print_usage()
 }
 
 enum Opt {GFF_FP   = 'a',
-          REF_FA     = 'r',
-          OUT_FA    = 'o',
-          KMER_LEN     = 'k'};
+          REF_FA   = 'r',
+          OUT_FA   = 'o',
+          KMER_LEN = 'k',
+          UNIQ     = 'u'};
 
 int main(int argc, char *argv[])
 {
     ArgParse args("Map2GFF");
-    args.add_string(Opt::GFF_FP,"gff","","");
-    args.add_string(Opt::REF_FA,"ref","","");
-    args.add_string(Opt::OUT_FA,"output","","");
-    args.add_int(Opt::KMER_LEN,"kmer",76,"");
+    args.add_string(Opt::GFF_FP,"gff","","path to the annotation of the genome is GFF/GTF format");
+    args.add_string(Opt::REF_FA,"ref","","path to the reference genome in the FASTA format");
+    args.add_string(Opt::OUT_FA,"output","","base name for the output files");
+    args.add_int(Opt::KMER_LEN,"kmer",76,"kmer length to use for building the index");
+    args.add_flag(Opt::UNIQ,"uniq","get a separate output with uniq kmers per each transcript");
     
     args.parse_args(argc,argv);
     
@@ -388,3 +423,24 @@ int main(int argc, char *argv[])
     
     return 0;
 }
+
+
+/* * can think of three different ways to reassign multimappers
+   * 1. on the gene/locus level
+        * compute average coverage across the entire locus
+        * coverage varies when multiple isoforms and may incorrectly reflect the coverage at the region of interest
+   * 2. on the transcript level
+        * compute average number of reads for each transcript individually
+        * problem with overlapping transcripts - how can we handle them
+        * 1. build an index to lookup how many isoforms cover a given range of positions
+            * count the coverage as the number of reads divided by the number of overlaps for each read
+            * alternatively, we could potentially precompute this index for all transcripts and use it to normalize the read counts for that transcript
+                * in which case we do not need to perform expensive lookus during runtime and the index stays small
+        * 2. preliminary transcriptome quantification
+   * 3. on the window level
+        * select a window around a multimapper and compute the average coverage
+   * */
+
+
+// Important!!!:: do not need a two-pass algorithm. We can achieve the same easier in a single pass
+// Similar to the PID algorithm which for each read will change the target (coverage) and at the next multimapper would compensate given an error

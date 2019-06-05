@@ -101,7 +101,7 @@ struct GffTranscript: public GSeg {
     std::string& getRefName() {
 		return refID;
 	}
-	GffTranscript(const std::string& tline);
+	explicit GffTranscript(const std::string& tline);
 };
 
 // typedef std::vector<std::pair<int,int> > Coords;
@@ -120,10 +120,7 @@ struct coord_hash {
 typedef std::tuple<int,int,int> coord_range;
 struct coord_cmp {
     bool operator()(coord_range const & a, coord_range const & b) {
-        if(std::get<2>(a) < std::get<1>(b) || std::get<0>(a)!=std::get<0>(b)){
-            return true;
-        }
-        return false;
+        return std::get<2>(a) < std::get<1>(b) || std::get<0>(a) != std::get<0>(b);
     }
 };
 
