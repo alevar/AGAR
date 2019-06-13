@@ -8,11 +8,37 @@ ArgParse::ArgParse(std::string desc) {
     desc_ = desc;
 }
 
-ArgParse::~ArgParse() {
-    // delete val_int;
-    // delete val_bool;
-    // delete val_double;
-    // delete val_string;
+ArgParse::~ArgParse() = default;
+
+std::string ArgParse::get_help(){
+    std::stringstream ss;
+
+    ss << "Trans2Genome Help Page"<<std::endl<<std::endl;
+    ss << "salmon2genome ";
+    for(auto & arg : args_){ // process required arguments
+        if(arg.second.required){
+            ss<<"-"<<arg.first<<" ";
+        }
+    }
+    bool first = true;
+    for(auto & arg : args_){ // now process non-required arguments
+        if(!arg.second.required){
+            if(first){
+                ss<<"[";
+            }
+            first = false;
+            ss<<"-"<<arg.first<<" ";
+        }
+    }
+    if(!first){
+        ss<<"]";
+    }
+    ss<<std::endl;
+    ss<<"Arguments:"<<std::endl;
+    for(auto & arg : args_){
+        ss<<"\t"<<arg.first<<"/--"<<arg.second.name<<"\t"<<arg.second.desc<<std::endl;
+    }
+    return ss.str();
 }
 
 std::string ArgParse::get_param_str() {
@@ -20,13 +46,12 @@ std::string ArgParse::get_param_str() {
     std::stringstream ss;
 
     for (auto a = args_.begin(); a != args_.end(); a++) {
+        std::cout<<a->first<<std::endl;
 
         if (a->second.type != Type::STRING) {
-            
             if (a != args_.begin()) {
                 ss << DELIM;
             }
-
             ss << a->first;
 
             switch(a->second.type) {
@@ -46,11 +71,8 @@ std::string ArgParse::get_param_str() {
                 std::cerr << "Error: bad type\n";
                 break;
             }
-
-            
         }
     }
-
     return ss.str();
 }
 
@@ -77,6 +99,7 @@ void ArgParse::parse_args(int argc, char **argv) {
 
         
         Arg &a = args_[o];
+        a.set = true; // this flag is set in the command line
         switch(a.type) {
             case Type::FLAG:
             *( (bool *) a.value ) = true;
@@ -99,9 +122,18 @@ void ArgParse::parse_args(int argc, char **argv) {
             break;
         }
     }
+
+    // now check if all required arguments have been provided
+    for (auto & arg : args_) {
+        if(arg.second.required && !arg.second.set){
+            std::cerr<<"======================================"<<std::endl<<std::endl<<"Missing argument: "<<arg.second.name<<std::endl<<std::endl<<"======================================"<<std::endl<<std::endl;
+            std::cerr<<this->get_help()<<std::endl;
+            exit(1);
+        }
+    }
 }
 
-bool ArgParse::add_flag(char c, std::string name, std::string desc="") {
+bool ArgParse::add_flag(char c, std::string name, std::string desc="",bool required=false) {
 
     if (args_.count(c) > 0) {
         return false;
@@ -110,14 +142,14 @@ bool ArgParse::add_flag(char c, std::string name, std::string desc="") {
     bool *val_bool = new bool;
     *val_bool = false;
 
-    Arg a = {Type::FLAG, name, desc, (void *) val_bool};
+    Arg a = {Type::FLAG, std::move(name), std::move(desc), (void *) val_bool,required,false};
     args_[c] = a;
 
     return true;
 }
 
 bool ArgParse::add_int(char c, std::string name, 
-                       int def, std::string desc="") {
+                       int def, std::string desc="",bool required=false) {
 
     if (args_.count(c) > 0) {
         return false;
@@ -126,14 +158,14 @@ bool ArgParse::add_int(char c, std::string name,
     int *val_int = new int;
     *val_int = def;
 
-    Arg a = {Type::INT, name, desc, (void *) val_int};
+    Arg a = {Type::INT, std::move(name), std::move(desc), (void *) val_int,required,false};
     args_[c] = a;
 
     return true;
 }
 
 bool ArgParse::add_double(char c, std::string name, 
-                          double def, std::string desc="") {
+                          double def, std::string desc="",bool required=false) {
 
     if (args_.count(c) > 0) {
         return false;
@@ -142,7 +174,7 @@ bool ArgParse::add_double(char c, std::string name,
     double *val_double = new double;
     *val_double = def;
 
-    Arg a = {Type::DOUBLE, name, desc, (void *) val_double};
+    Arg a = {Type::DOUBLE, std::move(name), std::move(desc), (void *) val_double,required,false};
     args_[c] = a;
 
     return true;
@@ -150,16 +182,16 @@ bool ArgParse::add_double(char c, std::string name,
 }
 
 bool ArgParse::add_string(char c, std::string name, 
-                          std::string def, std::string desc="") {
+                          std::string def, std::string desc="",bool required=false) {
     
     if (args_.count(c) > 0) {
         return false;
     }
 
     std::string *val_string = new std::string;
-    *val_string = def;
+    *val_string = std::move(def);
 
-    Arg a = {Type::STRING, name, desc, (void *) val_string};
+    Arg a = {Type::STRING, std::move(name), std::move(desc), (void *) val_string,required,false};
     args_[c] = a;
 
     return true;
@@ -192,19 +224,3 @@ std::string ArgParse::get_string(char c) {
     Arg &a = args_[c];
     return *( (std::string *) a.value );
 }
-
-//int main(int argc, char** argv) {
-//    ArgParse ap("This is a test");
-//    ap.add_flag('f', "flag", "This is a flag");
-//    ap.add_int('i', "int", 0, "This is an integer argument");
-//    ap.add_double('d', "double", 0, "This is a double argument");
-//    ap.add_string('s', "string", "", "This is a string argument");
-//
-//    ap.parse_args(argc, argv);
-//
-//    std::cout << ap.get_name('f') << ": " << ap.get_flag('f') << "\n";
-//    std::cout << ap.get_name('i') << ": " << ap.get_int('i') << "\n";
-//    std::cout << ap.get_name('d') << ": " << ap.get_double('d') << "\n";
-//    std::cout << ap.get_name('s') << ": " << ap.get_string('s') << "\n";
-//
-//}

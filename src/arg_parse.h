@@ -9,15 +9,13 @@ class ArgParse {
         enum Type {FLAG, INT, DOUBLE, STRING};
 
     private:
-        // bool * val_bool=new bool;
-        // int * val_int=new int;
-        // double * val_double=new double;
-        // std::string * val_string=new std::string;
 
         typedef struct {
             Type type;
             std::string name, desc;
             void *value;
+            bool required;
+            bool set;
         } Arg;
         
         std::string desc_;
@@ -25,16 +23,16 @@ class ArgParse {
 
     public:
 
-        ArgParse(std::string desc);
+        explicit ArgParse(std::string desc);
 
         ~ArgParse();
 
         void parse_args(int argc, char **argv);
 
-        bool add_flag(char c, std::string name, std::string desc);
-        bool add_int(char c, std::string name, int def, std::string desc);
-        bool add_double(char c, std::string name, double def, std::string desc);
-        bool add_string(char c, std::string name, std::string def, std::string desc);
+        bool add_flag(char c, std::string name, std::string desc,bool required);
+        bool add_int(char c, std::string name, int def, std::string desc,bool required);
+        bool add_double(char c, std::string name, double def, std::string desc,bool required);
+        bool add_string(char c, std::string name, std::string def, std::string desc,bool required);
 
         std::string get_name(char c);
         std::string get_desc(char c);
@@ -45,6 +43,8 @@ class ArgParse {
         std::string get_string(char c);
 
         std::string get_param_str();
+
+        std::string get_help();
 
 };
 

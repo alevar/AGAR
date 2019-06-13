@@ -10,12 +10,13 @@
 #include <fstream>
 #include <sstream>
 #include <unistd.h>
-#include <cassert>
 #include <cstdlib>
 #include <vector>
 #include <cstring>
 #include <unordered_map>
+#include <unordered_set>
 
+//#include <htslib/khash.h> // TODO: consider moving the implementation to a better hashmap (such as khash or something else)
 #include <htslib/sam.h>
 
 #include "GVec.hh"
@@ -31,48 +32,341 @@
 #define BAM_CDIFF   8
 #define MAX_CIGARS  1024
 
+#define NDEBUG
+#include <cassert>
+
+// class for the unmapped reads
+// evaluates reads and outputs them accordingly
+class UMAP{
+public:
+    UMAP() = default; // do not want anyone to call from outside
+    UMAP(const std::string& outFP){ // the output file allows saving the output into a specific file as opposed to passing it to stdout
+        this->outFP = outFP;
+        std::string out_fname_r1(this->outFP);
+        std::string out_fname_r2(this->outFP);
+        std::string out_fname_s(this->outFP);
+        out_fname_r1.append(".r1.fa");
+        out_fname_r2.append(".r2.fa");
+        out_fname_s.append(".s.fa");
+        this->out_stream_r1 = std::ofstream(out_fname_r1.c_str());
+        this->out_stream_r2 = std::ofstream(out_fname_r2.c_str());
+        this->out_stream_s = std::ofstream(out_fname_s.c_str());
+    }
+    ~UMAP(){
+        this->out_stream_r1.close();
+        this->out_stream_r2.close();
+        this->out_stream_s.close();
+    }
+
+    void set_outFP(const std::string& outFP){
+        this->outFP = outFP;
+        std::string out_fname_r1(this->outFP);
+        std::string out_fname_r2(this->outFP);
+        std::string out_fname_s(this->outFP);
+        out_fname_r1.append(".r1.fa");
+        out_fname_r2.append(".r2.fa");
+        out_fname_s.append(".s.fa");
+        this->out_stream_r1 = std::ofstream(out_fname_r1.c_str());
+        this->out_stream_r2 = std::ofstream(out_fname_r2.c_str());
+        this->out_stream_s = std::ofstream(out_fname_s.c_str());
+    }
+
+    // this function verifies whether a read needs to be written to the output
+    void insert(bam1_t* al){
+        // also need to check if the second pair does not
+        if(this->pair_unmapped(al)){
+            if(this->is1(al)){
+                this->pse = this->ps2.find(bam_get_qname(al));
+                if(this->pse != this->ps2.end()){ // already exists and is waiting to be returned
+                    // in this case we can simply write out both records
+                    this->outputFasta(al,this->out_stream_r1);
+                    this->outputFasta(this->pse->second,this->out_stream_r2);
+                    // remove from the stack
+                    this->ps2.erase(this->pse);
+                    // add the entry to unpaired
+                    this->unpaired1.insert(bam_get_qname(al));
+                }
+                else{
+                    if(this->unpaired1.insert(bam_get_qname(al)).second){ // successfully inserted a new key
+                        // need to add to the paired_stack to be outputted when the second mate is found
+                        this->ps1.insert(std::make_pair(bam_get_qname(al),al));
+                    }
+                }
+            }
+            else{
+                this->pse = this->ps1.find(bam_get_qname(al));
+                if(this->pse != this->ps1.end()){ // already exists and is waiting to be returned
+                    // in this case we can simply write out both records
+                    this->outputFasta(al, this->out_stream_r2);
+                    this->outputFasta(this->pse->second,this->out_stream_r1);
+                    // remove from the stack
+                    this->ps1.erase(this->pse);
+                    this->unpaired2.insert(bam_get_qname(al));
+                }
+                else{
+                    if(this->unpaired2.insert(bam_get_qname(al)).second){ // successfully inserted a new key
+                        // need to add to the paired_stack to be outputted when the second mate is found
+                        this->ps2.insert(std::make_pair(bam_get_qname(al),al));
+                    }
+                }
+            }
+        }
+        else if(this->is1(al)){
+            if(this->unpaired1.insert(bam_get_qname(al)).second){ // did not previously exist
+                this->outputFasta(al,this->out_stream_s);
+            }
+        }
+        else{
+            if(this->unpaired2.insert(bam_get_qname(al)).second){ // did not previously exist
+                this->outputFasta(al,this->out_stream_s);
+            }
+        }
+    }
+private:
+    std::string outFP;
+    std::ofstream out_stream_r1,out_stream_r2,out_stream_s;
+    // keep a map of the unmapped elements to directly output to hisat2
+    std::unordered_set<std::string> unpaired1; // for first mates
+    std::unordered_set<std::string> unpaired2; // for second mates
+    std::pair<std::unordered_set<std::string>::iterator,bool> ue1,ue2; // an entry exists;
+
+    std::unordered_map<std::string,bam1_t*> ps1,ps2; // stack for holding the paired end information
+    std::unordered_map<std::string,bam1_t*>::iterator pse;
+
+    // TODO: cannot output quality scores from SALMON. Need to consider trimming reads prior to passing through SALMON
+    void outputFasta(bam1_t *al,std::ofstream& out_stream){
+        // reports a fasta record from a given alignment record
+        std::string read_name= bam_get_qname(al);
+        out_stream<<">"<<read_name<<std::endl; // TODO: output to file to prevent crowding of the screen at the moment
+        // now deal with the sequence
+        uint8_t * seq = bam_get_seq(al);
+        for(int i=0;i<al->core.l_qseq;i++){
+            out_stream<<seq_nt16_str[bam_seqi(seq,i)];
+        }
+        out_stream<<std::endl;
+    }
+    bool is1(bam1_t *al){return al->core.flag & 64;} // test if the current read is first in the pair
+    bool is2(bam1_t *al){return al->core.flag & 128;} // test if the current read is second in the pair
+    bool pair_unmapped(bam1_t *al){return (al->core.flag & 4) && (al->core.flag & 8);}; // test if bth reads in the pair are unmapped
+};
+
+// this class describes the multimappers in the index transcriptome
+// and facilitates efficient storage and lookup
+class Multimap{
+public:
+    Multimap() = default;
+    ~Multimap() = default;
+private:
+    // has to be very a efficient implementation of a hashmap
+    std::unordered_map<std::string,int> mms;
+};
+
 struct GffTranscript: public GSeg {
     GVec<GSeg> exons;
-    int numID; //numeric ID in tlst
     std::string gffID;
     std::string refID;
+    int numID;
+    int abundance;
     char strand;
     GffTranscript():exons(1), numID(-1), gffID(),
-                    refID(), strand(0) { }
+                    refID(), strand(0), abundance(0) { }
 
-    std::string& getRefName() {
-        return refID;
+    void tline_parserr(const std::string& tline, std::string add="") {
+        std::cerr << "Error at parsing .tlst line " << add << ":"
+                  << std::endl << '\t' << tline << std::endl;
+        exit(1);
     }
-    explicit GffTranscript(const std::string& tline);
+
+    explicit GffTranscript(const std::string& tline){
+        std::istringstream f(tline);
+        std::string token;
+        std::vector<std::string> tokens;
+        while (std::getline(f, token, ' ')) {
+            tokens.push_back(token);
+        }
+
+        if (tokens.size()!=4) {
+            tline_parserr(tline);
+        }
+        numID=atoi(tokens[0].c_str());
+        gffID=tokens[1];
+        refID=tokens[2];
+        if (refID.length()<1) {
+            tline_parserr(tline, "(refID empty)");
+        }
+        strand=refID[refID.length()-1];
+        if (strand!='-' && strand!='+') {
+            tline_parserr(tline, "(invalid strand)");
+        }
+        refID.erase(refID.length()-1);
+
+        f.clear(); //to reset the std::getline() iterator
+        f.str(tokens[3]);
+        while (std::getline(f, token, ',')) {
+            size_t sp_pos=token.find('-');
+            if (sp_pos == std::string::npos) {
+                std::string s("(invalid exon str: ");
+                s+=token;s+=")";
+                tline_parserr(tline, s);
+            }
+            std::string s_start=token.substr(0,sp_pos);
+            std::string s_end=token.substr(sp_pos+1);
+            GSeg exon(atoi(s_start.c_str()), atoi(s_end.c_str()));
+            if (exon.start==0 || exon.end==0 || exon.end<exon.start) {
+                std::string s("(invalid exon: ");
+                s+=token;s+=")";
+                tline_parserr(tline, s);
+            }
+            if (start==0 || start>exon.start){
+                start=exon.start;
+            }
+            if (end==0 || end<exon.end){
+                end=exon.end;
+            }
+            exons.Add(exon);
+        } //while exons
+    }
+    std::string& getRefName() {return refID;}
+    void set_abundance(int abund){abundance=abund;}
+};
+
+// this structure defines all the things related to a genomic position of a transcriptomic alignment
+struct ReadData{
+    int read_start;
+    int cigar[MAX_CIGARS];
+    int num_cigars;
+    int tid;
+};
+
+// this class defines the unique identification of a read mapping
+class MapID{
+public:
+    explicit MapID(bam1_t *al){
+        // populate object with all the info
+        this->name = bam_get_qname(al);
+        this->refid = al->core.tid; // assumes that tid == mtid
+        if(al->core.flag & 0x40){
+            this->pos1 = al->core.pos;
+            this->pos2 = al->core.mpos;
+        }
+        else{
+            this->pos1 = al->core.mpos;
+            this->pos2 = al->core.pos;
+        }
+    }
+    ~MapID()=default;
+
+    bool operator==(const MapID& m) const{
+        return this->name==m.get_name() &&
+                this->refid==m.get_refid() &&
+                this->pos1==m.get_pos1() &&
+                this->pos2==m.get_pos2();
+    }
+
+    std::string get_name() const{return this->name;}
+    int get_refid() const{return this->refid;}
+    int get_pos1() const{return this->pos1;}
+    int get_pos2() const{return this->pos2;}
+private:
+    MapID()=default; // do not want to be called
+    std::string name;
+    int refid;
+    int pos1,pos2; // positions of two mates
+};
+
+// hash function to be used for
+template <>
+struct std::hash<MapID>{
+    size_t operator()(const MapID& k) const{
+        return ((std::hash<std::string>()(k.get_name()) ^
+                (
+                        (std::hash<int>()(k.get_refid()) ^ std::hash<int>()(k.get_pos1()) ^ std::hash<int>()(k.get_pos2())
+                )<< 1)) >> 1);
+    }
+};
+
+// this class facilitates efficient identification of mates from the same paired-end read
+// when a read is added to the class, the pair is looked up and if found is reported back
+// pairs are identified by the readname and respective positions (reference id and read start)
+// once identified, the pair is immediately removed from the set
+/*
+* SAMPLE WORKFLOW
+* 1. have a class to hold and release reads
+*      - this class will do the mate resolution
+*      - the class is needed since we can not guarantee without sorting by readname that reads will appear in the correct order
+*          however, with high likelihood they will, and that can be exploited for efficiency
+*
+* 2. for a paired read we simply wait until the mate is found and then proceed to process them together
+*
+*/
+class Pairs{
+public:
+    Pairs() = default;
+    ~Pairs() = default;
+
+    int add(bam1_t *al,bam1_t *mate){ // add read to the stack
+        MapID m(al);
+        me = mates.insert(std::make_pair(m,bam_dup1(al)));
+        if(!me.second){ // entry previously existed - can report a pair and remove from the stack
+            mate = bam_dup1(me.first->second);
+            mates.erase(me.first);
+            return 1;
+        }
+        return 0;
+    }
+private:
+    std::unordered_map<MapID,bam1_t*> mates;
+    std::pair<std::unordered_map<MapID,bam1_t*>::iterator,bool> me;
 };
 
 class Map2GFF_SALMON{
 public:
-    Map2GFF_SALMON(const std::string& tlstFP, const std::string& alFP, const int& threads);
-    ~Map2GFF_SALMON() = default;
+    Map2GFF_SALMON(const std::string& tlstFP, const std::string& alFP,const std::string& abundFP,const std::string& genome_headerFP,const std::string& outFP,const int& threads, const int& num_trans);
+    ~Map2GFF_SALMON();
 
-    void convert_coords(const std::string& outFP, const std::string& genome_header);
+    void convert_coords();
 
 private:
-    bool get_read_start(GVec<GSeg>& exon_list,size_t gff_start, size_t& genome_start,int& exon_idx);
-    int convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_exon,int match_length,GVec<GSeg>& exon_list,
-                      int &num_cigars,int read_start,bam1_t* curAl,std::string &cigar_str,int cigars[MAX_CIGARS],std::vector<std::pair<int,int>> &coords);
+    void load_transcriptome(); // add transcriptome positional information into the index
+    void load_abundances(); // add abundances to the transcripts
+
+    int convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_exon,int match_length,
+            GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS]);
     int merge_cigar(const std::vector<std::pair<int,int>> *cor,bam1_t *al, uint32_t *cur_cigar_full, int n_cigar);
 
     int numThreads=1;
+    int numTranscripts=0; // gtf_to_fasta returns a .info file with this information
 
-    GPVec<GffTranscript> transcripts;
-    std::unordered_map<std::string,GffTranscript*> tidx_to_t;
+    // section describing the file paths
+    std::string alFP,tlstFP,abundFP,outFP,genome_headerFP,infoFP;
 
-    std::ifstream tlststream;
+    // additional data
+
+    UMAP umap;
+
+    std::vector<GffTranscript> transcriptome; // TODO: initiate this vector with a size. the size is the number of transcripts in the index. This can be computed as part of the index creation
 
     samFile *al;
     bam_hdr_t *al_hdr;
-    bam1_t *curAl;
+//    bam1_t *curAl; // TODO: how about you try to remove this???
     samFile *genome_al;
     bam_hdr_t *genome_al_hdr;
+    samFile *outSAM;
+    bam_hdr_t *outSAM_header;
 
     std::unordered_map<std::string,int> ref_to_id; // built from the genome header file
+
+    Pairs pairs;
+
+    // new
+    bool has_valid_mate(bam1_t *al);
+    bool get_read_start(GVec<GSeg>& exon_list,size_t gff_start,size_t& genome_start, int& exon_idx);
+    void add_cigar(bam1_t *al,int num_cigars,int* cigars);
+    void add_aux(bam1_t *al,char xs);
+    void fix_flag(bam1_t *al);
+    int collapse_genomic(bam1_t *al,int mate_start);
+    void process_pair(bam1_t* al);
+    void process_single(bam1_t* al,int mate_start);
 
 };
 

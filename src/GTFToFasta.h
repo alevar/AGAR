@@ -26,54 +26,55 @@
 #include <set>
 #include <algorithm>
 
-// #include "common.h"
 #include "gff.h"
 #include "GFaSeqGet.h"
 #include "FastaTools.h"
 #include "arg_parse.h"
 
-// make -C /home/sparrow/genomicTools/tophat/ && ~/genomicTools/tophat/src/gtf_to_fasta 76 ~/genomicTools/tophat/ann.gff ~/genomicData/hg38/hg38_p8.fa ~/genomicTools/tophat/ann.fa
+// ~/genomicTools/tophat/src/gtf_to_fasta 76 ~/genomicTools/tophat/ann.gff ~/genomicData/hg38/hg38_p8.fa ~/genomicTools/tophat/ann.fa
 class GTFToFasta {
 public:
-    GTFToFasta(std::string gtf_fname, std::string genome_fname);
+    GTFToFasta(std::string gtf_fname, std::string genome_fname,const std::string& out_fname, int kmer_length,bool multi);
     ~GTFToFasta();
-    void make_transcriptome(const std::string& out_fname, int kmer_length);
+    void make_transcriptome();
 
     // for debugging
     void print_mapping();
 private:
-    // bool multi=false;
     GffReader gtfReader_;
-    // The genome_fhandle_ isn't used anywhere after being
-    // initialized, and double opening the fasta file means that pipes
-    // cannot work.
-    // GFaSeqGet genome_fhandle_;
 
     std::string gtf_fname_;
     std::string genome_fname_;
-
     FILE* gtf_fhandle_;
+
+    bool multi = false; // multimapper resolution
+    int kmerlen; // kmer length to index
+    std::string out_fname; // base name for all files
+    int topTransID = 0; // the highest transcript ID assigned for any transcript in the current transcriptome. This information is written to the info file
+
+    std::ofstream infofp;
+    std::ofstream tlst;
+    std::ofstream multimap;
+    std::ofstream uniquefp;
+    std::ofstream genefp;
+    std::ofstream out_file;
+
+    void transcript_map();
+    std::string get_exonic_sequence(GffObj& p_trans, FastaRecord& rec, std::string& coords);
+
+    GTFToFasta() = default; // Don't want anyone calling the constructor w/o options
+
+    // MULTIMAPPERS
 
     //convert set to unordered set
     std::map<std::vector<std::pair<int,int> >, std::pair<std::string,int> > kmer_coords; //genomic positions encountered and counts of how many transcripts share a given position on the genome if the position is not a multimapper. The second feature in the value pointed to by the key shows the first transcript for which a position is defined. If only a single transcript contains the position, than it is its transcript id written
-//    std::set<std::vector<std::pair<int,int> > > kmer_coords; // genomic positions encountered
     std::unordered_map<std::string,std::vector<std::vector<std::pair<int,int>>>> kmers; // kmers and their positions for efficient lookup
 
     std::unordered_map<int,const char* const> int_to_chr; // conversion back from intigers to chromosomes
     std::unordered_map<const char*,int> chr_to_int; // conversion table from chromosome id to int
 
-    // "contig" => vector(index_of_gff_obj)
-//    typedef std::map<const char* , std::vector< size_t >* > ContigTransMap;
     typedef std::map<std::string, std::vector< int >* > ContigTransMap;
-
     ContigTransMap contigTransMap_;
-
-    // std::transform(seq.cbegin(), seq.cend(), seq.begin(), lambda);
-
-    void transcript_map();
-    std::string get_exonic_sequence(GffObj& p_trans, FastaRecord& rec, std::string& coords, int kmer_length, std::ofstream& multimap);
-
-    GTFToFasta(); // Don't want anyone calling the constructor w/o options
 };
 
 #endif

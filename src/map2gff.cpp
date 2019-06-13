@@ -1,6 +1,7 @@
 #include "map2gff.h"
 #include "tokenize.h"
 
+
 void tline_parserr(const std::string& tline, std::string add="") {
 	std::cerr << "Error at parsing .tlst line " << add << ":"
 			<< std::endl << '\t' << tline << std::endl;
@@ -473,8 +474,17 @@ void Map2GFF::convert_coords(const std::string& outFP, const std::string& genome
 
     while(sam_read1(al,al_hdr,curAl)>0){
         std::string newReadName=bam_get_qname(curAl);
+        bool unmapped=curAl->core.flag           &    4;
+        if(unmapped){
+            // this is where we can simply output the reads to the stdandard out to be accepted by hisat2 for realignment onto the genome
+            continue;
+        }
+        std::cout<<newReadName<<std::endl;
+        print_cigar(curAl);
+        std::cout<<"========"<<std::endl;
         doMulti = this->db_entry_length == curAl->core.l_qseq;
 
+        // this is where we deal with the paired output
         if (newReadName == curReadName || start){
             curReadName=newReadName;
             start=false;

@@ -8,7 +8,7 @@
 //
 #include "GTFToFasta.h"
 
-std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::string& coords, int kmer_length, std::ofstream& multimap){
+std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::string& coords){
     GList<GffExon>& exon_list = p_trans.exons;
 
     std::string exon_seq;
@@ -33,16 +33,16 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
         length = (cur_exon.end+1) - cur_exon.start;
 
         // get coordinates into the map
-        if (length>1){ // sanity check for 0 and 1 base exons
+        if (length>1 and this->multi){ // sanity check for 0 and 1 base exons // TODO: need to refactor the multimapping index
             for(int j=0;j<length;j++){ // iterate over all kmers in the given exon
-                if ((length-j)+cur_len<kmer_length){ // not enough coordinates - need to look at the next exon
+                if ((length-j)+cur_len<this->kmerlen){ // not enough coordinates - need to look at the next exon
                     cur_coords.emplace_back(std::pair<int,int>(cur_exon.start+j,cur_exon.end));
                     cur_len+=((cur_exon.end+1)-(cur_exon.start+j)); // save the length that has been seen thus far
                     break;
                 }
                 else{ // otherwise we have all the bases we need and can evaluate their uniqueness
                     if (cur_len!=0){ // some information is left from previous exons
-                        for (int g=kmer_length-cur_len;g<kmer_length;g++){ // build new sequences using past coordinates
+                        for (int g=this->kmerlen-cur_len;g<this->kmerlen;g++){ // build new sequences using past coordinates
                             sub_seq="";
                             cur_coords.emplace_back(std::make_pair(cur_exon.start+j,cur_exon.start+j+g-1));
                             exists=this->kmer_coords.insert(std::make_pair(cur_coords,std::make_pair(p_trans.getID(),1)));
@@ -50,7 +50,7 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
                                 for (int d=1;d<cur_coords.size();d++){
                                     sub_seq+=rec.seq_.substr(cur_coords[d].first-1,(cur_coords[d].second+1)-cur_coords[d].first);
                                 }
-                                if(sub_seq.length()!=kmer_length){
+                                if(sub_seq.length()!=this->kmerlen){
                                     std::cerr<<"1: "<<sub_seq.length()<<" "<<p_trans.getID()<<std::endl;
                                     for(int y=1;y<cur_coords.size();y++){
                                         std::cerr<<cur_coords[y].first<<"-"<<cur_coords[y].second<<";";
@@ -68,25 +68,25 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
                                     // output a combination with every other element
                                     int u1=exists2.first->second.size()-1;
                                     for (int u2=0;u2<u1;u2++){
-                                        multimap<< GffObj::names->gseqs.getName(exists2.first->second[u1][0].first)<<":"<<(char)exists2.first->second[u1][0].second<<"@";
+                                        this->multimap<< GffObj::names->gseqs.getName(exists2.first->second[u1][0].first)<<":"<<(char)exists2.first->second[u1][0].second<<"@";
                                         for (int k1=1;k1<exists2.first->second[u1].size();k1++){
                                             if (k1!=exists2.first->second[u1].size()-1){
-                                                multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second<<",";
+                                                this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second<<",";
                                             }
                                             else{
-                                                multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second;
+                                                this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second;
                                             }
                                         }
-                                        multimap<<"\t"<< GffObj::names->gseqs.getName(exists2.first->second[u2][0].first)<<":"<<(char)exists2.first->second[u2][0].second<<"@";
+                                        this->multimap<<"\t"<< GffObj::names->gseqs.getName(exists2.first->second[u2][0].first)<<":"<<(char)exists2.first->second[u2][0].second<<"@";
                                         for (int k2=1;k2<exists2.first->second[u2].size();k2++){
                                             if (k2!=exists2.first->second[u2].size()-1){
-                                                multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second<<",";
+                                                this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second<<",";
                                             }
                                             else{
-                                                multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second;
+                                                this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second;
                                             }
                                         }
-                                        multimap<<std::endl;
+                                        this->multimap<<std::endl;
                                     }
                                 }
                             }
@@ -101,7 +101,7 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
                             if (cur_coords[1].first-1==cur_coords[1].second){
                                 cur_coords.erase(cur_coords.begin()+1); // delete the first element
                             }
-                            if((length - j) + cur_len < kmer_length){ // check again, since we are decreasing the cur_len with each iteration, thus it is possible that the length may not be sufficient
+                            if((length - j) + cur_len < this->kmerlen){ // check again, since we are decreasing the cur_len with each iteration, thus it is possible that the length may not be sufficient
                                 cur_coords.emplace_back(std::pair<int,int>(cur_exon.start+j,cur_exon.end));
                                 cur_len += ((cur_exon.end+1) - (cur_exon.start + j)); // save the length that has been seen thus far
                                 exhaustedExon=true; //set flag to exit from both for loops
@@ -115,18 +115,18 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
                         // add new coordinates first
                     }
                     // need to resume from the current index
-                    if ((length-j)+cur_len<kmer_length){ // not enough coordinates - need to look at the next exon
+                    if ((length-j)+cur_len<this->kmerlen){ // not enough coordinates - need to look at the next exon
                         cur_coords.emplace_back(std::pair<int,int>(cur_exon.start+j,cur_exon.end));
                         cur_len+=((cur_exon.end+1)-(cur_exon.start+j));
                         break;
                     }
                     else{
-                        cur_coords.emplace_back(std::make_pair(cur_exon.start+j,cur_exon.start+j+kmer_length));
+                        cur_coords.emplace_back(std::make_pair(cur_exon.start+j,cur_exon.start+j+this->kmerlen));
                         exists=this->kmer_coords.insert(std::make_pair(cur_coords,std::make_pair(p_trans.getID(),1)));
                         if (exists.second){ // was successfully inserted
                             // get sequence
-                            sub_seq=rec.seq_.substr(cur_exon.start+j-1,kmer_length);
-                            if(sub_seq.length()>kmer_length){
+                            sub_seq=rec.seq_.substr(cur_exon.start+j-1,this->kmerlen);
+                            if(sub_seq.length()>this->kmerlen){
                                 std::cerr<<"2: "<<sub_seq.length()<<" "<<p_trans.getID()<<" ";
                                 for(int y=1;y<cur_coords.size();y++){
                                     std::cerr<<cur_coords[y].first<<"-"<<cur_coords[y].second<<";";
@@ -144,25 +144,25 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
                                 // output a combination with every other element
                                 int u1=exists2.first->second.size()-1; // need to only look at the current cur_coords, since otherwise we output duplicates
                                 for (int u2=0;u2<u1;u2++){
-                                    multimap<< GffObj::names->gseqs.getName(exists2.first->second[u1][0].first)<<":"<<(char)exists2.first->second[u1][0].second<<"@";
+                                    this->multimap<< GffObj::names->gseqs.getName(exists2.first->second[u1][0].first)<<":"<<(char)exists2.first->second[u1][0].second<<"@";
                                     for (int k1=1;k1<exists2.first->second[u1].size();k1++){
                                         if (k1!=exists2.first->second[u1].size()-1){
-                                            multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second<<",";
+                                            this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second<<",";
                                         }
                                         else{
-                                            multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second;
+                                            this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second;
                                         }
                                     }
-                                    multimap<<"\t"<< GffObj::names->gseqs.getName(exists2.first->second[u2][0].first)<<":"<<(char)exists2.first->second[u2][0].second<<"@";
+                                    this->multimap<<"\t"<< GffObj::names->gseqs.getName(exists2.first->second[u2][0].first)<<":"<<(char)exists2.first->second[u2][0].second<<"@";
                                     for (int k2=1;k2<exists2.first->second[u2].size();k2++){
                                         if (k2!=exists2.first->second[u2].size()-1){
-                                            multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second<<",";
+                                            this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second<<",";
                                         }
                                         else{
-                                            multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second;
+                                            this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second;
                                         }
                                     }
-                                    multimap<<std::endl;
+                                    this->multimap<<std::endl;
                                 }
                             }
                         }
@@ -184,7 +184,7 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
     return exon_seq;
 }
 
-GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname)
+GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std::string& out_fname, int kmerlen,bool multi)
 {
     gtf_fname_ = gtf_fname;
     gtf_fhandle_ = fopen(gtf_fname_.c_str(), "r");
@@ -197,52 +197,70 @@ GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname)
     std::cout << "Reading the annotation file: " << gtf_fname_ << std::endl;
     gtfReader_.init(gtf_fhandle_, true); //load recognizable transcript features only
     gtfReader_.readAll();
+    std::cout << "loaded the annotation"<<std::endl;
 
-    genome_fname_ = genome_fname;
+    std::string multimap_fname(out_fname);
+    multimap_fname.append(".multi");
+    this->multimap = std::ofstream(multimap_fname.c_str());
+
+    std::string tlst_fname(out_fname);
+    tlst_fname.append(".tlst");
+    this->tlst = std::ofstream(tlst_fname.c_str());
+
+    std::string unique_fname(out_fname);
+    unique_fname.append(".unq");
+    this->uniquefp = std::ofstream(unique_fname.c_str());
+
+    std::string gene_fname(out_fname);
+    gene_fname.append(".glst");
+    this->genefp = std::ofstream(gene_fname.c_str());
+
+    std::string info_fname(out_fname);
+    info_fname.append(".info");
+    this->infofp = std::ofstream(info_fname.c_str());
+
+    genome_fname_ = std::move(genome_fname);
+
+    this->multi =  multi;
+    this->kmerlen = kmerlen;
+    this->out_fname = out_fname;
 
     // Make a map from the GffObj
     transcript_map();
 }
 
-GTFToFasta::~GTFToFasta()
-{
+GTFToFasta::~GTFToFasta(){
     ContigTransMap::iterator it;
-
     for (it = contigTransMap_.begin(); it != contigTransMap_.end(); ++it) {
         delete it->second;
     }
-
+    this->infofp.close();
+    this->tlst.close();
+    this->multimap.close();
+    this->uniquefp.close();
+    this->genefp.close();
+    this->out_file.close();
 }
 
-void GTFToFasta::make_transcriptome(const std::string& out_fname, int kmer_length)
+void GTFToFasta::make_transcriptome()
 {
     std::vector<int> *p_contig_vec;
 
     FastaReader fastaReader(genome_fname_);
-    FastaWriter fastaWriter(out_fname);
-    std::string tlst_fname(out_fname);
-    tlst_fname.append(".tlst");
-    std::ofstream tlst(tlst_fname.c_str());
-    std::string multimap_fname(out_fname);
+    FastaWriter fastaWriter(this->out_fname);
     FastaRecord cur_contig;
-    multimap_fname.append(".multi");
-    std::ofstream multimap(multimap_fname.c_str());
     std::map<std::string,std::tuple<int,int,int>> geneMap; // stores minimum and maximum gene coordinates of transcripts in a given gene
     std::pair< std::map<
                 std::string,
                 std::tuple<int,int,int>
             >::iterator,bool> exists_cur_gene;
 
-    std::cerr<<"start"<<std::endl;
     while (fastaReader.good()) {
-
         fastaReader.next(cur_contig);
-
         // If this contig isn't in the map, then there are no transcripts
         // associated with it. Skip it.
         if (contigTransMap_.find(cur_contig.id_) ==
-            contigTransMap_.end())
-        {
+            contigTransMap_.end()){
             continue;
         }
 
@@ -251,25 +269,22 @@ void GTFToFasta::make_transcriptome(const std::string& out_fname, int kmer_lengt
         FastaRecord out_rec;
         for (int trans_idx : *p_contig_vec) {
             GffObj *p_trans = gtfReader_.gflst.Get(trans_idx);
-            //if (p_trans->isDiscarded() || p_trans->exons.Count()==0) continue;
             std::string coordstr;
-            out_rec.seq_ = get_exonic_sequence(*p_trans, cur_contig, coordstr, kmer_length,multimap);
+            out_rec.seq_ = get_exonic_sequence(*p_trans, cur_contig, coordstr);
             if (out_rec.seq_.empty()) continue;
             std::stringstream ss;
             ss << trans_idx;
             out_rec.id_ = ss.str();
-            //ss.str(std::string()); //clear ss
+            if(std::stoi(out_rec.id_)>this->topTransID){ // check if current id is greater than the highest previously observed
+                topTransID = std::stoi(out_rec.id_);
+            }
             out_rec.desc_=p_trans->getID();
             out_rec.desc_.push_back(' ');
-            //ss << p_trans->getID() << ' ' << p_trans->getGSeqName() << p_trans->strand << '\t' << coordstr ;
             out_rec.desc_.append(cur_contig.id_);
             out_rec.desc_.push_back(p_trans->strand);
             out_rec.desc_.push_back(' ');
             out_rec.desc_.append(coordstr); //list of exon coordinates
-            tlst << out_rec.id_ << ' ' << out_rec.desc_ << std::endl;
-            //out_rec.desc_ = "";
-            //out_rec.desc_ = ss.str();
-            //out_rec.seq_ = exon_seq;
+            this->tlst << out_rec.id_ << ' ' << out_rec.desc_ << std::endl;
             fastaWriter.write(out_rec);
 
             // populate the genemap
@@ -296,11 +311,6 @@ void GTFToFasta::make_transcriptome(const std::string& out_fname, int kmer_lengt
             }
         }
     }
-    tlst.close();
-    multimap.close();
-
-    std::cerr<<"end"<<std::endl;
-    std::cerr<<"total number of kmers: "<<this->kmers.size()<<std::endl;
 
     // now time to write the unique kmers for transcripts
     std::unordered_map<std::string,int> uniq_cnt; // counts of unique kmers per transcript
@@ -317,28 +327,21 @@ void GTFToFasta::make_transcriptome(const std::string& out_fname, int kmer_lengt
         it_unq++;
     }
 
-    std::string unique_fname(out_fname);
-    unique_fname.append(".unq");
-    std::ofstream uniquefp(unique_fname.c_str());
     auto it_unq_cnt = uniq_cnt.begin();
     while(it_unq_cnt!=uniq_cnt.end()){
-        uniquefp<<it_unq_cnt->first<<","<<it_unq_cnt->second<<std::endl;
+        this->uniquefp<<it_unq_cnt->first<<","<<it_unq_cnt->second<<std::endl;
         it_unq_cnt++;
     }
-    uniquefp.close();
 
     // write genes to file
-    std::string gene_fname(out_fname);
-    gene_fname.append(".glst");
-    std::ofstream genefp(gene_fname.c_str());
-
     auto it=geneMap.begin();
     while(it!=geneMap.end()){
-        genefp<<it->first<<"\t"<<std::get<0>(it->second)<<"\t"<<std::get<1>(it->second)<<"\t"<<std::get<2>(it->second)<<std::endl;
-        // std::cout<<it->first<<"\t"<<std::get<0>(it->second)<<"\t"<<std::get<1>(it->second)<<"\t"<<std::get<2>(it->second)<<std::endl;
+        this->genefp<<it->first<<"\t"<<std::get<0>(it->second)<<"\t"<<std::get<1>(it->second)<<"\t"<<std::get<2>(it->second)<<std::endl;
         it++;
     }
-    genefp.close();
+
+    // write the information about the index now
+    this->infofp<<this->topTransID<<std::endl;
 }
 
 void GTFToFasta::transcript_map()
@@ -347,50 +350,40 @@ void GTFToFasta::transcript_map()
     const char *p_contig_name;
     std::vector<int> *p_contig_vec;
 
-    for (int i = 0; i < gtfReader_.gflst.Count(); ++i) 
-    {
+    for (int i = 0; i < gtfReader_.gflst.Count(); ++i){
         p_gffObj = gtfReader_.gflst.Get(i);
-        if (p_gffObj->isDiscarded() || p_gffObj->exons.Count()==0)
+        if (p_gffObj->isDiscarded() || p_gffObj->exons.Count()==0){
            continue;
+        }
 
         p_contig_name = p_gffObj->getRefName();
         std::string contig_name(p_contig_name);
 
         // Check if the current contig exists in the map
         // If it doesn't, add it
-        if (contigTransMap_.find(contig_name) == contigTransMap_.end())
-        {
+        if (contigTransMap_.find(contig_name) == contigTransMap_.end()){
             p_contig_vec = new std::vector<int>;
             contigTransMap_[contig_name] = p_contig_vec;
         }
-        else
-        {
+        else{
             p_contig_vec = contigTransMap_[contig_name];
         }
-
         p_contig_vec->push_back(i);
     }
 }
 
-void GTFToFasta::print_mapping()
-{
+void GTFToFasta::print_mapping(){
     std::ofstream out_file("out.names");
     GffObj *p_gffObj;
 
-    for (int i = 0; i < gtfReader_.gflst.Count(); ++i) 
-    {
+    for (int i = 0; i < gtfReader_.gflst.Count(); ++i){
         p_gffObj = gtfReader_.gflst.Get(i);
         if (p_gffObj->isDiscarded() || p_gffObj->exons.Count()==0) continue;
         out_file << i << "\t" << p_gffObj->getID() << std::endl;
     }
-
-    out_file.close();
 }
 
-GTFToFasta::GTFToFasta() = default;
-
-void gtf2fasta_print_usage() 
-{
+void gtf2fasta_print_usage(){
     std::cerr << "Usage: gtf_to_fasta kmer_length transcripts.gtf genome.fa out_file" << std::endl;
 }
 
@@ -398,16 +391,23 @@ enum Opt {GFF_FP   = 'a',
           REF_FA   = 'r',
           OUT_FA   = 'o',
           KMER_LEN = 'k',
-          UNIQ     = 'u'};
+          UNIQ     = 'u',
+          MULTI    = 'm'};
 
 int main(int argc, char *argv[])
 {
     ArgParse args("Map2GFF");
-    args.add_string(Opt::GFF_FP,"gff","","path to the annotation of the genome is GFF/GTF format");
-    args.add_string(Opt::REF_FA,"ref","","path to the reference genome in the FASTA format");
-    args.add_string(Opt::OUT_FA,"output","","base name for the output files");
-    args.add_int(Opt::KMER_LEN,"kmer",76,"kmer length to use for building the index");
-    args.add_flag(Opt::UNIQ,"uniq","get a separate output with uniq kmers per each transcript");
+    args.add_string(Opt::GFF_FP,"gff","","path to the annotation of the genome is GFF/GTF format",true);
+    args.add_string(Opt::REF_FA,"ref","","path to the reference genome in the FASTA format",true);
+    args.add_string(Opt::OUT_FA,"output","","base name for the output files",true);
+    args.add_int(Opt::KMER_LEN,"kmer",76,"kmer length to use for building the index",false);
+    args.add_flag(Opt::UNIQ,"uniq","get a separate output with uniq kmers per each transcript",false);
+    args.add_flag(Opt::MULTI,"multi","identify all multimappers present in the input transcriptome",false);
+
+    if(strcmp(argv[1],"--help")==0){
+        std::cerr<<args.get_help()<<std::endl;
+        exit(1);
+    }
     
     args.parse_args(argc,argv);
     
@@ -415,11 +415,10 @@ int main(int argc, char *argv[])
     std::string gtf_fname(args.get_string(Opt::GFF_FP));
     std::string genome_fname(args.get_string(Opt::REF_FA));
     std::string out_fname(args.get_string(Opt::OUT_FA));
-    // this->multi=args.get_flag(Opt::MULTI_FLAG);
+    bool multi=args.get_flag(Opt::MULTI); // TODO: re-enable the multimapper mode
 
-    GTFToFasta gtfToFasta(gtf_fname, genome_fname);
-    gtfToFasta.make_transcriptome(out_fname, kmer_length);
-    //gtfToFasta.print_mapping();
+    GTFToFasta gtfToFasta(gtf_fname, genome_fname,out_fname, kmer_length,multi);
+    gtfToFasta.make_transcriptome();
     
     return 0;
 }
