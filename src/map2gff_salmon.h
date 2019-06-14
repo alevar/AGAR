@@ -37,6 +37,8 @@
 
 // class for the unmapped reads
 // evaluates reads and outputs them accordingly
+// TODO: consider making this into a probabilistic lookup in order to reduce memory
+//     alternatively, assuming a sorted output, can now simply reset when new readname appears
 class UMAP{
 public:
     UMAP() = default; // do not want anyone to call from outside
@@ -48,14 +50,17 @@ public:
         out_fname_r1.append(".r1.fa");
         out_fname_r2.append(".r2.fa");
         out_fname_s.append(".s.fa");
-        this->out_stream_r1 = std::ofstream(out_fname_r1.c_str());
-        this->out_stream_r2 = std::ofstream(out_fname_r2.c_str());
-        this->out_stream_s = std::ofstream(out_fname_s.c_str());
+        this->out_stream_r1 = new std::ofstream(out_fname_r1.c_str());
+        this->out_stream_r2 = new std::ofstream(out_fname_r2.c_str());
+        this->out_stream_s = new std::ofstream(out_fname_s.c_str());
     }
     ~UMAP(){
-        this->out_stream_r1.close();
-        this->out_stream_r2.close();
-        this->out_stream_s.close();
+        this->out_stream_r1->close();
+        this->out_stream_r2->close();
+        this->out_stream_s->close();
+        delete this->out_stream_r1;
+        delete this->out_stream_r2;
+        delete this->out_stream_s;
     }
 
     void set_outFP(const std::string& outFP){
@@ -66,21 +71,22 @@ public:
         out_fname_r1.append(".r1.fa");
         out_fname_r2.append(".r2.fa");
         out_fname_s.append(".s.fa");
-        this->out_stream_r1 = std::ofstream(out_fname_r1.c_str());
-        this->out_stream_r2 = std::ofstream(out_fname_r2.c_str());
-        this->out_stream_s = std::ofstream(out_fname_s.c_str());
+        this->out_stream_r1 = new std::ofstream(out_fname_r1.c_str());
+        this->out_stream_r2 = new std::ofstream(out_fname_r2.c_str());
+        this->out_stream_s = new std::ofstream(out_fname_s.c_str());
     }
 
     // this function verifies whether a read needs to be written to the output
     void insert(bam1_t* al){
+        this->clean(al);
         // also need to check if the second pair does not
         if(this->pair_unmapped(al)){
             if(this->is1(al)){
                 this->pse = this->ps2.find(bam_get_qname(al));
                 if(this->pse != this->ps2.end()){ // already exists and is waiting to be returned
                     // in this case we can simply write out both records
-                    this->outputFasta(al,this->out_stream_r1);
-                    this->outputFasta(this->pse->second,this->out_stream_r2);
+                    this->outputFasta(al,*this->out_stream_r1);
+                    this->outputFasta(this->pse->second,*this->out_stream_r2);
                     // remove from the stack
                     this->ps2.erase(this->pse);
                     // add the entry to unpaired
@@ -97,8 +103,8 @@ public:
                 this->pse = this->ps1.find(bam_get_qname(al));
                 if(this->pse != this->ps1.end()){ // already exists and is waiting to be returned
                     // in this case we can simply write out both records
-                    this->outputFasta(al, this->out_stream_r2);
-                    this->outputFasta(this->pse->second,this->out_stream_r1);
+                    this->outputFasta(al, *this->out_stream_r2);
+                    this->outputFasta(this->pse->second,*this->out_stream_r1);
                     // remove from the stack
                     this->ps1.erase(this->pse);
                     this->unpaired2.insert(bam_get_qname(al));
@@ -113,18 +119,19 @@ public:
         }
         else if(this->is1(al)){
             if(this->unpaired1.insert(bam_get_qname(al)).second){ // did not previously exist
-                this->outputFasta(al,this->out_stream_s);
+                this->outputFasta(al,*this->out_stream_s);
             }
         }
         else{
             if(this->unpaired2.insert(bam_get_qname(al)).second){ // did not previously exist
-                this->outputFasta(al,this->out_stream_s);
+                this->outputFasta(al,*this->out_stream_s);
             }
         }
     }
 private:
+    std::string last_readname = ""; // used to erase entries for sorted-by-name input to optimize lookup and memory
     std::string outFP;
-    std::ofstream out_stream_r1,out_stream_r2,out_stream_s;
+    std::ofstream *out_stream_r1,*out_stream_r2,*out_stream_s;
     // keep a map of the unmapped elements to directly output to hisat2
     std::unordered_set<std::string> unpaired1; // for first mates
     std::unordered_set<std::string> unpaired2; // for second mates
@@ -133,11 +140,23 @@ private:
     std::unordered_map<std::string,bam1_t*> ps1,ps2; // stack for holding the paired end information
     std::unordered_map<std::string,bam1_t*>::iterator pse;
 
+    // this method evaluates the state of the maps based on readnames and cleans it
+    void clean(bam1_t *al){
+        if(bam_get_qname(al) != this-> last_readname){ // if new read name
+            // clean everything up
+            this->unpaired1.clear();
+            this->unpaired2.clear();
+            this->ps1.clear();
+            this->ps2.clear();
+            this->last_readname = bam_get_qname(al);
+        }
+    }
+
     // TODO: cannot output quality scores from SALMON. Need to consider trimming reads prior to passing through SALMON
     void outputFasta(bam1_t *al,std::ofstream& out_stream){
         // reports a fasta record from a given alignment record
         std::string read_name= bam_get_qname(al);
-        out_stream<<">"<<read_name<<std::endl; // TODO: output to file to prevent crowding of the screen at the moment
+        out_stream<<">"<<read_name<<std::endl;
         // now deal with the sequence
         uint8_t * seq = bam_get_seq(al);
         for(int i=0;i<al->core.l_qseq;i++){
@@ -148,17 +167,6 @@ private:
     bool is1(bam1_t *al){return al->core.flag & 64;} // test if the current read is first in the pair
     bool is2(bam1_t *al){return al->core.flag & 128;} // test if the current read is second in the pair
     bool pair_unmapped(bam1_t *al){return (al->core.flag & 4) && (al->core.flag & 8);}; // test if bth reads in the pair are unmapped
-};
-
-// this class describes the multimappers in the index transcriptome
-// and facilitates efficient storage and lookup
-class Multimap{
-public:
-    Multimap() = default;
-    ~Multimap() = default;
-private:
-    // has to be very a efficient implementation of a hashmap
-    std::unordered_map<std::string,int> mms;
 };
 
 struct GffTranscript: public GSeg {
@@ -275,15 +283,18 @@ private:
 };
 
 // hash function to be used for
-template <>
-struct std::hash<MapID>{
-    size_t operator()(const MapID& k) const{
-        return ((std::hash<std::string>()(k.get_name()) ^
-                (
-                        (std::hash<int>()(k.get_refid()) ^ std::hash<int>()(k.get_pos1()) ^ std::hash<int>()(k.get_pos2())
-                )<< 1)) >> 1);
-    }
-};
+namespace std {
+    template<>
+    struct hash<MapID> {
+        size_t operator()(const MapID &k) const {
+            return ((hash<string>()(k.get_name()) ^
+                     (
+                             (hash<int>()(k.get_refid()) ^ hash<int>()(k.get_pos1()) ^
+                              hash<int>()(k.get_pos2())
+                             ) << 1)) >> 1);
+        }
+    };
+}
 
 // this class facilitates efficient identification of mates from the same paired-end read
 // when a read is added to the class, the pair is looked up and if found is reported back
@@ -308,7 +319,8 @@ public:
         MapID m(al);
         me = mates.insert(std::make_pair(m,bam_dup1(al)));
         if(!me.second){ // entry previously existed - can report a pair and remove from the stack
-            mate = bam_dup1(me.first->second);
+            bam_copy1(mate,me.first->second);
+            bam_destroy1(me.first->second);
             mates.erase(me.first);
             return 1;
         }
@@ -317,6 +329,117 @@ public:
 private:
     std::unordered_map<MapID,bam1_t*> mates;
     std::pair<std::unordered_map<MapID,bam1_t*>::iterator,bool> me;
+};
+
+// this class describes the multimappers in the index transcriptome
+// and facilitates efficient storage and lookup
+class Multimap{
+public:
+    Multimap() = default;
+    ~Multimap() = default;
+private:
+    // has to be very a efficient implementation of a hashmap
+    std::unordered_map<std::string,int> mms;
+};
+
+// this class describes the unique identifier of a genomic maping of a read
+class ReadGenKey{
+public:
+    ReadGenKey() = default;
+    ~ReadGenKey() = default;
+    std::string name;
+    int tid;
+    int start;
+    int mate_start;
+    int cigar; // TODO: if this class is used, need to consider how to pass the cigar information
+    int mate_cigar; // TODO: same here as above
+
+    bool operator==(const ReadGenKey& m) const{
+        return this->name==m.name &&
+               this->tid==m.tid &&
+               this->start==m.start &&
+               this->cigar==m.cigar &&
+               this->mate_start==m.mate_start &&
+               this->mate_cigar==m.mate_cigar;
+    }
+};
+
+// hash function to be used for
+namespace std {
+    template<>
+    struct hash<ReadGenKey> {
+        size_t operator()(const ReadGenKey &k) const {
+            return ((hash<string>()(k.name) ^
+                     (
+                             (hash<int>()(k.tid) ^
+                              hash<int>()(k.start) ^
+                              hash<int>()(k.mate_start) ^
+                              hash<int>()(k.cigar) ^
+                              hash<int>()(k.mate_cigar)
+                             ) << 1)) >> 1);
+        }
+    };
+}
+
+// the following class describes resolution of transcriptomic multimappers
+// it notifies wheter a given mapping needs to be returned or not
+class Collapser{
+public:
+    // TODO: need a way to automatically cleanup when a new read is provided
+    Collapser() = default;
+    ~Collapser() = default;
+    int add(bam1_t *curAl,size_t cigar_hash){ // add single read to the stack
+        this->clean(curAl);
+        ReadGenKey rgk;
+        rgk.name = bam_get_qname(curAl);
+        rgk.tid = curAl->core.tid;
+        rgk.start = curAl->core.pos;
+        rgk.cigar = cigar_hash;
+        rgk.mate_start = curAl->core.mpos;
+        rgk.mate_cigar = cigar_hash;
+        gpe = this->genomic_positions.insert(rgk);
+        if(!gpe.second){ // entry previously existed - can report a pair and remove from the stack
+            return 0;
+        }
+        return 1;
+    }
+    int add(bam1_t *curAl,bam1_t *mateAl,size_t cigar_hash,size_t mate_cigar_hash){ // add pair to the stack
+        this->clean(curAl);
+        ReadGenKey rgk;
+        rgk.name = bam_get_qname(curAl);
+        rgk.tid = curAl->core.tid;
+        if(curAl->core.flag & 0x40){ // first in a pair
+            rgk.start = curAl->core.pos;
+            rgk.cigar = cigar_hash;
+            rgk.mate_start = mateAl->core.pos;
+            rgk.mate_cigar = mate_cigar_hash;
+        }
+        else{
+            rgk.start = mateAl->core.pos;
+            rgk.cigar = mate_cigar_hash;
+            rgk.mate_start = curAl->core.pos;
+            rgk.mate_cigar = cigar_hash;
+        }
+        gpe = this->genomic_positions.insert(rgk);
+        if(!gpe.second){ // entry previously existed - can report a pair and remove from the stack
+            return 0;
+        }
+        return 1;
+    }
+private:
+    std::string last_readname = "";
+    std::unordered_set<ReadGenKey> genomic_positions;
+    std::pair<std::unordered_set<ReadGenKey>::iterator,bool> gpe;
+
+    // when a new read is detected then this method removes any old entries for memory and lookup efficiency
+    void clean(bam1_t *al){
+        if(bam_get_qname(al) != this->last_readname){ // if new read is detected
+//            std::cout<<"2"<<std::endl;
+            // clear contents of the containers
+            this->genomic_positions.clear();
+            this->last_readname = bam_get_qname(al);
+        }
+    }
 };
 
 class Map2GFF_SALMON{
@@ -344,11 +467,10 @@ private:
 
     UMAP umap;
 
-    std::vector<GffTranscript> transcriptome; // TODO: initiate this vector with a size. the size is the number of transcripts in the index. This can be computed as part of the index creation
+    std::vector<GffTranscript> transcriptome;
 
     samFile *al;
     bam_hdr_t *al_hdr;
-//    bam1_t *curAl; // TODO: how about you try to remove this???
     samFile *genome_al;
     bam_hdr_t *genome_al_hdr;
     samFile *outSAM;
@@ -358,15 +480,20 @@ private:
 
     Pairs pairs;
 
+    Collapser collapser;
+
     // new
-    bool has_valid_mate(bam1_t *al);
+    bool has_valid_mate(bam1_t *curAl);
     bool get_read_start(GVec<GSeg>& exon_list,size_t gff_start,size_t& genome_start, int& exon_idx);
-    void add_cigar(bam1_t *al,int num_cigars,int* cigars);
-    void add_aux(bam1_t *al,char xs);
-    void fix_flag(bam1_t *al);
-    int collapse_genomic(bam1_t *al,int mate_start);
-    void process_pair(bam1_t* al);
-    void process_single(bam1_t* al,int mate_start);
+    void add_cigar(bam1_t *curAl,int num_cigars,int* cigars);
+    void add_aux(bam1_t *curAl,char xs);
+    void fix_flag(bam1_t *curAl);
+    int collapse_genomic(bam1_t *curAl,size_t cigar_hash);
+    int collapse_genomic(bam1_t *curAl,bam1_t *mateAl,size_t cigar_hash,size_t mate_cigar_hash);
+    void process_pair(bam1_t* curAl);
+    void process_single(bam1_t* curAl);
+    size_t process_read(bam1_t* curAl);
+    void finish_read(bam1_t *curAl);
 
 };
 
