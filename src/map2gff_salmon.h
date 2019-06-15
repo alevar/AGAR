@@ -342,8 +342,8 @@ public:
         return 0;
     }
 private:
-    std::map<MapID,bam1_t*> mates;
-    std::pair<std::map<MapID,bam1_t*>::iterator,bool> me;
+    std::unordered_map<MapID,bam1_t*> mates;
+    std::pair<std::unordered_map<MapID,bam1_t*>::iterator,bool> me;
 };
 
 // this class describes the representation of a single set of coordinates for a multimapper
