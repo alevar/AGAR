@@ -39,6 +39,8 @@
 // TODO: for the final version it needs to scan through the first n reads to check for constraints
 //    such as whether multimappers are reported, and whatever else
 
+// TODO: needs to be parallelized
+
 // class for the unmapped reads
 // evaluates reads and outputs them accordingly
 // TODO: consider making this into a probabilistic lookup in order to reduce memory
@@ -344,15 +346,68 @@ private:
     std::pair<std::map<MapID,bam1_t*>::iterator,bool> me;
 };
 
+// this class describes the representation of a single set of coordinates for a multimapper
+class Position{
+public:
+    Position() = default;
+    ~Position() = default;
+private:
+    // coordinates are described by position at index 0 and lengths of the cigar segments (Matches and Introns only)
+    std::vector<uint32_t> coords;
+};
+
 // this class describes the multimappers in the index transcriptome
 // and facilitates efficient storage and lookup
 class Multimap{
 public:
     Multimap() = default;
     ~Multimap() = default;
+
+    void load(std::string& input_file){
+        std::ifstream infp(input_file,std::ios::binary);
+        if(infp){
+            infp.seekg(0,infp.end);
+            int size = infp.tellg();
+            infp.seekg(0,infp.beg);
+            char *buffer = new char[size];
+            if(infp.read(buffer,size)){
+                int k = infp.gcount();
+                for(int i=0;i<k;i++){
+                    switch(buffer[i]){
+                        case '\n':
+                            //end of line
+                            break;
+                        case ' ':
+                            //end of current int
+                            break;
+                        case '\t':
+                            // end of a full coordinate
+                            break;
+                        case '-':
+                            // negative strand
+                            break;
+                        case '+':
+                            // positive strand
+                            case '0': case '1': case '2': case '3':
+                            case '4': case '5': case '6': case '7':
+                            case '8': case '9':
+                                //add to the current integer
+                                break;
+                        default:
+                            std::cerr<<"unrecognized character"<<std::endl;
+                            exit(1);
+                    }
+                }
+            }
+            delete[] buffer;
+        }
+    }
 private:
-    // has to be very a efficient implementation of a hashmap
-    std::unordered_map<std::string,int> mms;
+    // the following structure describes the following hierarchy
+    // highest level is the the chromosome index
+    // second level is the strand index
+    // third level is the positional index
+    std::vector<std::pair<std::vector<Position>,std::vector<Position> > > index;
 };
 
 // this class describes the unique identifier of a genomic maping of a read
