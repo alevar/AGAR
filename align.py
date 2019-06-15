@@ -3,6 +3,26 @@ import sys
 import shutil
 import subprocess
 
+# for the salmon mode - here are the commands
+# ~/soft/salmon-latest_linux_x86_64/bin/salmon index -t db.fasta -i ./db
+# ~/soft/salmon-latest_linux_x86_64/bin/salmon quant -l A -i ./data/salmonHisatIDX_p8/db -1 ./data/SRR1071717_r1.fq -2 ./data/SRR1071717_r2.fq --writeMappings ./outBladder_salmon/SRR1071717.sam --writeUnmappedNames -o ./outBladder_salmon/SRR1071717 -p 24 --validateMappings
+# samtools sort -n --output-fmt=BAM -@ 3 -o ./outBladder_salmon/SRR1071717.sorted.bam ./outBladder_salmon/SRR1071717.bam
+
+# /ccb/salz4-4/avaraby/tools_under_development/trans2genome_gtftofasta/salmon2genome -t ./salmonHisatIDX_p8/db.fasta.tlst -i ./outBladder_salmon/SRR1071717_salmon_stdout.sorted.bam -s ./salmonHisatIDX_p8/db.genome.header -o ./outBladder_salmon/SRR1071717.trans2genome.bam -n 154368 -a ./outBladder_salmon/SRR1071717/quant.sf
+
+# cut -d' ' -f1 SRR1071717/aux_info/unmapped_names.txt | seqtk subseq ../data/SRR1071717_r2.fq - > SRR1071717_salmon_unmapped_r2.fq
+# cut -d' ' -f1 SRR1071717/aux_info/unmapped_names.txt | seqtk subseq ../data/SRR1071717_r2.fq - > SRR1071717_salmon_unmapped_r2.fq
+
+# hisat2 -x /home/gpertea/ncbi/dbGaP-10908/hg38/genome_tran -1 ./SRR1071717_salmon_unmapped_r1.fq -2 SRR1071717_salmon_unmapped_r2.fq --very-sensitive --no-unal -k 30 -p 24 -S ./SRR1071717_salmon_unmapped_hisat.sam
+
+# samtools view -h --output-fmt=BAM -@ 24 ./SRR1071717_salmon_unmapped_hisat.sam -o ./SRR1071717_salmon_unmapped_hisat.bam
+
+# samtools merge -@ 24 SRR1071717_salmon_hisat.bam SRR1071717_salmon_unmapped_hisat.bam SRR1071717.trans2genome.bam
+
+# samtools sort --output-fmt=BAM -@ 24 -o ./SRR1071717_salmon_hisat.sorted.bam ./SRR1071717_salmon_hisat.bam
+
+# stringtie ./SRR1071717_salmon_hisat.sorted.bam -p 24 -m 150 -G ../data/hg38_p8.biotype_flt.cls.gff3 -o SRR1071717_stringtie.gtf
+
 def main(args):
 	for ifp in args.m1.split(","):
 		assert os.path.exists(os.path.abspath(ifp)),"#1 reads not found"

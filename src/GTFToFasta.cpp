@@ -68,25 +68,25 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
                                     // output a combination with every other element
                                     int u1=exists2.first->second.size()-1;
                                     for (int u2=0;u2<u1;u2++){
-                                        this->multimap<< GffObj::names->gseqs.getName(exists2.first->second[u1][0].first)<<":"<<(char)exists2.first->second[u1][0].second<<"@";
+                                        *this->multimap<< GffObj::names->gseqs.getName(exists2.first->second[u1][0].first)<<":"<<(char)exists2.first->second[u1][0].second<<"@";
                                         for (int k1=1;k1<exists2.first->second[u1].size();k1++){
                                             if (k1!=exists2.first->second[u1].size()-1){
-                                                this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second<<",";
+                                                *this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second<<",";
                                             }
                                             else{
-                                                this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second;
+                                                *this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second;
                                             }
                                         }
-                                        this->multimap<<"\t"<< GffObj::names->gseqs.getName(exists2.first->second[u2][0].first)<<":"<<(char)exists2.first->second[u2][0].second<<"@";
+                                        *this->multimap<<"\t"<< GffObj::names->gseqs.getName(exists2.first->second[u2][0].first)<<":"<<(char)exists2.first->second[u2][0].second<<"@";
                                         for (int k2=1;k2<exists2.first->second[u2].size();k2++){
                                             if (k2!=exists2.first->second[u2].size()-1){
-                                                this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second<<",";
+                                                *this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second<<",";
                                             }
                                             else{
-                                                this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second;
+                                                *this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second;
                                             }
                                         }
-                                        this->multimap<<std::endl;
+                                        *this->multimap<<std::endl;
                                     }
                                 }
                             }
@@ -144,25 +144,25 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
                                 // output a combination with every other element
                                 int u1=exists2.first->second.size()-1; // need to only look at the current cur_coords, since otherwise we output duplicates
                                 for (int u2=0;u2<u1;u2++){
-                                    this->multimap<< GffObj::names->gseqs.getName(exists2.first->second[u1][0].first)<<":"<<(char)exists2.first->second[u1][0].second<<"@";
+                                    *this->multimap<< GffObj::names->gseqs.getName(exists2.first->second[u1][0].first)<<":"<<(char)exists2.first->second[u1][0].second<<"@";
                                     for (int k1=1;k1<exists2.first->second[u1].size();k1++){
                                         if (k1!=exists2.first->second[u1].size()-1){
-                                            this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second<<",";
+                                            *this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second<<",";
                                         }
                                         else{
-                                            this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second;
+                                            *this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second;
                                         }
                                     }
-                                    this->multimap<<"\t"<< GffObj::names->gseqs.getName(exists2.first->second[u2][0].first)<<":"<<(char)exists2.first->second[u2][0].second<<"@";
+                                    *this->multimap<<"\t"<< GffObj::names->gseqs.getName(exists2.first->second[u2][0].first)<<":"<<(char)exists2.first->second[u2][0].second<<"@";
                                     for (int k2=1;k2<exists2.first->second[u2].size();k2++){
                                         if (k2!=exists2.first->second[u2].size()-1){
-                                            this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second<<",";
+                                            *this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second<<",";
                                         }
                                         else{
-                                            this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second;
+                                            *this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second;
                                         }
                                     }
-                                    this->multimap<<std::endl;
+                                    *this->multimap<<std::endl;
                                 }
                             }
                         }
@@ -201,23 +201,23 @@ GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std
 
     std::string multimap_fname(out_fname);
     multimap_fname.append(".multi");
-    this->multimap = std::ofstream(multimap_fname.c_str());
+    this->multimap = new std::ofstream(multimap_fname.c_str());
 
     std::string tlst_fname(out_fname);
     tlst_fname.append(".tlst");
-    this->tlst = std::ofstream(tlst_fname.c_str());
+    this->tlst = new std::ofstream(tlst_fname.c_str());
 
     std::string unique_fname(out_fname);
     unique_fname.append(".unq");
-    this->uniquefp = std::ofstream(unique_fname.c_str());
+    this->uniquefp = new std::ofstream(unique_fname.c_str());
 
     std::string gene_fname(out_fname);
     gene_fname.append(".glst");
-    this->genefp = std::ofstream(gene_fname.c_str());
+    this->genefp = new std::ofstream(gene_fname.c_str());
 
     std::string info_fname(out_fname);
     info_fname.append(".info");
-    this->infofp = std::ofstream(info_fname.c_str());
+    this->infofp = new std::ofstream(info_fname.c_str());
 
     genome_fname_ = std::move(genome_fname);
 
@@ -234,12 +234,19 @@ GTFToFasta::~GTFToFasta(){
     for (it = contigTransMap_.begin(); it != contigTransMap_.end(); ++it) {
         delete it->second;
     }
-    this->infofp.close();
-    this->tlst.close();
-    this->multimap.close();
-    this->uniquefp.close();
-    this->genefp.close();
-    this->out_file.close();
+    this->infofp->close();
+    this->tlst->close();
+    this->multimap->close();
+    this->uniquefp->close();
+    this->genefp->close();
+    this->out_file->close();
+
+//    delete this->infofp;
+//    delete this->tlst;
+//    delete this->multimap;
+//    delete this->uniquefp;
+//    delete this->genefp;
+//    delete this->out_file;
 }
 
 void GTFToFasta::make_transcriptome()
@@ -284,7 +291,7 @@ void GTFToFasta::make_transcriptome()
             out_rec.desc_.push_back(p_trans->strand);
             out_rec.desc_.push_back(' ');
             out_rec.desc_.append(coordstr); //list of exon coordinates
-            this->tlst << out_rec.id_ << ' ' << out_rec.desc_ << std::endl;
+            *this->tlst << out_rec.id_ << ' ' << out_rec.desc_ << std::endl;
             fastaWriter.write(out_rec);
 
             // populate the genemap
@@ -329,19 +336,19 @@ void GTFToFasta::make_transcriptome()
 
     auto it_unq_cnt = uniq_cnt.begin();
     while(it_unq_cnt!=uniq_cnt.end()){
-        this->uniquefp<<it_unq_cnt->first<<","<<it_unq_cnt->second<<std::endl;
+        *this->uniquefp<<it_unq_cnt->first<<","<<it_unq_cnt->second<<std::endl;
         it_unq_cnt++;
     }
 
     // write genes to file
     auto it=geneMap.begin();
     while(it!=geneMap.end()){
-        this->genefp<<it->first<<"\t"<<std::get<0>(it->second)<<"\t"<<std::get<1>(it->second)<<"\t"<<std::get<2>(it->second)<<std::endl;
+        *this->genefp<<it->first<<"\t"<<std::get<0>(it->second)<<"\t"<<std::get<1>(it->second)<<"\t"<<std::get<2>(it->second)<<std::endl;
         it++;
     }
 
     // write the information about the index now
-    this->infofp<<this->topTransID<<std::endl;
+    *this->infofp<<this->topTransID<<std::endl;
 }
 
 void GTFToFasta::transcript_map()
@@ -419,7 +426,7 @@ int main(int argc, char *argv[])
 
     GTFToFasta gtfToFasta(gtf_fname, genome_fname,out_fname, kmer_length,multi);
     gtfToFasta.make_transcriptome();
-    
+    std::cout<<"done"<<std::endl;
     return 0;
 }
 

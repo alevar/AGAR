@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <vector>
 #include <cstring>
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -34,6 +35,9 @@
 
 #define NDEBUG
 #include <cassert>
+
+// TODO: for the final version it needs to scan through the first n reads to check for constraints
+//    such as whether multimappers are reported, and whatever else
 
 // class for the unmapped reads
 // evaluates reads and outputs them accordingly
@@ -78,6 +82,7 @@ public:
 
     // this function verifies whether a read needs to be written to the output
     void insert(bam1_t* al){
+//        std::cout<<this->unpaired1.size()<<"\t"<<this->unpaired2.size()<<"\t"<<this->ps1.size()<<"\t"<<this->ps2.size()<<std::endl;
         this->clean(al);
         // also need to check if the second pair does not
         if(this->pair_unmapped(al)){
@@ -271,6 +276,14 @@ public:
                 this->pos2==m.get_pos2();
     }
 
+    bool operator<(const MapID& m) const{
+        return this->name<m.get_name() &&
+               this->refid<m.get_refid() &&
+               this->pos1<m.get_pos1() &&
+               this->pos2<m.get_pos2();
+
+    }
+
     std::string get_name() const{return this->name;}
     int get_refid() const{return this->refid;}
     int get_pos1() const{return this->pos1;}
@@ -327,8 +340,8 @@ public:
         return 0;
     }
 private:
-    std::unordered_map<MapID,bam1_t*> mates;
-    std::pair<std::unordered_map<MapID,bam1_t*>::iterator,bool> me;
+    std::map<MapID,bam1_t*> mates;
+    std::pair<std::map<MapID,bam1_t*>::iterator,bool> me;
 };
 
 // this class describes the multimappers in the index transcriptome
@@ -433,6 +446,7 @@ private:
 
     // when a new read is detected then this method removes any old entries for memory and lookup efficiency
     void clean(bam1_t *al){
+//        std::cout<<this->genomic_positions.size()<<std::endl;
         if(bam_get_qname(al) != this->last_readname){ // if new read is detected
 //            std::cout<<"2"<<std::endl;
             // clear contents of the containers

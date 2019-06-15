@@ -359,7 +359,8 @@ void Map2GFF_SALMON::process_pair(bam1_t *curAl) {
     bam1_t* mate = bam_init1();
     int ret = this->pairs.add(curAl,mate);
     size_t cigar_hash,mate_cigar_hash;
-    if(!ret){ // mate returned need to write information out
+    if(!ret){ // mate not found
+        bam_destroy1(mate);
         return;
     }
 
@@ -372,6 +373,7 @@ void Map2GFF_SALMON::process_pair(bam1_t *curAl) {
         finish_read(curAl);
         finish_read(mate);
     }
+    bam_destroy1(mate);
 }
 
 void Map2GFF_SALMON::process_single(bam1_t *curAl){
