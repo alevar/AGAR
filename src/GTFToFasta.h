@@ -30,7 +30,6 @@
 #include "GFaSeqGet.h"
 #include "FastaTools.h"
 #include "arg_parse.h"
-#include "Multimap.hh"
 
 class GTFToFasta {
 public:

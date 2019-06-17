@@ -6,7 +6,7 @@
 //
 //  Created by Harold Pimentel on 10/26/11.
 //
-#include "GTFToFasta.h"
+#include "GTFToFasta_salmon.h"
 
 std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::string& coords){
     GList<GffExon>& exon_list = p_trans.exons;
@@ -15,171 +15,20 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
     size_t length;
     coords.clear();
     std::stringstream ss;
-    // base algorithm for multimappers as of now
-    // for each transcript
-    // 1. get start-end coordinates of a kmer
-    // 2. insert into kmer_coords
-    // 3. check return value: if second element is true - did not exist before; if false - was already present, and we should skip it
-    std::vector<std::pair<int,int>> cur_coords; // the coordinates encountered from the previous exons
-    int cur_len=0; // current length left from the previous exon
-    int cur_pos=0;
-    std::pair<std::map<std::vector<std::pair<int,int> >, std::pair<std::string,int> >::iterator,bool> exists;
-    std::pair<std::unordered_map<std::string,std::vector<std::vector<std::pair<int,int>>>>::iterator,bool> exists2;
-    std::string sub_seq;
-    cur_coords.emplace_back(std::make_pair(p_trans.gseq_id,(int)p_trans.strand));
-    bool exhaustedExon=false;
+
     for (int i = 0; i < exon_list.Count(); ++i) {
         GffExon& cur_exon = *(exon_list.Get(i));
         length = (cur_exon.end+1) - cur_exon.start;
 
-        // get coordinates into the map
-        if (length>1 and this->multi){ // sanity check for 0 and 1 base exons // TODO: need to refactor the multimapping index
-            for(int j=0;j<length;j++){ // iterate over all kmers in the given exon
-                if ((length-j)+cur_len<this->kmerlen){ // not enough coordinates - need to look at the next exon
-                    cur_coords.emplace_back(std::pair<int,int>(cur_exon.start+j,cur_exon.end));
-                    cur_len+=((cur_exon.end+1)-(cur_exon.start+j)); // save the length that has been seen thus far
-                    break;
-                }
-                else{ // otherwise we have all the bases we need and can evaluate their uniqueness
-                    if (cur_len!=0){ // some information is left from previous exons
-                        for (int g=this->kmerlen-cur_len;g<this->kmerlen;g++){ // build new sequences using past coordinates
-                            sub_seq="";
-                            cur_coords.emplace_back(std::make_pair(cur_exon.start+j,cur_exon.start+j+g-1));
-                            exists=this->kmer_coords.insert(std::make_pair(cur_coords,std::make_pair(p_trans.getID(),1)));
-                            if (exists.second){ // if this set of genomic coordinates was not previously observed, we can proceed to evaluate
-                                for (int d=1;d<cur_coords.size();d++){
-                                    sub_seq+=rec.seq_.substr(cur_coords[d].first-1,(cur_coords[d].second+1)-cur_coords[d].first);
-                                }
-                                if(sub_seq.length()!=this->kmerlen){
-                                    std::cerr<<"1: "<<sub_seq.length()<<" "<<p_trans.getID()<<std::endl;
-                                    for(int y=1;y<cur_coords.size();y++){
-                                        std::cerr<<cur_coords[y].first<<"-"<<cur_coords[y].second<<";";
-                                    }
-                                    std::cerr<<std::endl;
-                                }
-                                std::transform(sub_seq.begin(), sub_seq.end(), sub_seq.begin(), ::toupper);
-                                exists2=this->kmers.insert(std::pair<std::string,std::vector<std::vector<std::pair<int,int>>>>(sub_seq,{}));
-                                exists2.first->second.push_back(cur_coords);
-                                if(!exists2.second){
-                                    // if exists2 is false, meaning the element already existed
-                                    // we can then proceed to write the coordinates to the output file
-
-                                    // for each previously added element
-                                    // output a combination with every other element
-                                    int u1=exists2.first->second.size()-1;
-                                    for (int u2=0;u2<u1;u2++){
-                                        *this->multimap<< GffObj::names->gseqs.getName(exists2.first->second[u1][0].first)<<":"<<(char)exists2.first->second[u1][0].second<<"@";
-                                        for (int k1=1;k1<exists2.first->second[u1].size();k1++){
-                                            if (k1!=exists2.first->second[u1].size()-1){
-                                                *this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second<<",";
-                                            }
-                                            else{
-                                                *this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second;
-                                            }
-                                        }
-                                        *this->multimap<<"\t"<< GffObj::names->gseqs.getName(exists2.first->second[u2][0].first)<<":"<<(char)exists2.first->second[u2][0].second<<"@";
-                                        for (int k2=1;k2<exists2.first->second[u2].size();k2++){
-                                            if (k2!=exists2.first->second[u2].size()-1){
-                                                *this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second<<",";
-                                            }
-                                            else{
-                                                *this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second;
-                                            }
-                                        }
-                                        *this->multimap<<std::endl;
-                                    }
-                                }
-                            }
-                            else{ // this is where we can perform evaluation of the number of unique kmers per transcript
-                                // means that the genomic coordinates already existed before, and a counter needs to be updated
-//                                std::cout<<"inc"<<std::endl;
-                                exists.first->second.second++;
-                            }
-                            cur_len-=1;
-                            cur_coords.pop_back();
-                            cur_coords[1].first+=1;
-                            if (cur_coords[1].first-1==cur_coords[1].second){
-                                cur_coords.erase(cur_coords.begin()+1); // delete the first element
-                            }
-                            if((length - j) + cur_len < this->kmerlen){ // check again, since we are decreasing the cur_len with each iteration, thus it is possible that the length may not be sufficient
-                                cur_coords.emplace_back(std::pair<int,int>(cur_exon.start+j,cur_exon.end));
-                                cur_len += ((cur_exon.end+1) - (cur_exon.start + j)); // save the length that has been seen thus far
-                                exhaustedExon=true; //set flag to exit from both for loops
-                                break;
-                            }
-                        }
-                        if(exhaustedExon){
-                            exhaustedExon=false;
-                            break;
-                        }
-                        // add new coordinates first
-                    }
-                    // need to resume from the current index
-                    if ((length-j)+cur_len<this->kmerlen){ // not enough coordinates - need to look at the next exon
-                        cur_coords.emplace_back(std::pair<int,int>(cur_exon.start+j,cur_exon.end));
-                        cur_len+=((cur_exon.end+1)-(cur_exon.start+j));
-                        break;
-                    }
-                    else{
-                        cur_coords.emplace_back(std::make_pair(cur_exon.start+j,cur_exon.start+j+this->kmerlen));
-                        exists=this->kmer_coords.insert(std::make_pair(cur_coords,std::make_pair(p_trans.getID(),1)));
-                        if (exists.second){ // was successfully inserted
-                            // get sequence
-                            sub_seq=rec.seq_.substr(cur_exon.start+j-1,this->kmerlen);
-                            if(sub_seq.length()>this->kmerlen){
-                                std::cerr<<"2: "<<sub_seq.length()<<" "<<p_trans.getID()<<" ";
-                                for(int y=1;y<cur_coords.size();y++){
-                                    std::cerr<<cur_coords[y].first<<"-"<<cur_coords[y].second<<";";
-                                }
-                                std::cerr<<std::endl;
-                            }
-                            std::transform(sub_seq.begin(), sub_seq.end(), sub_seq.begin(), ::toupper);
-                            exists2=this->kmers.insert(std::pair<std::string,std::vector<std::vector<std::pair<int,int>>>>(sub_seq,{}));
-                            exists2.first->second.push_back(cur_coords);
-                            if(!exists2.second){
-                                // if exists2 is false, meaning the element already existed
-                                // we can then proceed to write the coordinates to the output file
-
-                                // for each previously added element
-                                // output a combination with every other element
-                                int u1=exists2.first->second.size()-1; // need to only look at the current cur_coords, since otherwise we output duplicates
-                                for (int u2=0;u2<u1;u2++){
-                                    *this->multimap<< GffObj::names->gseqs.getName(exists2.first->second[u1][0].first)<<":"<<(char)exists2.first->second[u1][0].second<<"@";
-                                    for (int k1=1;k1<exists2.first->second[u1].size();k1++){
-                                        if (k1!=exists2.first->second[u1].size()-1){
-                                            *this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second<<",";
-                                        }
-                                        else{
-                                            *this->multimap<<exists2.first->second[u1][k1].first<<"-"<<exists2.first->second[u1][k1].second;
-                                        }
-                                    }
-                                    *this->multimap<<"\t"<< GffObj::names->gseqs.getName(exists2.first->second[u2][0].first)<<":"<<(char)exists2.first->second[u2][0].second<<"@";
-                                    for (int k2=1;k2<exists2.first->second[u2].size();k2++){
-                                        if (k2!=exists2.first->second[u2].size()-1){
-                                            *this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second<<",";
-                                        }
-                                        else{
-                                            *this->multimap<<exists2.first->second[u2][k2].first<<"-"<<exists2.first->second[u2][k2].second;
-                                        }
-                                    }
-                                    *this->multimap<<std::endl;
-                                }
-                            }
-                        }
-                        else{
-                            exists.first->second.second++;
-                        }
-                    }
-                    // since we went into this conditional, that means no previously encountered exons are left
-                    // and we can reset some things
-                    cur_coords.erase(cur_coords.begin()+1,cur_coords.end());
-                    cur_len=0;
-                }
-            }
-        }
         exon_seq += rec.seq_.substr(cur_exon.start - 1, length);
         ss << ',' << cur_exon.start << '-' << cur_exon.end;
     }
+
+    // get coordinates into the map
+    if (length>this->kmerlen and this->multi){ // sanity check for 0 and 1 base exons // TODO: need to refactor the multimapping index
+        this->mmap.add_sequence(exon_seq,p_trans);
+    }
+
     coords = ss.str().substr(1);
     return exon_seq;
 }
@@ -223,6 +72,7 @@ GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std
 
     this->multi =  multi;
     this->kmerlen = kmerlen;
+    this->mmap.set_kmerlen(kmerlen);
     this->out_fname = out_fname;
 
     // Make a map from the GffObj
@@ -239,7 +89,6 @@ GTFToFasta::~GTFToFasta(){
     this->multimap->close();
     this->uniquefp->close();
     this->genefp->close();
-    this->out_file->close();
 
 //    delete this->infofp;
 //    delete this->tlst;
@@ -322,23 +171,6 @@ void GTFToFasta::make_transcriptome()
     // now time to write the unique kmers for transcripts
     std::unordered_map<std::string,int> uniq_cnt; // counts of unique kmers per transcript
     std::pair<std::unordered_map<std::string,int>::iterator,bool> ex_ucnt; // exists or not
-
-    auto it_unq = kmer_coords.begin();
-    while(it_unq!=kmer_coords.end()){
-        if(it_unq->second.second == 1){ // if only one instance was observed - write out
-            ex_ucnt = uniq_cnt.insert(std::make_pair(it_unq->second.first,1));
-            if(!ex_ucnt.second){ // did not exist
-                ex_ucnt.first->second++;
-            }
-        }
-        it_unq++;
-    }
-
-    auto it_unq_cnt = uniq_cnt.begin();
-    while(it_unq_cnt!=uniq_cnt.end()){
-        *this->uniquefp<<it_unq_cnt->first<<","<<it_unq_cnt->second<<std::endl;
-        it_unq_cnt++;
-    }
 
     // write genes to file
     auto it=geneMap.begin();
@@ -426,7 +258,6 @@ int main(int argc, char *argv[])
 
     GTFToFasta gtfToFasta(gtf_fname, genome_fname,out_fname, kmer_length,multi);
     gtfToFasta.make_transcriptome();
-    std::cout<<"done"<<std::endl;
     return 0;
 }
 
