@@ -21,6 +21,7 @@
 #include <htslib/sam.h>
 
 #include "GVec.hh"
+#include "Multimap.hh"
 
 #define BAM_CMATCH  0
 #define BAM_CINS    1
@@ -351,63 +352,17 @@ class Position{
 public:
     Position() = default;
     ~Position() = default;
+    void add_to_coords(uint32_t c){
+        coords.emplace_back(c);
+    }
+    // adds a pointer to the multimapping coordinate
+    void add_edge(uint32_t e){
+        edges.emplace_back(e);
+    }
 private:
     // coordinates are described by position at index 0 and lengths of the cigar segments (Matches and Introns only)
     std::vector<uint32_t> coords;
-};
-
-// this class describes the multimappers in the index transcriptome
-// and facilitates efficient storage and lookup
-class Multimap{
-public:
-    Multimap() = default;
-    ~Multimap() = default;
-
-    void load(std::string& input_file){
-        std::ifstream infp(input_file,std::ios::binary);
-        if(infp){
-            infp.seekg(0,infp.end);
-            int size = infp.tellg();
-            infp.seekg(0,infp.beg);
-            char *buffer = new char[size];
-            if(infp.read(buffer,size)){
-                int k = infp.gcount();
-                for(int i=0;i<k;i++){
-                    switch(buffer[i]){
-                        case '\n':
-                            //end of line
-                            break;
-                        case ' ':
-                            //end of current int
-                            break;
-                        case '\t':
-                            // end of a full coordinate
-                            break;
-                        case '-':
-                            // negative strand
-                            break;
-                        case '+':
-                            // positive strand
-                            case '0': case '1': case '2': case '3':
-                            case '4': case '5': case '6': case '7':
-                            case '8': case '9':
-                                //add to the current integer
-                                break;
-                        default:
-                            std::cerr<<"unrecognized character"<<std::endl;
-                            exit(1);
-                    }
-                }
-            }
-            delete[] buffer;
-        }
-    }
-private:
-    // the following structure describes the following hierarchy
-    // highest level is the the chromosome index
-    // second level is the strand index
-    // third level is the positional index
-    std::vector<std::pair<std::vector<Position>,std::vector<Position> > > index;
+    std::vector<uint32_t> edges;
 };
 
 // this class describes the unique identifier of a genomic maping of a read
@@ -516,7 +471,10 @@ public:
     Map2GFF_SALMON(const std::string& tlstFP, const std::string& alFP,const std::string& abundFP,const std::string& genome_headerFP,const std::string& outFP,const int& threads, const int& num_trans);
     ~Map2GFF_SALMON();
 
+    void load_multi(const std::string& multiFP);
+
     void convert_coords();
+    void print_multimappers();
 
 private:
     void load_transcriptome(); // add transcriptome positional information into the index
@@ -535,6 +493,7 @@ private:
     // additional data
 
     UMAP umap;
+    Multimap mmap;
 
     std::vector<GffTranscript> transcriptome;
 
@@ -565,6 +524,5 @@ private:
     void finish_read(bam1_t *curAl);
 
 };
-
 
 #endif //TRANS2GENOME_MAP2GFF_SALMON_H

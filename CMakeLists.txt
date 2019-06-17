@@ -48,8 +48,30 @@ add_executable(gtf_to_fasta
         src/GTFToFasta.cpp
         src/GTFToFasta.h
         src/GVec.hh
+        src/tokenize.cpp)
+
+add_executable(gtf_to_fasta_salmon
+        src/arg_parse.cpp
+        src/arg_parse.h
+        src/codons.cpp
+        src/codons.h
+        src/FastaTools.cpp
+        src/FastaTools.h
+        src/GBase.cpp
+        src/GBase.h
+        src/gdna.cpp
+        src/gdna.h
+        src/GFaSeqGet.cpp
+        src/GFaSeqGet.h
+        src/gff.cpp
+        src/gff.h
+        src/GHash.hh
+        src/GList.hh
+        src/GTFToFasta_salmon.cpp
+        src/GTFToFasta_salmon.h
+        src/GVec.hh
         src/tokenize.cpp
-        src/tokenize.h)
+        src/Multimap.hh)
 
 add_executable(trans2genome
         src/arg_parse.cpp
@@ -65,7 +87,8 @@ add_executable(trans2genome
         src/map2gff.h
         src/tokenize.cpp
         src/tokenize.h
-        src/trans2genome.cpp)
+        src/trans2genome.cpp
+        src/Multimap.hh)
 
 add_dependencies(trans2genome htslib zlib)
 target_link_libraries(trans2genome ${htslib_LIB} ${zlib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl)
@@ -84,7 +107,8 @@ add_executable(salmon2genome
         src/map2gff_salmon.h
         src/tokenize.cpp
         src/tokenize.h
-        src/salmon2genome.cpp)
+        src/salmon2genome.cpp
+        src/Multimap.hh)
 
 add_dependencies(salmon2genome htslib zlib)
 target_link_libraries(salmon2genome ${htslib_LIB} ${zlib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl)

@@ -448,3 +448,11 @@ size_t Map2GFF_SALMON::process_read(bam1_t *curAl) {
 void Map2GFF_SALMON::finish_read(bam1_t *curAl){
     int ret_val = sam_write1(this->outSAM, genome_al_hdr, curAl);
 }
+
+void Map2GFF_SALMON::load_multi(const std::string& multiFP){
+    this->mmap.load(multiFP);
+}
+
+void Map2GFF_SALMON::print_multimappers() {
+    this->mmap.print_multimapers();
+}

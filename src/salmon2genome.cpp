@@ -43,6 +43,8 @@ int main(int argc, char** argv) {
     args.parse_args(argc,argv);
 
     Map2GFF_SALMON gffMapper(args.get_string(Opt::TLST_FP),args.get_string(Opt::IN_AL),args.get_string(Opt::ABUNDANCES),args.get_string(Opt::GEN_HDR),args.get_string(Opt::OUT_AL),args.get_int(Opt::THREADS),args.get_int(Opt::NUM_TRANS));
+    gffMapper.load_multi(args.get_string(Opt::MULTI));
+    gffMapper.print_multimappers();
     gffMapper.convert_coords();
     return 0;
 }
