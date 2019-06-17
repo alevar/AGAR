@@ -32,7 +32,7 @@ public:
         this->moves.emplace_back(move);
     }
 
-    std::string get_strg(){
+    std::string get_strg() const {
         std::string res;
         res.append(std::to_string(this->chr));
         res += this->strand;
@@ -44,10 +44,34 @@ public:
         }
         return res;
     }
-private:
+
+    bool operator==(const Position& m) const{
+        return this->chr==m.chr &&
+               this->strand==m.strand &&
+               this->start==m.start &&
+               this->moves==m.moves;
+    }
+
     uint32_t chr,strand,start;
     std::vector<uint32_t> moves; // simplified CIGAR describing the intron-exon coverage of the given kmer
 };
+
+// hash function to be used for
+namespace std {
+    template<>
+    struct hash<Position> {
+        size_t operator()(const Position &p) const {
+            int hash = 1;
+            hash ^= p.chr + 0x9e3779b9 + (hash<<6) + (hash>>2);
+            hash ^= p.strand + 0x9e3779b9 + (hash<<6) + (hash>>2);
+            hash ^= p.start + 0x9e3779b9 + (hash<<6) + (hash>>2);
+            for(auto &v : p.moves){
+                hash ^= v + 0x9e3779b9 + (hash<<6) + (hash>>2);
+            }
+            return hash;
+        }
+    };
+}
 
 // this class describes the multimappers in the index transcriptome
 // and facilitates efficient storage and lookup
@@ -191,16 +215,15 @@ public:
 
             Position p(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos); // initialize position and add information to it accordingly
 
-            this->kce = this->kmer_coords.insert(std::make_pair(kmer,std::vector<Position>{p}));
-            if(!this->kce.second){ // if key previously existed - need to append instead
-                this->kce.first->second.emplace_back(p);
-            }
+            this->kce = this->kmer_coords.insert(std::make_pair(kmer,pcord{}));
 
-            process_remaining(el_pos,exon_pos,this->kce.first->second.back(),exon_list,cur_exon); // adds moves to the position object
+            process_remaining(el_pos,exon_pos,p,exon_list,cur_exon); // adds moves to the position object
+
+            this->pce = this->kce.first->second.insert(p); // insert new completed position now
 
             // reset_parameters
             exon_pos++; // increment and evaluate
-            if(exon_pos+cur_exon->start >= cur_exon->end){
+            if(exon_pos+cur_exon->start > cur_exon->end){
                 exon_pos = 0;
                 el_pos++;
                 cur_exon = exon_list[el_pos];
@@ -217,11 +240,9 @@ private:
         int el = (ee+1) - es; // length of the current exon
         if(el-exon_pos >= this->kmerlen){ // kmer fits well
             p.add_move(this->kmerlen);
-            exon_pos++;
             return;
         }
         else{
-            std::cout<<"======="<<std::endl;
             int left = this->kmerlen - (el-exon_pos);
             p.add_move(el-exon_pos);
 
@@ -246,17 +267,12 @@ private:
             std::cerr<<"exon boundaries exceeded"<<std::endl;
             exit(1);
         }
-
-
-//        while(true){
-//            el_pos++;
-//            exon_pos=0; // reset with respect to new exon
-//            p.add_move(cur_exon->end-(cur_exon->start-1)); // append an intron length to the current position object
-//        }
     }
 
-    std::unordered_map<std::string,std::vector<Position>> kmer_coords; // TODO: here the vector of positions needs to be reimplemented as a set to remove redundancy introduced by shared exons with identical genomic coordinates
-    std::pair<std::unordered_map<std::string,std::vector<Position>>::iterator,bool> kce;
+    typedef std::unordered_set<Position> pcord;
+    std::pair<pcord::iterator,bool> pce;
+    std::unordered_map<std::string,pcord> kmer_coords; // TODO: here the vector of positions needs to be reimplemented as a set to remove redundancy introduced by shared exons with identical genomic coordinates
+    std::pair<std::unordered_map<std::string,pcord>::iterator,bool> kce;
 
     int kmerlen;
 
