@@ -27,6 +27,23 @@ public:
         this->start = start;
     }
     ~Position() = default;
+
+    void add_move(uint32_t move){
+        this->moves.emplace_back(move);
+    }
+
+    std::string get_strg(){
+        std::string res;
+        res.append(std::to_string(this->chr));
+        res += this->strand;
+        res.append(std::to_string(this->start));
+        res += ':';
+        for(auto &mit : this->moves){
+            res.append(std::to_string(mit));
+            res += ' ';
+        }
+        return res;
+    }
 private:
     uint32_t chr,strand,start;
     std::vector<uint32_t> moves; // simplified CIGAR describing the intron-exon coverage of the given kmer
@@ -130,6 +147,18 @@ public:
         infp.close();
     }
 
+    // print using Positions from the kmer_coords
+    void print(){
+        for(auto &kv : this->kmer_coords){
+            std::cout<<kv.first<<"\t";
+            for(auto &cv : kv.second){
+                std::cout<<cv.get_strg()<<"\t";
+            }
+            std::cout<<std::endl;
+        }
+    }
+
+    // print from the loaded index
     void print_multimapers(){
         std::cerr<<this->index.size()<<std::endl;
         for(auto &mm : this->index){
@@ -142,6 +171,12 @@ public:
 
     void set_kmerlen(int kmerlen){this->kmerlen = kmerlen;}
 
+    void save_multimappers(std::string& outFP){
+        for(auto &kc : this->kmer_coords){
+            std::cout<<kc.first<<std::endl;
+        }
+    }
+
     // given a full transcript sequence and the pointer to the transcript description (constituent exons)
     // get all kmers and coordinates and load them into the multimapper index
     void add_sequence(std::string& seq,GffObj &p_trans){
@@ -152,26 +187,75 @@ public:
         std::string kmer = ""; // currently evaluated kmer
         GffExon *cur_exon = exon_list[el_pos];
         for(int i=0;i<seq.size()-this->kmerlen+1;i++){ // iterate over all kmers in the sequence
-            kmer=seq.substr(i,i+this->kmerlen);
+            kmer=seq.substr(i,this->kmerlen);
 
             Position p(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos); // initialize position and add information to it accordingly
 
             this->kce = this->kmer_coords.insert(std::make_pair(kmer,std::vector<Position>{p}));
+            if(!this->kce.second){ // if key previously existed - need to append instead
+                this->kce.first->second.emplace_back(p);
+            }
 
-            if(cur_exon->start+exon_pos > cur_exon->end){ // stepped out of exon bounds. need to increment the exon position
-                exon_pos++;
+            process_remaining(el_pos,exon_pos,this->kce.first->second.back(),exon_list,cur_exon); // adds moves to the position object
+
+            // reset_parameters
+            exon_pos++; // increment and evaluate
+            if(exon_pos+cur_exon->start >= cur_exon->end){
+                exon_pos = 0;
+                el_pos++;
+                cur_exon = exon_list[el_pos];
             }
         }
     }
 
-    void save_multimappers(std::string& outFP){
-        for(auto &kc : this->kmer_coords){
-            std::cout<<kc.first<<std::endl;
+private:
+    // we know that the kmer spans an intron
+    // this function appends the intron/exon information to moves of of the position object
+    void process_remaining(int& el_pos,int& exon_pos,Position& p,GList<GffExon>& exon_list,GffExon* cur_exon){
+        int ee = cur_exon->end;
+        int es = cur_exon->start;
+        int el = (ee+1) - es; // length of the current exon
+        if(el-exon_pos >= this->kmerlen){ // kmer fits well
+            p.add_move(this->kmerlen);
+            exon_pos++;
+            return;
         }
+        else{
+            std::cout<<"======="<<std::endl;
+            int left = this->kmerlen - (el-exon_pos);
+            p.add_move(el-exon_pos);
+
+            GffExon *next_exon,*prev_exon;
+            int nee,nes,nel,cee,ces,cel; // holders for current and next exons
+            for(int i=el_pos+1;i<exon_list.Count();i++){ // iterate over the exons
+                prev_exon = exon_list[i-1];
+                ee = prev_exon->end,es = prev_exon->start,el = (ee+1)-es;
+                next_exon = exon_list[i];
+                nee = next_exon->end,nes = next_exon->start,nel = (nee+1)-nes;
+
+                p.add_move(nes - ee); // adding the intron information to the moves
+                if(nel >= left){ // remainder fits well
+                    p.add_move(left);
+                    return;
+                }
+                else{
+                    left = left - nel;
+                    p.add_move(nel);
+                }
+            }
+            std::cerr<<"exon boundaries exceeded"<<std::endl;
+            exit(1);
+        }
+
+
+//        while(true){
+//            el_pos++;
+//            exon_pos=0; // reset with respect to new exon
+//            p.add_move(cur_exon->end-(cur_exon->start-1)); // append an intron length to the current position object
+//        }
     }
 
-private:
-    std::unordered_map<std::string,std::vector<Position>> kmer_coords;
+    std::unordered_map<std::string,std::vector<Position>> kmer_coords; // TODO: here the vector of positions needs to be reimplemented as a set to remove redundancy introduced by shared exons with identical genomic coordinates
     std::pair<std::unordered_map<std::string,std::vector<Position>>::iterator,bool> kce;
 
     int kmerlen;

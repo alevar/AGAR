@@ -222,6 +222,10 @@ void GTFToFasta::print_mapping(){
     }
 }
 
+void GTFToFasta::print_mmap(){
+    this->mmap.print();
+}
+
 void gtf2fasta_print_usage(){
     std::cerr << "Usage: gtf_to_fasta kmer_length transcripts.gtf genome.fa out_file" << std::endl;
 }
@@ -258,6 +262,7 @@ int main(int argc, char *argv[])
 
     GTFToFasta gtfToFasta(gtf_fname, genome_fname,out_fname, kmer_length,multi);
     gtfToFasta.make_transcriptome();
+    gtfToFasta.print_mmap();
     return 0;
 }
 

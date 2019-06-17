@@ -40,6 +40,7 @@ public:
 
     // for debugging
     void print_mapping();
+    void print_mmap();
 private:
     GffReader gtfReader_;
 
