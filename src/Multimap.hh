@@ -29,7 +29,7 @@ public:
     ~Position() = default;
 
     void add_move(uint32_t move){
-        this->moves.emplace_back(move);
+        this->moves.push_back(move);
     }
 
     std::string get_strg() const {
@@ -100,7 +100,7 @@ public:
                     switch(buffer[i]){
                         case '\n':
                             //end of line
-                            coords.emplace_back(move);
+                            coords.push_back(move);
                             this->ie = this->index.insert(coords); // write the last entry
                             coords.clear();
                             elem = Opt::CHR;
@@ -108,7 +108,7 @@ public:
                             break;
                         case '\t':
                             // end of a full coordinate - write lsat integer
-                            coords.emplace_back(move);
+                            coords.push_back(move);
                             this->ie = this->index.insert(coords); // write the last entry
                             coords.clear();
                             elem = Opt::CHR;
@@ -116,20 +116,20 @@ public:
                             break;
                         case ' ':
                             //end of current int - write move
-                            coords.emplace_back(move);
+                            coords.push_back(move);
                             elem = Opt::MOVE;
                             move = 0;
                             break;
                         case ':':
                             //end of current int - write start
-                            coords.emplace_back(start);
+                            coords.push_back(start);
                             elem = Opt::MOVE;
                             move = 0;
                             break;
                         case '-': case '+':
                             // negative strand - write chromosome
-                            coords.emplace_back(chr);
-                            coords.emplace_back((uint32_t)buffer[i]);
+                            coords.push_back(chr);
+                            coords.push_back((uint32_t)buffer[i]);
                             elem = Opt::START;
                             start = 0;
                             break;

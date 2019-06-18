@@ -39,6 +39,7 @@
 
 // TODO: for the final version it needs to scan through the first n reads to check for constraints
 //    such as whether multimappers are reported, and whatever else
+//    or the number of bases per read
 
 // TODO: needs to be parallelized
 
@@ -345,24 +346,6 @@ public:
 private:
     std::unordered_map<MapID,bam1_t*> mates;
     std::pair<std::unordered_map<MapID,bam1_t*>::iterator,bool> me;
-};
-
-// this class describes the representation of a single set of coordinates for a multimapper
-class Position{
-public:
-    Position() = default;
-    ~Position() = default;
-    void add_to_coords(uint32_t c){
-        coords.emplace_back(c);
-    }
-    // adds a pointer to the multimapping coordinate
-    void add_edge(uint32_t e){
-        edges.emplace_back(e);
-    }
-private:
-    // coordinates are described by position at index 0 and lengths of the cigar segments (Matches and Introns only)
-    std::vector<uint32_t> coords;
-    std::vector<uint32_t> edges;
 };
 
 // this class describes the unique identifier of a genomic maping of a read
