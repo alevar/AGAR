@@ -1,0 +1,8 @@
+##gff-version 3
+s1	S1	gene	11	70	.	+	.	ID=g1
+s1	S1	transcript	11	70	.	+	.	ID=t1;Parent=g1
+s1	S1	exon	11	20	.	+	.	Parent=t1
+s1	S1	exon	30	70	.	+	.	Parent=t1
+s1	S1	transcript	35	65	.	+	.	ID=t2;Parent=g1
+s1	S1	exon	35	45	.	+	.	Parent=t2
+s1	S1	exon	50	65	.	+	.	Parent=t2
