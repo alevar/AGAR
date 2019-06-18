@@ -25,7 +25,7 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
     }
 
     // get coordinates into the map
-    if (length>this->kmerlen and this->multi){ // sanity check for 0 and 1 base exons // TODO: need to refactor the multimapping index
+    if (length>this->kmerlen and this->multi){ // sanity check for 0 and 1 base exons
         this->mmap.add_sequence(exon_seq,p_trans);
     }
 
@@ -48,17 +48,9 @@ GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std
     gtfReader_.readAll();
     std::cout << "loaded the annotation"<<std::endl;
 
-    std::string multimap_fname(out_fname);
-    multimap_fname.append(".multi");
-    this->multimap = new std::ofstream(multimap_fname.c_str());
-
     std::string tlst_fname(out_fname);
     tlst_fname.append(".tlst");
     this->tlst = new std::ofstream(tlst_fname.c_str());
-
-    std::string unique_fname(out_fname);
-    unique_fname.append(".unq");
-    this->uniquefp = new std::ofstream(unique_fname.c_str());
 
     std::string gene_fname(out_fname);
     gene_fname.append(".glst");
@@ -86,14 +78,10 @@ GTFToFasta::~GTFToFasta(){
     }
     this->infofp->close();
     this->tlst->close();
-    this->multimap->close();
-    this->uniquefp->close();
     this->genefp->close();
 
 //    delete this->infofp;
 //    delete this->tlst;
-//    delete this->multimap;
-//    delete this->uniquefp;
 //    delete this->genefp;
 //    delete this->out_file;
 }
@@ -226,6 +214,19 @@ void GTFToFasta::print_mmap(){
     this->mmap.print();
 }
 
+void GTFToFasta::save(bool multi, bool uniq){
+    if(multi){
+        std::string multimap_fname(this->out_fname);
+        multimap_fname.append(".multi");
+        this->mmap.save_multimappers(multimap_fname);
+    }
+    if(uniq){
+        std::string uniq_fname(this->out_fname);
+        uniq_fname.append(".unq");
+        this->mmap.save_unique(uniq_fname);
+    }
+}
+
 void gtf2fasta_print_usage(){
     std::cerr << "Usage: gtf_to_fasta kmer_length transcripts.gtf genome.fa out_file" << std::endl;
 }
@@ -258,11 +259,11 @@ int main(int argc, char *argv[])
     std::string gtf_fname(args.get_string(Opt::GFF_FP));
     std::string genome_fname(args.get_string(Opt::REF_FA));
     std::string out_fname(args.get_string(Opt::OUT_FA));
-    bool multi=args.get_flag(Opt::MULTI); // TODO: re-enable the multimapper mode
+    bool multi=args.get_flag(Opt::MULTI);
 
     GTFToFasta gtfToFasta(gtf_fname, genome_fname,out_fname, kmer_length,multi);
     gtfToFasta.make_transcriptome();
-    gtfToFasta.print_mmap();
+    gtfToFasta.save(Opt::MULTI,Opt::UNIQ);
     return 0;
 }
 

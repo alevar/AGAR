@@ -196,9 +196,29 @@ public:
     void set_kmerlen(int kmerlen){this->kmerlen = kmerlen;}
 
     void save_multimappers(std::string& outFP){
-        for(auto &kc : this->kmer_coords){
-            std::cout<<kc.first<<std::endl;
+        std::ofstream multi_ss(outFP.c_str());
+        for(auto &kv : this->kmer_coords){
+            if(kv.second.size()>1) {
+                for (auto &cv : kv.second) {
+                    multi_ss << cv.get_strg() << "\t";
+                }
+                multi_ss << std::endl;
+            }
         }
+        multi_ss.close();
+    }
+
+    void save_unique(std::string& outFP){
+        std::ofstream uniq_ss(outFP.c_str());
+        for(auto &kv : this->kmer_coords){
+            if(kv.second.size()==1) {
+                for (auto &cv : kv.second) {
+                    uniq_ss << cv.get_strg() << "\t";
+                }
+                uniq_ss << std::endl;
+            }
+        }
+        uniq_ss.close();
     }
 
     // given a full transcript sequence and the pointer to the transcript description (constituent exons)
@@ -271,7 +291,7 @@ private:
 
     typedef std::unordered_set<Position> pcord;
     std::pair<pcord::iterator,bool> pce;
-    std::unordered_map<std::string,pcord> kmer_coords; // TODO: here the vector of positions needs to be reimplemented as a set to remove redundancy introduced by shared exons with identical genomic coordinates
+    std::unordered_map<std::string,pcord> kmer_coords;
     std::pair<std::unordered_map<std::string,pcord>::iterator,bool> kce;
 
     int kmerlen;
@@ -289,7 +309,6 @@ private:
     std::unordered_set<std::vector<uint32_t>,coord_hash> index;
     std::pair<std::unordered_set<std::vector<uint32_t>,coord_hash>::iterator,bool> ie; // iterator
 
-    // TODO: deal with uniques here as well if needed
     // now time to write the unique kmers for transcripts
     std::unordered_map<std::string,int> uniq_cnt; // counts of unique kmers per transcript
     std::pair<std::unordered_map<std::string,int>::iterator,bool> ex_ucnt; // exists or not
