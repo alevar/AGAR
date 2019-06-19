@@ -18,13 +18,84 @@
 
 #include "gff.h"
 
+// this class holds a description of a single Locus
+// the description includes:
+// 1. effective length of the locus (excludes the intronic sequences)
+// 2. number of reads
+// Allows the following methods:
+// 1. get abundance from reads and effective length
+// 2. count reads and etc
+class Locus{
+public:
+    Locus()=default;
+    Locus(uint32_t elen){
+        this->elen = elen;
+    }
+    ~Locus()=default;
+
+    void set_elen(uint32_t elen){
+        this->elen = elen;
+    }
+
+    // return rpk difference which is used to increment the normalizing constant
+    double inc(){ // increments the read count and recomputes the TPM
+        this->n_reads++;
+        double old_rpk = this->rpk;
+        this->rpk = this->n_reads/this->elen;
+        return this->rpk - old_rpk;
+    }
+    double get_rpk(){ // return the RPK
+        return this->rpk;
+    }
+private:
+    uint32_t elen;
+    double rpk;
+    uint32_t n_reads;
+};
+
+// this object holds the map of loci and different means of accessing the contents and modifying it
+// for instance for the purpose of Abundance inference
+class Loci{
+public:
+    explicit Loci(uint32_t nloc){
+        this->nloc = nloc;
+        this->loci = std::vector<Locus>(nloc); // Initialize the index to a given length
+    };
+    ~Loci()=default;
+
+    void add_locus(uint32_t lid,uint32_t elen){
+        this->loci[lid].set_elen(elen);
+    }
+
+    void add_read(uint32_t lid){
+        double rpk_diff = this->loci[lid].inc(); // update locus abundance
+        this->scaling_factor += rpk_diff/1000000; // update the scaling factor
+    }
+
+    // the following method is used to normalize the locus counts
+    double get_abund(uint32_t locid){
+        return this->loci[locid].get_rpk()/this->scaling_factor;
+    }
+
+    // load from a .glast file
+    void load(std::string& locFP){
+
+    }
+
+private:
+    std::vector<Locus> loci;
+    uint32_t nloc;
+    double scaling_factor = 0;
+};
+
 class Position{
 public:
     Position() = default;
-    Position(uint32_t chr,uint32_t strand,uint32_t start){
+    Position(uint32_t chr,uint32_t strand,uint32_t start,uint32_t locus){
         this->chr = chr;
         this->strand = strand;
         this->start = start;
+        this->locus = locus;
     }
     ~Position() = default;
 
@@ -34,6 +105,8 @@ public:
 
     std::string get_strg() const {
         std::string res;
+        res.append(std::to_string(this->locus));
+        res += "@";
         res.append(std::to_string(this->chr));
         res += this->strand;
         res.append(std::to_string(this->start));
@@ -49,10 +122,11 @@ public:
         return this->chr==m.chr &&
                this->strand==m.strand &&
                this->start==m.start &&
+               this->locus==m.locus &&
                this->moves==m.moves;
     }
 
-    uint32_t chr,strand,start;
+    uint32_t chr,strand,start,locus;
     std::vector<uint32_t> moves; // simplified CIGAR describing the intron-exon coverage of the given kmer
 };
 
@@ -65,6 +139,7 @@ namespace std {
             hash ^= p.chr + 0x9e3779b9 + (hash<<6) + (hash>>2);
             hash ^= p.strand + 0x9e3779b9 + (hash<<6) + (hash>>2);
             hash ^= p.start + 0x9e3779b9 + (hash<<6) + (hash>>2);
+            hash ^= p.locus + 0x9e3779b9 + (hash<<6) + (hash>>2);
             for(auto &v : p.moves){
                 hash ^= v + 0x9e3779b9 + (hash<<6) + (hash>>2);
             }
@@ -107,10 +182,9 @@ public:
                             chr = 0;
                             break;
                         case '\t':
-                            // end of a full coordinate - write lsat integer
+                            // end of a full coordinate - write last integer
                             coords.push_back(move);
                             this->ie = this->index.insert(coords); // write the last entry
-                            coords.clear();
                             elem = Opt::CHR;
                             chr = 0;
                             break;
@@ -126,6 +200,9 @@ public:
                             elem = Opt::MOVE;
                             move = 0;
                             break;
+                        case '@':
+                            // got the geneID
+                            coords.clear();
                         case '-': case '+':
                             // negative strand - write chromosome
                             coords.push_back(chr);
@@ -223,7 +300,7 @@ public:
 
     // given a full transcript sequence and the pointer to the transcript description (constituent exons)
     // get all kmers and coordinates and load them into the multimapper index
-    void add_sequence(std::string& seq,GffObj &p_trans){
+    void add_sequence(std::string& seq,GffObj &p_trans,uint32_t geneID){
         GList<GffExon>& exon_list = p_trans.exons;
 
         int el_pos = 0; // current position within the exon list
@@ -233,7 +310,7 @@ public:
         for(int i=0;i<seq.size()-this->kmerlen+1;i++){ // iterate over all kmers in the sequence
             kmer=seq.substr(i,this->kmerlen);
 
-            Position p(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos); // initialize position and add information to it accordingly
+            Position p(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos,geneID); // initialize position and add information to it accordingly
 
             this->kce = this->kmer_coords.insert(std::make_pair(kmer,pcord{}));
 

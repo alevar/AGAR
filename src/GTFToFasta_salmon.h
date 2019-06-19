@@ -63,6 +63,7 @@ private:
 
     void transcript_map();
     std::string get_exonic_sequence(GffObj& p_trans, FastaRecord& rec, std::string& coords);
+    void add_to_geneMap(GffObj &p_trans);
 
     GTFToFasta() = default; // Don't want anyone calling the constructor w/o options
 
@@ -75,7 +76,13 @@ private:
     typedef std::map<std::string, std::vector< int >* > ContigTransMap;
     ContigTransMap contigTransMap_;
 
-    // TODO: need to write out the chromosome ID map which is used in the multimapper index and elsewhere throughout
+    int curGeneID = 0;
+    std::map<std::string,std::tuple<int,int,int,int>> geneMap; // stores minimum and maximum gene coordinates of transcripts in a given gene as well as strand and unique ID
+    std::pair< std::map<
+            std::string,
+            std::tuple<int,int,int,int>
+    >::iterator,bool> exists_cur_gene;
+    std::map<std::string,std::tuple<int,int,int,int>>::iterator found_gene;
 };
 
 #endif

@@ -26,15 +26,22 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
 
     // get coordinates into the map
     if (length>this->kmerlen and this->multi){ // sanity check for 0 and 1 base exons
-        this->mmap.add_sequence(exon_seq,p_trans);
+        this->found_gene = this->geneMap.find(std::string(p_trans.getGeneID()));
+        if(this->found_gene != this->geneMap.end()){
+            this->mmap.add_sequence(exon_seq,p_trans,std::get<0>(this->found_gene->second));
+        }
+        else{
+            std::cerr<<"something went wrong with gene ID assignment"<<std::endl;
+            std::cerr<<"looking up: "<<p_trans.getGeneID()<<"\t"<<std::string(p_trans.getGeneID())<<std::endl;
+            exit(1);
+        }
     }
 
     coords = ss.str().substr(1);
     return exon_seq;
 }
 
-GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std::string& out_fname, int kmerlen,bool multi)
-{
+GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std::string& out_fname, int kmerlen,bool multi){
     gtf_fname_ = gtf_fname;
     gtf_fhandle_ = fopen(gtf_fname_.c_str(), "r");
     if (gtf_fhandle_ == nullptr)
@@ -86,18 +93,41 @@ GTFToFasta::~GTFToFasta(){
 //    delete this->out_file;
 }
 
-void GTFToFasta::make_transcriptome()
-{
+void GTFToFasta::add_to_geneMap(GffObj &p_trans){
+    // populate the genemap
+    int nst=p_trans.start;
+    int nen=p_trans.end;
+    char* geneID=p_trans.getGeneID();
+    std::cout<<p_trans.getGeneID()<<"\t"<<p_trans.getID()<<std::endl;
+    if(geneID==nullptr){
+        geneID=p_trans.getGeneName();
+        if(geneID==nullptr){
+            std::cout<<"wrong geneID"<<std::endl;
+            exit(1);
+        }
+    }
+    exists_cur_gene=this->geneMap.insert(std::make_pair(std::string(geneID),std::make_tuple(this->curGeneID,p_trans.strand,nst,nen)));
+    if(!exists_cur_gene.second){ // the key did exist - update start and min
+        int &st=std::get<2>(exists_cur_gene.first->second);
+        int &en=std::get<3>(exists_cur_gene.first->second);
+        if(nen>en){ //update end
+            en=nen;
+        }
+        if(nst<st){ //update start
+            st=nst;
+        }
+    }
+    else{ // saw a new gene, so need to create a new identifier
+        this->curGeneID++;
+    }
+}
+
+void GTFToFasta::make_transcriptome(){
     std::vector<int> *p_contig_vec;
 
     FastaReader fastaReader(genome_fname_);
     FastaWriter fastaWriter(this->out_fname);
     FastaRecord cur_contig;
-    std::map<std::string,std::tuple<int,int,int>> geneMap; // stores minimum and maximum gene coordinates of transcripts in a given gene
-    std::pair< std::map<
-                std::string,
-                std::tuple<int,int,int>
-            >::iterator,bool> exists_cur_gene;
 
     while (fastaReader.good()) {
         fastaReader.next(cur_contig);
@@ -113,6 +143,10 @@ void GTFToFasta::make_transcriptome()
         FastaRecord out_rec;
         for (int trans_idx : *p_contig_vec) {
             GffObj *p_trans = gtfReader_.gflst.Get(trans_idx);
+
+            // add the gene record to the geneMap first
+            this->add_to_geneMap(*p_trans);
+
             std::string coordstr;
             out_rec.seq_ = get_exonic_sequence(*p_trans, cur_contig, coordstr);
             if (out_rec.seq_.empty()) continue;
@@ -130,29 +164,6 @@ void GTFToFasta::make_transcriptome()
             out_rec.desc_.append(coordstr); //list of exon coordinates
             *this->tlst << out_rec.id_ << ' ' << out_rec.desc_ << std::endl;
             fastaWriter.write(out_rec);
-
-            // populate the genemap
-            int nst=p_trans->start;
-            int nen=p_trans->end;
-            char* geneID=p_trans->getGeneID();
-            if(geneID==nullptr){
-                geneID=p_trans->getGeneName();
-                if(geneID==nullptr){
-                    std::cout<<"wrong geneID"<<std::endl;
-                    continue;
-                }
-            }
-            exists_cur_gene=geneMap.insert(std::make_pair(std::string(geneID),std::make_tuple(p_trans->strand,nst,nen)));
-            if(!exists_cur_gene.second){ // the key did exist - update start and min
-                int &st=std::get<1>(exists_cur_gene.first->second);
-                int &en=std::get<2>(exists_cur_gene.first->second);
-                if(nen>en){ //update end
-                    en=nen;
-                }
-                if(nst<st){ //update start
-                    st=nst;
-                }
-            }
         }
     }
 
@@ -161,9 +172,9 @@ void GTFToFasta::make_transcriptome()
     std::pair<std::unordered_map<std::string,int>::iterator,bool> ex_ucnt; // exists or not
 
     // write genes to file
-    auto it=geneMap.begin();
-    while(it!=geneMap.end()){
-        *this->genefp<<it->first<<"\t"<<std::get<0>(it->second)<<"\t"<<std::get<1>(it->second)<<"\t"<<std::get<2>(it->second)<<std::endl;
+    auto it=this->geneMap.begin();
+    while(it!=this->geneMap.end()){
+        *this->genefp<<std::get<0>(it->second)<<"\t"<<std::get<1>(it->second)<<"\t"<<std::get<2>(it->second)<<"\t"<<std::get<3>(it->second)<<std::endl;
         it++;
     }
 
@@ -171,8 +182,7 @@ void GTFToFasta::make_transcriptome()
     *this->infofp<<this->topTransID<<std::endl;
 }
 
-void GTFToFasta::transcript_map()
-{
+void GTFToFasta::transcript_map(){
     GffObj *p_gffObj;
     const char *p_contig_name;
     std::vector<int> *p_contig_vec;
