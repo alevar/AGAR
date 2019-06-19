@@ -224,3 +224,8 @@ std::string ArgParse::get_string(char c) {
     Arg &a = args_[c];
     return *( (std::string *) a.value );
 }
+
+bool ArgParse::is_set(char c){
+    Arg &a = args_[c];
+    return a.set;
+}

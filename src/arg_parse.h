@@ -42,6 +42,8 @@ class ArgParse {
         double get_double(char c);
         std::string get_string(char c);
 
+        bool is_set(char c);
+
         std::string get_param_str();
 
         std::string get_help();

@@ -2,6 +2,8 @@
 // Created by varabyou on 6/6/19.
 //
 
+#include <sys/stat.h>
+
 #include "map2gff_salmon.h"
 #include "tokenize.h"
 
@@ -31,29 +33,17 @@ void print_aux(bam1_t *al) {
     std::cout<<*sStop<<std::endl;
 }
 
-Map2GFF_SALMON::Map2GFF_SALMON(const std::string& tlstFP, const std::string& alFP,const std::string& abundFP,const std::string& genome_headerFP,const std::string& outFP,const int& threads, const int& num_trans){
-    this->tlstFP = tlstFP;
-    this->alFP   = alFP;
-    this->abundFP= abundFP;
-    this->infoFP = infoFP;
-    this->genome_headerFP = genome_headerFP;
-    this->outFP = outFP;
-
+Map2GFF_SALMON::Map2GFF_SALMON(const std::string& alFP,const std::string& outFP,const std::string& index_base,const int& threads,bool multi){
     this->umap.set_outFP(outFP);
-
     this->numThreads=threads;
-    this->numTranscripts = num_trans;
 
-    // now load the appropriate data
-    this->load_transcriptome();
-    this->load_abundances();
+    // now load the index
+    this->load_index(index_base,multi);
 
     // now initialize the sam file
     this->al=hts_open(this->alFP.c_str(),"r");
     this->al_hdr=sam_hdr_read(this->al); // read the current alignment header
-//    this->curAl=bam_init1(); // initialize the alignment record
 
-    genome_al=hts_open(this->genome_headerFP.c_str(),"r");
     genome_al_hdr=sam_hdr_read(genome_al);
 
     this->outSAM=sam_open(outFP.c_str(),"wb");
@@ -77,16 +67,40 @@ Map2GFF_SALMON::~Map2GFF_SALMON() {
     sam_close(outSAM);
 }
 
+void Map2GFF_SALMON::load_info(const std::string& info_fname){
+    // read file to get important stats
+    struct stat buffer{};
+    if(stat (info_fname.c_str(), &buffer) != 0){ // if file does not exists
+        std::cerr<<"Info file: "<<info_fname<<" is not found. Check that correct index is provided."<<std::endl;
+        exit(1);
+    }
+    // read file and save important info
+    std::cerr<<"Reading the info file: "<<info_fname<<std::endl;
+    std::string iline;
+    std::ifstream infostream(info_fname);
+
+    std::getline(infostream,iline);
+    this->numTranscripts = std::stoi(iline);
+
+    std::getline(infostream,iline);
+    this->maxLocID = std::stoi(iline);
+    this->loci = Loci(maxLocID);
+
+    infostream.close();
+    std::cerr<<"Loaded info data"<<std::endl;
+}
+
+// TODO: we need to provide connection/map between transcriptIDs and geneIDs
 // this function loads the transcriptome from a tlst file, keeping the name of the transcript, position as well as the ID of the transcript
-void Map2GFF_SALMON::load_transcriptome(){
+void Map2GFF_SALMON::load_transcriptome(const std::string& tlst_fname){
     std::ifstream tstream;
-    tstream.open(this->tlstFP.c_str(),std::ios::in);
+    tstream.open(tlst_fname.c_str(),std::ios::in);
     if(!tstream.good()){
-        std::cerr<<"FATAL: Couldn't open transcript data: "<<tlstFP<<std::endl;
+        std::cerr<<"FATAL: Couldn't open transcript data: "<<tlst_fname<<std::endl;
         exit(1);
     }
     std::ios::sync_with_stdio(false);
-    std::cerr<<"Reading the transcript data: "<<tlstFP<<std::endl;
+    std::cerr<<"Reading the transcript data: "<<tlst_fname<<std::endl;
     this->transcriptome = std::vector<GffTranscript>(this->numTranscripts);
 
     std::string tline;
@@ -97,8 +111,50 @@ void Map2GFF_SALMON::load_transcriptome(){
     std::cerr<<"Loaded the transcript data"<<std::endl;
 }
 
+void Map2GFF_SALMON::load_genome_header(const std::string& genome_header_fname){
+    struct stat buffer{};
+    if(stat (genome_header_fname.c_str(), &buffer) != 0){ // if file does not exists
+        std::cerr<<"Genome Header file: "<<genome_header_fname<<" is not found. Check that correct index is provided."<<std::endl;
+        exit(1);
+    }
+    this->genome_al=hts_open(genome_header_fname.c_str(),"r");
+}
+
+void Map2GFF_SALMON::load_index(const std::string& index_base,bool multi){
+    // first verify that all required files are present
+    this->multi = multi;
+
+    // load information
+    std::string info_fname(index_base);
+    info_fname.append(".info");
+    this->load_info(info_fname);
+
+    // load transcriptome
+    std::string tlst_fname(index_base);
+    tlst_fname.append(".tlst");
+    this->load_transcriptome(tlst_fname);
+
+    // load the locus data
+    std::string glst_fname(index_base);
+    glst_fname.append(".glst");
+    this->loci.load(glst_fname);
+
+    // load genome header
+    std::string genome_header_fname(index_base);
+    tlst_fname.append(".genome_header");
+    this->load_genome_header(genome_header_fname);
+
+    if(this->multi){
+        std::string multi_fname(index_base);
+        multi_fname.append(".multi");
+        this->load_multi(multi_fname);
+        this->print_multimappers();
+    }
+}
+
 // this function takes in the abundance estimation from salmon and augments the transcriptome index with the data
-void Map2GFF_SALMON::load_abundances(){
+void Map2GFF_SALMON::load_abundances(const std::string& abundFP){
+    this->abund = true;
     std::ifstream abundstream;
     std::stringstream *linestream;
     abundstream.open(abundFP.c_str(),std::ios::in);
@@ -194,6 +250,7 @@ bool Map2GFF_SALMON::get_read_start(GVec<GSeg>& exon_list,size_t gff_start,size_
     }
     return false;
 }
+
 int Map2GFF_SALMON::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_exon,int match_length,
         GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS]){
 
@@ -450,6 +507,7 @@ void Map2GFF_SALMON::finish_read(bam1_t *curAl){
 }
 
 void Map2GFF_SALMON::load_multi(const std::string& multiFP){
+    this->multi = true;
     this->mmap.load(multiFP);
 }
 

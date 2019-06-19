@@ -2,7 +2,7 @@
 //  gtfToFasta.h
 //  TopHat
 //
-//  Created by Harold Pimentel on 10/26/11.
+//  Created by Ales Varabyou on 07/26/19 based on gtf_to_fasta from Tophat written by Harold Pimentel
 //
 
 #ifndef GTFToFasta_H
@@ -55,6 +55,7 @@ private:
     std::string out_fname; // base name for all files
     int topTransID = 0; // the highest transcript ID assigned for any transcript in the current transcriptome. This information is written to the info file
 
+    std::string trans_fastaname;
     std::ofstream *infofp;
     std::ofstream *tlst;
     std::ofstream *multimap;

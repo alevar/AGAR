@@ -16,6 +16,9 @@ def buildHeader(fastaIDX,outputHeaderFP):
 def main(args):
 	assert os.path.exists(os.path.abspath(args.gff)),"gff annotation not found"
 	assert os.path.exists(os.path.abspath(args.ref)),"reference file not found"
+	# TODO: replace the samtools faidx and build_header function with an implementation within gtf_to_fasta
+	# TODO: rename gtf_to_fasta to something else
+	# TODO: create a new name for the tool
 	if not os.path.exists(os.path.abspath(args.ref)+".fai"):
 		print("FASTA index for the reference genome not found. Building now.")
 		subprocess.call(["samtools","faidx",args.ref])
@@ -25,12 +28,12 @@ def main(args):
 
 	# gtf_to_fasta
 	print("Extracting fasta from gtf")
-	gtf_to_fasta_path=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'gtf_to_fasta') # get path to the gtf_to_fasta that was compiled with the package
-	print(" ".join([gtf_to_fasta_path,"-k",str(args.kmerlen),"-a",args.gff,"-r",args.ref,"-o",os.path.abspath(args.output)+"/db.fasta"]))
-	subprocess.call([gtf_to_fasta_path,"-k",str(args.kmerlen),"-a",args.gff,"-r",args.ref,"-o",os.path.abspath(args.output)+"/db.fasta"])
+	gtf_to_fasta_path=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'gtf_to_fasta_salmon') # get path to the gtf_to_fasta that was compiled with the package
+	print(" ".join([gtf_to_fasta_path,"-k",str(args.kmerlen),"-a",args.gff,"-r",args.ref,"-o",os.path.abspath(args.output)+"/db"]))
+	subprocess.call([gtf_to_fasta_path,"-k",str(args.kmerlen),"-a",args.gff,"-r",args.ref,"-o",os.path.abspath(args.output)+"/db"])
 	# buildGenomeHeader.py
 	print("Building genome header file")
-	buildHeader(os.path.abspath(args.ref)+".fai",os.path.abspath(args.output)+"/db.genome.header")
+	buildHeader(os.path.abspath(args.ref)+".fai",os.path.abspath(args.output)+"/db.genome_header")
 
 	if args.type=="bowtie":
 		print("Building additional bowtie transcriptome index")
@@ -38,7 +41,7 @@ def main(args):
 	elif args.type=="hisat":
 		print("Building transcriptome database for HISAT2")
 		subprocess.call(["hisat2-build","-p",args.threads,os.path.abspath(args.output)+"/db.fasta",os.path.abspath(args.output)+"/db"])
-	if args.locus is not None:
+	if args.locus:
 		print("building a locus specific bowtie index for the second bowtie stage")
 		# first extract the locus information
 		subprocess.call["./extractLocus.py",args.gff,s.path.abspath(args.output)+"/db.locus.gff"]

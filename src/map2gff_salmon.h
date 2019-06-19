@@ -451,34 +451,36 @@ private:
 
 class Map2GFF_SALMON{
 public:
-    Map2GFF_SALMON(const std::string& tlstFP, const std::string& alFP,const std::string& abundFP,const std::string& genome_headerFP,const std::string& outFP,const int& threads, const int& num_trans);
+    Map2GFF_SALMON(const std::string& alFP,const std::string& outFP,const std::string& index_base,const int& threads,bool multi);
     ~Map2GFF_SALMON();
 
-    void load_multi(const std::string& multiFP);
+    void load_abundances(const std::string& abundFP); // add abundances to the transcripts
 
     void convert_coords();
     void print_multimappers();
 
 private:
-    void load_transcriptome(); // add transcriptome positional information into the index
-    void load_abundances(); // add abundances to the transcripts
+    // INDEX METHODS
+    void load_index(const std::string& index_base,bool multi);
+    void load_info(const std::string& info_fname);
+    void load_transcriptome(const std::string& tlst_fname); // add transcriptome positional information into the index
+    void load_genome_header(const std::string& genome_header_fname);
+    void load_multi(const std::string& multiFP);
 
-    int convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_exon,int match_length,
-            GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS]);
-    int merge_cigar(const std::vector<std::pair<int,int>> *cor,bam1_t *al, uint32_t *cur_cigar_full, int n_cigar);
-
+    // INDEX-SPECIFIC DECLARATIONS
+    bool multi = false; // set to true if the multimapper index is loaded
+    bool abund = false;
     int numThreads=1;
     int numTranscripts=0; // gtf_to_fasta returns a .info file with this information
+    int maxLocID = 0; // what is the highest geneID assigned for the GFF by the index-builder
 
-    // section describing the file paths
-    std::string alFP,tlstFP,abundFP,outFP,genome_headerFP,infoFP;
-
-    // additional data
-
-    UMAP umap;
+    // INDEX DATA
     Multimap mmap;
-
+    Loci loci;
     std::vector<GffTranscript> transcriptome;
+
+    // ALIGNMENT SPECIFIC DECLARATIONS
+    std::string alFP,outFP;
 
     samFile *al;
     bam_hdr_t *al_hdr;
@@ -489,11 +491,15 @@ private:
 
     std::unordered_map<std::string,int> ref_to_id; // built from the genome header file
 
+    // TODO: these three objects should only be enabled when the tool is run in the appropriate mode - this can be verified by quickly scanning through "n" lines of the alignment and deciding whether it needs to be done
+    UMAP umap;
     Pairs pairs;
-
     Collapser collapser;
 
-    // new
+    // ALIGNMENT METHODS
+    int convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_exon,int match_length,
+                      GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS]);
+    int merge_cigar(const std::vector<std::pair<int,int>> *cor,bam1_t *al, uint32_t *cur_cigar_full, int n_cigar);
     bool has_valid_mate(bam1_t *curAl);
     bool get_read_start(GVec<GSeg>& exon_list,size_t gff_start,size_t& genome_start, int& exon_idx);
     void add_cigar(bam1_t *curAl,int num_cigars,int* cigars);

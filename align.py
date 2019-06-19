@@ -22,7 +22,7 @@ import subprocess
 # samtools sort --output-fmt=BAM -@ 24 -o ./SRR1071717_salmon_hisat.sorted.bam ./SRR1071717_salmon_hisat.bam
 
 # stringtie ./SRR1071717_salmon_hisat.sorted.bam -p 24 -m 150 -G ../data/hg38_p8.biotype_flt.cls.gff3 -o SRR1071717_stringtie.gt
-f
+
 def main(args):
 	for ifp in args.m1.split(","):
 		assert os.path.exists(os.path.abspath(ifp)),"#1 reads not found"

@@ -61,6 +61,7 @@ public:
         this->nloc = nloc;
         this->loci = std::vector<Locus>(nloc); // Initialize the index to a given length
     };
+    Loci() = default;
     ~Loci()=default;
 
     void add_locus(uint32_t lid,uint32_t elen){
@@ -77,15 +78,120 @@ public:
         return this->loci[locid].get_rpk()/this->scaling_factor;
     }
 
-    // load from a .glast file
-    void load(std::string& locFP){
-
+    // load from a .glst file
+    void load(std::string& locus_file){
+        struct stat buffer{};
+        if(stat (locus_file.c_str(), &buffer) != 0){ // if file does not exists
+            std::cerr<<"Locus file: "<<locus_file<<" is not found. Check that correct index is provided."<<std::endl;
+            exit(1);
+        }
+        std::cerr<<"loading locus data from: "<<locus_file<<std::endl;
+        std::ifstream locfp(locus_file,std::ifstream::binary);
+        if(locfp){
+            locfp.seekg(0,locfp.end);
+            int size = locfp.tellg();
+            locfp.seekg(0,locfp.beg);
+            char *buffer = new char[size];
+            if(locfp.read(buffer,size)){
+                this->_load(locfp,buffer);
+            }
+            delete[] buffer;
+            std::cerr<<"finished loading the locus data"<<std::endl;
+        }
+        else{
+            std::cerr<<"failed to open the locus file"<<std::endl;
+        }
+        locfp.close();
     }
 
 private:
     std::vector<Locus> loci;
     uint32_t nloc;
     double scaling_factor = 0;
+
+    void _load(std::ifstream& locfp,char* buffer){
+        int k = locfp.gcount();
+        uint32_t cur=0,chr=0,strand=0,start=0,move=0,locus=0;
+        enum Opt {CHR   = 0,
+                START = 1,
+                MOVE  = 2,
+                LOCUS = 3};
+//        uint32_t elem = Opt::CHR;
+//        Position pos;
+//        for(int i=0;i<k;i++){
+//            switch(buffer[i]){
+//                case '\n':
+//                    //end of line
+//                    pos.add_move(move);
+//                    this->pce = this->index.insert(pos); // write the last entry
+//                    pos.clear();
+//                    elem = Opt::LOCUS;
+//                    chr = 0;
+//                    break;
+//                case '\t':
+//                    // end of a full coordinate - write last integer
+//                    pos.add_move(move);
+//                    this->pce = this->index.insert(pos); // write the last entry
+//                    pos.clear();
+//                    elem = Opt::LOCUS;
+//                    chr = 0;
+//                    break;
+//                case ' ':
+//                    //end of current int - write move
+//                    pos.add_move(move);
+//                    elem = Opt::MOVE;
+//                    move = 0;
+//                    break;
+//                case ':':
+//                    //end of current int - write start
+//                    pos.set_start(start);
+//                    elem = Opt::MOVE;
+//                    move = 0;
+//                    break;
+//                case '@':
+//                    // got the geneID
+//                    pos.set_locus(locus);
+//                    elem = Opt::CHR;
+//                    locus = 0;
+//                case '-': case '+':
+//                    // negative strand - write chromosome
+//                    pos.set_chr(chr);
+//                    pos.set_strand((uint32_t)buffer[i]);
+//                    elem = Opt::START;
+//                    start = 0;
+//                    break;
+//                case '0': case '1': case '2': case '3':
+//                case '4': case '5': case '6': case '7':
+//                case '8': case '9':
+//                    //add to the current integer
+//                    switch(elem){
+//                        case 0: //chromosome
+//                            chr = 10*chr + buffer[i] - '0';
+//                            break;
+//                        case 1:
+//                            start = 10*start + buffer[i] - '0';
+//                            break;
+//                        case 2:
+//                            move = 10*move + buffer[i] - '0';
+//                            break;
+//                        case 3:
+//                            locus = 10*locus + buffer[i] - '0';
+//                            break;
+//                        default:
+//                            std::cerr<<"should never happen"<<std::endl;
+//                            exit(1);
+//                    }
+//                    break;
+//                default:
+//                    std::cerr<<"unrecognized character"<<std::endl;
+//                    std::cerr<<buffer[i]<<std::endl;
+//                    exit(1);
+//            }
+//        }
+//        if(pos.size() >= 4){ // no end of line character, so need to write the last entry
+//            this->pce = this->index.insert(pos);
+//        }
+    }
 };
 
 class Position{
@@ -99,9 +205,11 @@ public:
     }
     ~Position() = default;
 
-    void add_move(uint32_t move){
-        this->moves.push_back(move);
-    }
+    void add_move(uint32_t move){this->moves.push_back(move);this->num_elems++;}
+    void set_chr(uint32_t chr){this->chr=chr;this->num_elems++;}
+    void set_strand(uint32_t strand){this->strand=strand;this->num_elems++;}
+    void set_start(uint32_t start){this->start=start;this->num_elems++;}
+    void set_locus(uint32_t locus){this->locus=locus;this->num_elems++;}
 
     std::string get_strg() const {
         std::string res;
@@ -126,6 +234,14 @@ public:
                this->moves==m.moves;
     }
 
+    void clear(){
+        this->moves.clear();
+        this->num_elems = 0;
+    }
+
+    uint8_t size(){return this->num_elems;}
+
+    uint8_t num_elems = 0;
     uint32_t chr,strand,start,locus;
     std::vector<uint32_t> moves; // simplified CIGAR describing the intron-exon coverage of the given kmer
 };
@@ -164,80 +280,7 @@ public:
             infp.seekg(0,infp.beg);
             char *buffer = new char[size];
             if(infp.read(buffer,size)){
-                int k = infp.gcount();
-                uint32_t cur=0,chr=0,strand=0,start=0,move=0;
-                enum Opt {CHR   = 0,
-                    START = 1,
-                    MOVE  = 2};
-                uint32_t elem = Opt::CHR;
-                std::vector<uint32_t> coords;
-                for(int i=0;i<k;i++){
-                    switch(buffer[i]){
-                        case '\n':
-                            //end of line
-                            coords.push_back(move);
-                            this->ie = this->index.insert(coords); // write the last entry
-                            coords.clear();
-                            elem = Opt::CHR;
-                            chr = 0;
-                            break;
-                        case '\t':
-                            // end of a full coordinate - write last integer
-                            coords.push_back(move);
-                            this->ie = this->index.insert(coords); // write the last entry
-                            elem = Opt::CHR;
-                            chr = 0;
-                            break;
-                        case ' ':
-                            //end of current int - write move
-                            coords.push_back(move);
-                            elem = Opt::MOVE;
-                            move = 0;
-                            break;
-                        case ':':
-                            //end of current int - write start
-                            coords.push_back(start);
-                            elem = Opt::MOVE;
-                            move = 0;
-                            break;
-                        case '@':
-                            // got the geneID
-                            coords.clear();
-                        case '-': case '+':
-                            // negative strand - write chromosome
-                            coords.push_back(chr);
-                            coords.push_back((uint32_t)buffer[i]);
-                            elem = Opt::START;
-                            start = 0;
-                            break;
-                        case '0': case '1': case '2': case '3':
-                        case '4': case '5': case '6': case '7':
-                        case '8': case '9':
-                            //add to the current integer
-                            switch(elem){
-                                case 0: //chromosome
-                                    chr = 10*chr + buffer[i] - '0';
-                                    break;
-                                case 1:
-                                    start = 10*start + buffer[i] - '0';
-                                    break;
-                                case 2:
-                                    move = 10*move + buffer[i] - '0';
-                                    break;
-                                default:
-                                    std::cerr<<"should never happen"<<std::endl;
-                                    exit(1);
-                            }
-                            break;
-                        default:
-                            std::cerr<<"unrecognized character"<<std::endl;
-                            std::cerr<<buffer[i]<<std::endl;
-                            exit(1);
-                    }
-                }
-                if(coords.size() >= 4){ // no end of line character, so need to write the last entry
-                    this->ie = this->index.insert(coords);
-                }
+                this->_load(infp,buffer);
             }
             delete[] buffer;
             std::cerr<<"finished loading the multimapper data"<<std::endl;
@@ -263,10 +306,7 @@ public:
     void print_multimapers(){
         std::cerr<<this->index.size()<<std::endl;
         for(auto &mm : this->index){
-            for(auto &c : mm){
-                std::cerr<<c<<" ";
-            }
-            std::cerr<<std::endl;
+            std::cerr<<mm.get_strg()<<std::endl;
         }
     }
 
@@ -366,13 +406,6 @@ private:
         }
     }
 
-    typedef std::unordered_set<Position> pcord;
-    std::pair<pcord::iterator,bool> pce;
-    std::unordered_map<std::string,pcord> kmer_coords;
-    std::pair<std::unordered_map<std::string,pcord>::iterator,bool> kce;
-
-    int kmerlen;
-
     struct coord_hash { // in case it is implemented as an unordered_map
         uint64_t operator()(const std::vector<uint32_t> &coords ) const{
             uint64_t resHash=1;
@@ -383,8 +416,100 @@ private:
         }
     };
 
-    std::unordered_set<std::vector<uint32_t>,coord_hash> index;
-    std::pair<std::unordered_set<std::vector<uint32_t>,coord_hash>::iterator,bool> ie; // iterator
+    // TODO: needs to handle reverse complement of a kmer
+    // TODO: for efficient lookup pcord needs to contain pointers to related multimappers
+
+    void _load(std::ifstream &infp,char *buffer){
+        int k = infp.gcount();
+        uint32_t cur=0,chr=0,strand=0,start=0,move=0,locus=0;
+        enum Opt {CHR   = 0,
+            START = 1,
+            MOVE  = 2,
+            LOCUS = 3};
+        uint32_t elem = Opt::CHR;
+        Position pos;
+        for(int i=0;i<k;i++){
+            switch(buffer[i]){
+                case '\n':
+                    //end of line
+                    pos.add_move(move);
+                    this->pce = this->index.insert(pos); // write the last entry
+                    pos.clear();
+                    elem = Opt::LOCUS;
+                    chr = 0;
+                    break;
+                case '\t':
+                    // end of a full coordinate - write last integer
+                    pos.add_move(move);
+                    this->pce = this->index.insert(pos); // write the last entry
+                    pos.clear();
+                    elem = Opt::LOCUS;
+                    chr = 0;
+                    break;
+                case ' ':
+                    //end of current int - write move
+                    pos.add_move(move);
+                    elem = Opt::MOVE;
+                    move = 0;
+                    break;
+                case ':':
+                    //end of current int - write start
+                    pos.set_start(start);
+                    elem = Opt::MOVE;
+                    move = 0;
+                    break;
+                case '@':
+                    // got the geneID
+                    pos.set_locus(locus);
+                    elem = Opt::CHR;
+                    locus = 0;
+                case '-': case '+':
+                    // negative strand - write chromosome
+                    pos.set_chr(chr);
+                    pos.set_strand((uint32_t)buffer[i]);
+                    elem = Opt::START;
+                    start = 0;
+                    break;
+                case '0': case '1': case '2': case '3':
+                case '4': case '5': case '6': case '7':
+                case '8': case '9':
+                    //add to the current integer
+                    switch(elem){
+                        case 0: //chromosome
+                            chr = 10*chr + buffer[i] - '0';
+                            break;
+                        case 1:
+                            start = 10*start + buffer[i] - '0';
+                            break;
+                        case 2:
+                            move = 10*move + buffer[i] - '0';
+                            break;
+                        case 3:
+                            locus = 10*locus + buffer[i] - '0';
+                            break;
+                        default:
+                            std::cerr<<"should never happen"<<std::endl;
+                            exit(1);
+                    }
+                    break;
+                default:
+                    std::cerr<<"unrecognized character"<<std::endl;
+                    std::cerr<<buffer[i]<<std::endl;
+                    exit(1);
+            }
+        }
+        if(pos.size() >= 4){ // no end of line character, so need to write the last entry
+            this->pce = this->index.insert(pos);
+        }
+    }
+
+    int kmerlen;
+
+    typedef std::unordered_set<Position> pcord;
+    pcord index;
+    std::pair<pcord::iterator,bool> pce;
+    std::unordered_map<std::string,pcord> kmer_coords;
+    std::pair<std::unordered_map<std::string,pcord>::iterator,bool> kce;
 
     // now time to write the unique kmers for transcripts
     std::unordered_map<std::string,int> uniq_cnt; // counts of unique kmers per transcript

@@ -51,7 +51,7 @@ GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std
         exit(1);
     }
     std::cout << "Reading the annotation file: " << gtf_fname_ << std::endl;
-    gtfReader_.init(gtf_fhandle_, true); //load recognizable transcript features only
+    gtfReader_.init(gtf_fhandle_, true); // load recognizable transcript features only
     gtfReader_.readAll();
     std::cout << "loaded the annotation"<<std::endl;
 
@@ -66,6 +66,9 @@ GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std
     std::string info_fname(out_fname);
     info_fname.append(".info");
     this->infofp = new std::ofstream(info_fname.c_str());
+
+    this->trans_fastaname = out_fname;
+    this->trans_fastaname.append(".fasta");
 
     genome_fname_ = std::move(genome_fname);
 
@@ -86,11 +89,6 @@ GTFToFasta::~GTFToFasta(){
     this->infofp->close();
     this->tlst->close();
     this->genefp->close();
-
-//    delete this->infofp;
-//    delete this->tlst;
-//    delete this->genefp;
-//    delete this->out_file;
 }
 
 void GTFToFasta::add_to_geneMap(GffObj &p_trans){
@@ -98,7 +96,6 @@ void GTFToFasta::add_to_geneMap(GffObj &p_trans){
     int nst=p_trans.start;
     int nen=p_trans.end;
     char* geneID=p_trans.getGeneID();
-    std::cout<<p_trans.getGeneID()<<"\t"<<p_trans.getID()<<std::endl;
     if(geneID==nullptr){
         geneID=p_trans.getGeneName();
         if(geneID==nullptr){
@@ -126,7 +123,7 @@ void GTFToFasta::make_transcriptome(){
     std::vector<int> *p_contig_vec;
 
     FastaReader fastaReader(genome_fname_);
-    FastaWriter fastaWriter(this->out_fname);
+    FastaWriter fastaWriter(this->trans_fastaname);
     FastaRecord cur_contig;
 
     while (fastaReader.good()) {
@@ -172,14 +169,17 @@ void GTFToFasta::make_transcriptome(){
     std::pair<std::unordered_map<std::string,int>::iterator,bool> ex_ucnt; // exists or not
 
     // write genes to file
+    int max_locid = 0; // find what the maximum locus ID is in the current data to be saved into the info file
     auto it=this->geneMap.begin();
     while(it!=this->geneMap.end()){
-        *this->genefp<<std::get<0>(it->second)<<"\t"<<std::get<1>(it->second)<<"\t"<<std::get<2>(it->second)<<"\t"<<std::get<3>(it->second)<<std::endl;
+        max_locid = (std::get<0>(it->second)>max_locid) ? std::get<0>(it->second) : max_locid;
+        *this->genefp<<std::get<0>(it->second)<<"@"<<char(std::get<1>(it->second))<<":"<<std::get<2>(it->second)<<" "<<std::get<3>(it->second)<<std::endl;
         it++;
     }
 
     // write the information about the index now
     *this->infofp<<this->topTransID<<std::endl;
+    *this->infofp<<max_locid<<std::endl;
 }
 
 void GTFToFasta::transcript_map(){
