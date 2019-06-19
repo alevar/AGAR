@@ -418,7 +418,6 @@ private:
 
     // TODO: needs to handle reverse complement of a kmer
     // TODO: for efficient lookup pcord needs to contain pointers to related multimappers
-
     void _load(std::ifstream &infp,char *buffer){
         int k = infp.gcount();
         uint32_t cur=0,chr=0,strand=0,start=0,move=0,locus=0;

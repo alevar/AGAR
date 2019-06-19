@@ -21,7 +21,7 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
         length = (cur_exon.end+1) - cur_exon.start;
 
         exon_seq += rec.seq_.substr(cur_exon.start - 1, length);
-        ss << ',' << cur_exon.start << '-' << cur_exon.end;
+        ss << ',' << cur_exon.start << '_' << cur_exon.end;
     }
 
     // get coordinates into the map
@@ -153,13 +153,20 @@ void GTFToFasta::make_transcriptome(){
             if(std::stoi(out_rec.id_)>this->topTransID){ // check if current id is greater than the highest previously observed
                 topTransID = std::stoi(out_rec.id_);
             }
-            out_rec.desc_=p_trans->getID();
-            out_rec.desc_.push_back(' ');
-            out_rec.desc_.append(cur_contig.id_);
+            out_rec.desc_="";
+//            out_rec.desc_.append(p_trans->getID());
+//            out_rec.desc_.push_back(':');
+            this->found_gene = this->geneMap.find(p_trans->getGeneID());
+            if(this->found_gene == this->geneMap.end()) { // gene not found
+                std::cout << "an error in GeneID ocurred" << std::endl;
+                exit(-1);
+            }
+            out_rec.desc_.append(std::to_string(std::get<0>(this->found_gene->second)));
+            out_rec.desc_.push_back('@');
+            out_rec.desc_.append(std::to_string(p_trans->gseq_id));
             out_rec.desc_.push_back(p_trans->strand);
-            out_rec.desc_.push_back(' ');
             out_rec.desc_.append(coordstr); //list of exon coordinates
-            *this->tlst << out_rec.id_ << ' ' << out_rec.desc_ << std::endl;
+            *this->tlst << out_rec.id_ << '\t' << out_rec.desc_ << std::endl;
             fastaWriter.write(out_rec);
         }
     }

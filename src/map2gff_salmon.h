@@ -181,70 +181,34 @@ private:
 struct GffTranscript: public GSeg {
     GVec<GSeg> exons;
     std::string gffID;
-    std::string refID;
-    int numID;
-    int abundance;
-    char strand;
+    uint32_t refID;
+    uint32_t geneID;
+    uint32_t numID;
+    uint8_t strand;
     GffTranscript():exons(1), numID(-1), gffID(),
-                    refID(), strand(0), abundance(0) { }
+                    refID(), strand(0), geneID(0) { }
 
-    void tline_parserr(const std::string& tline, std::string add="") {
-        std::cerr << "Error at parsing .tlst line " << add << ":"
-                  << std::endl << '\t' << tline << std::endl;
-        exit(1);
+    void set_gffID(uint32_t gffID){this->gffID=gffID;}
+    void set_refID(uint32_t refID){this->refID=refID;}
+    void set_geneID(uint32_t geneID){this->geneID=geneID;}
+    void set_numID(uint32_t numID){this->numID=numID;}
+    void set_strand(uint8_t strand){this->strand=strand;}
+    void add_exon(GSeg exon){ this->exons.Add(exon);}
+
+    uint32_t getRefID() {return refID;}
+    uint32_t get_geneID(){return geneID;}
+
+    void clear(){
+        this->exons.Clear();
     }
-
-    explicit GffTranscript(const std::string& tline){
-        std::istringstream f(tline);
-        std::string token;
-        std::vector<std::string> tokens;
-        while (std::getline(f, token, ' ')) {
-            tokens.push_back(token);
+    // TODO: this re-implementation needs to be tested by printing out all transcripts in the transcriptome after parsing a .tlst file
+    void print(){
+        std::cout<<this->gffID<<"\t"<<this->geneID<<"@"<<this->refID<<this->strand;
+        for(int i=0;i<this->exons.Count();i++){
+            std::cout<<this->exons[i].start<<"_"<<this->exons[i].end<<",";
         }
-
-        if (tokens.size()!=4) {
-            tline_parserr(tline);
-        }
-        numID=atoi(tokens[0].c_str());
-        gffID=tokens[1];
-        refID=tokens[2];
-        if (refID.length()<1) {
-            tline_parserr(tline, "(refID empty)");
-        }
-        strand=refID[refID.length()-1];
-        if (strand!='-' && strand!='+') {
-            tline_parserr(tline, "(invalid strand)");
-        }
-        refID.erase(refID.length()-1);
-
-        f.clear(); //to reset the std::getline() iterator
-        f.str(tokens[3]);
-        while (std::getline(f, token, ',')) {
-            size_t sp_pos=token.find('-');
-            if (sp_pos == std::string::npos) {
-                std::string s("(invalid exon str: ");
-                s+=token;s+=")";
-                tline_parserr(tline, s);
-            }
-            std::string s_start=token.substr(0,sp_pos);
-            std::string s_end=token.substr(sp_pos+1);
-            GSeg exon(atoi(s_start.c_str()), atoi(s_end.c_str()));
-            if (exon.start==0 || exon.end==0 || exon.end<exon.start) {
-                std::string s("(invalid exon: ");
-                s+=token;s+=")";
-                tline_parserr(tline, s);
-            }
-            if (start==0 || start>exon.start){
-                start=exon.start;
-            }
-            if (end==0 || end<exon.end){
-                end=exon.end;
-            }
-            exons.Add(exon);
-        } //while exons
+        std::cout<<std::endl;
     }
-    std::string& getRefName() {return refID;}
-    void set_abundance(int abund){abundance=abund;}
 };
 
 // this structure defines all the things related to a genomic position of a transcriptomic alignment
@@ -464,6 +428,7 @@ private:
     void load_index(const std::string& index_base,bool multi);
     void load_info(const std::string& info_fname);
     void load_transcriptome(const std::string& tlst_fname); // add transcriptome positional information into the index
+    void _load_transcriptome(std::ifstream& tlstfp,char* buffer);
     void load_genome_header(const std::string& genome_header_fname);
     void load_multi(const std::string& multiFP);
 
