@@ -25,6 +25,8 @@
 // Allows the following methods:
 // 1. get abundance from reads and effective length
 // 2. count reads and etc
+// TODO: need to compute effective length in gtf_to_fasta and include the value in the .glst
+//      current implementation relies on the actual gene length without taking into account the introns
 class Locus{
 public:
     Locus()=default;
@@ -33,9 +35,16 @@ public:
     }
     ~Locus()=default;
 
-    void set_elen(uint32_t elen){
-        this->elen = elen;
-    }
+    void set_elen(uint32_t elen){this->elen = elen;this->empty = false;}
+    void set_start(uint32_t start){this->start=start;this->empty=false;}
+    void set_end(uint32_t end){this->end=end;this->empty=false;}
+    void set_strand(uint32_t strand){this->strand=strand,this->empty=false;}
+    void set_id(uint32_t locid){this->locid=locid;this->empty=false;}
+
+    uint32_t get_start(){return this->start;}
+    uint32_t get_end(){return this->end;}
+    uint32_t get_locid(){return this->locid;}
+    bool is_empty(){return this->empty;}
 
     // return rpk difference which is used to increment the normalizing constant
     double inc(){ // increments the read count and recomputes the TPM
@@ -47,10 +56,25 @@ public:
     double get_rpk(){ // return the RPK
         return this->rpk;
     }
+
+    void clear(){
+        this->empty=true;
+        this->elen=0;
+        this->rpk=0;
+        this->n_reads=0;
+    }
+
+    void print(){
+        std::cout<<this->locid<<this->strand<<this->start<<" "<<this->end<<std::endl;
+    }
 private:
     uint32_t elen;
     double rpk;
     uint32_t n_reads;
+    uint32_t start,end;
+    uint8_t strand;
+    uint32_t locid;
+    bool empty = true;
 };
 
 // this object holds the map of loci and different means of accessing the contents and modifying it
@@ -104,6 +128,12 @@ public:
         locfp.close();
     }
 
+    void print(){
+        for(auto &v : this->loci){
+            v.print();
+        }
+    }
+
 private:
     std::vector<Locus> loci;
     uint32_t nloc;
@@ -111,86 +141,63 @@ private:
 
     void _load(std::ifstream& locfp,char* buffer){
         int k = locfp.gcount();
-        uint32_t cur=0,chr=0,strand=0,start=0,move=0,locus=0;
-        enum Opt {CHR   = 0,
-                START = 1,
-                MOVE  = 2,
-                LOCUS = 3};
-//        uint32_t elem = Opt::CHR;
-//        Position pos;
-//        for(int i=0;i<k;i++){
-//            switch(buffer[i]){
-//                case '\n':
-//                    //end of line
-//                    pos.add_move(move);
-//                    this->pce = this->index.insert(pos); // write the last entry
-//                    pos.clear();
-//                    elem = Opt::LOCUS;
-//                    chr = 0;
-//                    break;
-//                case '\t':
-//                    // end of a full coordinate - write last integer
-//                    pos.add_move(move);
-//                    this->pce = this->index.insert(pos); // write the last entry
-//                    pos.clear();
-//                    elem = Opt::LOCUS;
-//                    chr = 0;
-//                    break;
-//                case ' ':
-//                    //end of current int - write move
-//                    pos.add_move(move);
-//                    elem = Opt::MOVE;
-//                    move = 0;
-//                    break;
-//                case ':':
-//                    //end of current int - write start
-//                    pos.set_start(start);
-//                    elem = Opt::MOVE;
-//                    move = 0;
-//                    break;
-//                case '@':
-//                    // got the geneID
-//                    pos.set_locus(locus);
-//                    elem = Opt::CHR;
-//                    locus = 0;
-//                case '-': case '+':
-//                    // negative strand - write chromosome
-//                    pos.set_chr(chr);
-//                    pos.set_strand((uint32_t)buffer[i]);
-//                    elem = Opt::START;
-//                    start = 0;
-//                    break;
-//                case '0': case '1': case '2': case '3':
-//                case '4': case '5': case '6': case '7':
-//                case '8': case '9':
-//                    //add to the current integer
-//                    switch(elem){
-//                        case 0: //chromosome
-//                            chr = 10*chr + buffer[i] - '0';
-//                            break;
-//                        case 1:
-//                            start = 10*start + buffer[i] - '0';
-//                            break;
-//                        case 2:
-//                            move = 10*move + buffer[i] - '0';
-//                            break;
-//                        case 3:
-//                            locus = 10*locus + buffer[i] - '0';
-//                            break;
-//                        default:
-//                            std::cerr<<"should never happen"<<std::endl;
-//                            exit(1);
-//                    }
-//                    break;
-//                default:
-//                    std::cerr<<"unrecognized character"<<std::endl;
-//                    std::cerr<<buffer[i]<<std::endl;
-//                    exit(1);
-//            }
-//        }
-//        if(pos.size() >= 4){ // no end of line character, so need to write the last entry
-//            this->pce = this->index.insert(pos);
-//        }
+        uint32_t locus=0,start=0,end=0,elen=0;
+        enum Opt {LOCUS   = 0,
+                  START   = 1,
+                  END     = 2};
+        uint32_t elem = Opt::LOCUS;
+        Locus loc;
+        for(int i=0;i<k;i++){
+            switch(buffer[i]){
+                case '\n':
+                    loc.set_end(end);
+                    loc.set_elen((loc.get_end()+1)-loc.get_start());
+                    this->loci[loc.get_locid()]=loc;
+                    loc.clear();
+                    elem = Opt::LOCUS;
+                    end = 0;
+                    break;
+                case ' ':
+                    loc.set_start(start);
+                    elem = Opt::END;
+                    start = 0;
+                    break;
+                case '-': case '+':
+                    loc.set_id(locus);
+                    loc.set_strand((uint8_t)buffer[i]);
+                    elem = Opt::START;
+                    locus = 0;
+                    break;
+                case '0': case '1': case '2': case '3':
+                case '4': case '5': case '6': case '7':
+                case '8': case '9':
+                    //add to the current integer
+                    switch(elem){
+                        case 0: //chromosome
+                            locus = 10*locus + buffer[i] - '0';
+                            break;
+                        case 1:
+                            start = 10*start + buffer[i] - '0';
+                            break;
+                        case 2:
+                            end = 10*end + buffer[i] - '0';
+                            break;
+                        default:
+                            std::cerr<<"should never happen"<<std::endl;
+                            exit(1);
+                    }
+                    break;
+                default:
+                    std::cerr<<"unrecognized character"<<std::endl;
+                    std::cerr<<buffer[i]<<std::endl;
+                    exit(1);
+            }
+        }
+        if(!loc.is_empty()){ // no end of line character, so need to write the last entry
+            loc.set_end(end);
+            loc.set_elen((loc.get_end()+1)-loc.get_start());
+            this->loci[loc.get_locid()]=loc;
+        }
     }
 };
 
@@ -291,7 +298,7 @@ public:
         infp.close();
     }
 
-    // print using Positions from the kmer_coords
+    // print using Positions from the kmer_loadcoords
     void print(){
         for(auto &kv : this->kmer_coords){
             std::cout<<kv.first<<"\t";
@@ -515,6 +522,5 @@ private:
     std::pair<std::unordered_map<std::string,int>::iterator,bool> ex_ucnt; // exists or not
 
 };
-
 
 #endif //TRANS2GENOME_MULTIMAP_H

@@ -180,7 +180,7 @@ void GTFToFasta::make_transcriptome(){
     auto it=this->geneMap.begin();
     while(it!=this->geneMap.end()){
         max_locid = (std::get<0>(it->second)>max_locid) ? std::get<0>(it->second) : max_locid;
-        *this->genefp<<std::get<0>(it->second)<<"@"<<char(std::get<1>(it->second))<<":"<<std::get<2>(it->second)<<" "<<std::get<3>(it->second)<<std::endl;
+        *this->genefp<<std::get<0>(it->second)<<char(std::get<1>(it->second))<<std::get<2>(it->second)<<" "<<std::get<3>(it->second)<<std::endl;
         it++;
     }
 

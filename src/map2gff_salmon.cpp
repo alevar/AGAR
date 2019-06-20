@@ -84,88 +84,64 @@ void Map2GFF_SALMON::load_info(const std::string& info_fname){
 
     std::getline(infostream,iline);
     this->maxLocID = std::stoi(iline);
-    this->loci = Loci(maxLocID);
+    this->loci = Loci(maxLocID+1);
 
     infostream.close();
     std::cerr<<"Loaded info data"<<std::endl;
 }
 
 // TODO: we need to provide connection/map between transcriptIDs and geneIDs - might already exist, but not sure
-// this function loads the transcriptome from a tlst file, keeping the name of the transcript, position as well as the ID of the transcript
-void load_transcriptome(const std::string& tlst_fname){
-    std::ifstream tstream;
-    tstream.open(tlst_fname.c_str(),std::ios::in);
-    if(!tstream.good()){
-        std::cerr<<"FATAL: Couldn't open transcript data: "<<tlst_fname<<std::endl;
-        exit(1);
-    }
-    std::ios::sync_with_stdio(false);
-    std::cerr<<"Reading the transcript data: "<<tlst_fname<<std::endl;
 
-    std::string tline;
-    while(std::getline(tstream,tline)){
-        GffTranscript t(tline);
-        transcriptome[t.numID] = t;
-    }
-    std::cerr<<"Loaded the transcript data"<<std::endl;
-}
-
+// this function parses the .tlst file and inserts entries into the index
 void Map2GFF_SALMON::_load_transcriptome(std::ifstream& tlstfp,char* buffer){
-    int k = infp.gcount();
-    uint32_t cur=0,chr=0,strand=0,start=0,move=0,locus=0;
+    int k = tlstfp.gcount();
+    uint32_t tid=0,start=0,end=0,chr=0,strand=0,locus=0;
     enum Opt {TID = 0,
             LOCUS = 1,
             CHR   = 2,
-            STRAND= 3,
-            START = 4,
-            END   =5};
-    uint32_t elem = Opt::CHR;
-    Position pos;
+            START = 3,
+            END   = 4};
+    uint32_t elem = Opt::TID;
+    GSeg exon;
+    GffTranscript transcript;
     for(int i=0;i<k;i++){
         switch(buffer[i]){
             case '\n':
-                // write last exon
-
-                //end of line
-                pos.add_move(move);
-                this->pce = this->index.insert(pos); // write the last entry
-                pos.clear();
+                // write last exon and copy the transcript over to the index
+                exon.end = end;
+                transcript.add_exon(exon);
+                this->transcriptome[transcript.gffID] = transcript;
+                transcript.clear();
                 elem = Opt::TID;
-                chr = 0;
+                end = 0;
                 break;
             case '\t':
                 // write tid
-
-                // end of a full coordinate - write last integer
-                pos.add_move(move);
-                this->pce = this->index.insert(pos); // write the last entry
-                pos.clear();
-                elem = Opt::CHR;
-                chr = 0;
+                transcript.set_gffID(tid);
+                elem = Opt::LOCUS;
+                tid = 0;
                 break;
-            case ' ':
-                //end of current int - write move
-                pos.add_move(move);
-                elem = Opt::MOVE;
-                move = 0;
+            case '_':
+                exon.start = start;
+                elem = Opt::END;
+                start = 0;
                 break;
-            case ':':
-                //end of current int - write start
-                pos.set_start(start);
-                elem = Opt::MOVE;
-                move = 0;
+            case ',':
+                exon.end = end;
+                transcript.add_exon(exon);
+                elem = Opt::START;
+                end = 0;
                 break;
             case '@':
-                // got the geneID
-                pos.set_locus(locus);
+                transcript.set_geneID(locus);
                 elem = Opt::CHR;
                 locus = 0;
+                break;
             case '-': case '+':
-                // negative strand - write chromosome
-                pos.set_chr(chr);
-                pos.set_strand((uint32_t)buffer[i]);
+                transcript.set_refID(chr);
+                transcript.set_strand((uint32_t)buffer[i]);
                 elem = Opt::START;
-                start = 0;
+                chr = 0;
                 break;
             case '0': case '1': case '2': case '3':
             case '4': case '5': case '6': case '7':
@@ -173,16 +149,19 @@ void Map2GFF_SALMON::_load_transcriptome(std::ifstream& tlstfp,char* buffer){
                 //add to the current integer
                 switch(elem){
                     case 0: //chromosome
-                        chr = 10*chr + buffer[i] - '0';
+                        tid = 10*tid + buffer[i] - '0';
                         break;
                     case 1:
-                        start = 10*start + buffer[i] - '0';
+                        locus = 10*locus + buffer[i] - '0';
                         break;
                     case 2:
-                        move = 10*move + buffer[i] - '0';
+                        chr = 10*chr + buffer[i] - '0';
                         break;
                     case 3:
-                        locus = 10*locus + buffer[i] - '0';
+                        start = 10*start + buffer[i] - '0';
+                        break;
+                    case 4:
+                        end = 10*end + buffer[i] - '0';
                         break;
                     default:
                         std::cerr<<"should never happen"<<std::endl;
@@ -195,14 +174,23 @@ void Map2GFF_SALMON::_load_transcriptome(std::ifstream& tlstfp,char* buffer){
                 exit(1);
         }
     }
-    if(pos.size() >= 4){ // no end of line character, so need to write the last entry
-        this->pce = this->index.insert(pos);
+    if(!transcript.empty){
+        transcript.add_exon(exon);
+        this->transcriptome[transcript.gffID] = transcript;
     }
+}
+
+void Map2GFF_SALMON::print_transcriptome(){
+    std::cerr<<"printing transcriptome"<<std::endl;
+    for(auto &t : this->transcriptome){
+        t.print();
+    }
+    std::cerr<<"done printing transcriptome"<<std::endl;
 }
 
 void Map2GFF_SALMON::load_transcriptome(const std::string &tlst_fname) {
     // first initiate the transcriptome array to hold the transcripts
-    this->transcriptome = std::vector<GffTranscript>(this->numTranscripts);
+    this->transcriptome = std::vector<GffTranscript>(this->numTranscripts+1);
 
     struct stat buffer{};
     if(stat (tlst_fname.c_str(), &buffer) != 0){ // if file does not exists
@@ -305,17 +293,18 @@ void Map2GFF_SALMON::load_index(const std::string& index_base,bool multi){
     std::string glst_fname(index_base);
     glst_fname.append(".glst");
     this->loci.load(glst_fname);
+//    this->loci.print();
 
     // load genome header
     std::string genome_header_fname(index_base);
-    tlst_fname.append(".genome_header");
+    genome_header_fname.append(".genome_header");
     this->load_genome_header(genome_header_fname);
 
     if(this->multi){
         std::string multi_fname(index_base);
         multi_fname.append(".multi");
         this->load_multi(multi_fname);
-        this->print_multimappers();
+//        this->print_multimappers();
     }
 }
 
@@ -655,11 +644,11 @@ size_t Map2GFF_SALMON::process_read(bam1_t *curAl) {
     fix_flag(curAl);
 
     // now need to deal with the rest
-    curAl->core.tid = ref_to_id[p_trans.refID]; // assign new reference
+    curAl->core.tid = p_trans.refID; // assign new reference
     curAl->core.pos = read_start - 1; // assign new position
 
     // convert the mate information for single reads without a concordantly mapped mate
-    curAl->core.mtid = ref_to_id[p_trans.refID];
+    curAl->core.mtid = p_trans.refID;
     curAl->core.mpos = read_start_mate - 1;
 
     // assign new cigar string to the record

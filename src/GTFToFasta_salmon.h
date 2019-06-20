@@ -78,12 +78,18 @@ private:
     ContigTransMap contigTransMap_;
 
     int curGeneID = 0;
-    std::map<std::string,std::tuple<int,int,int,int>> geneMap; // stores minimum and maximum gene coordinates of transcripts in a given gene as well as strand and unique ID
+    // the structure of the gene tuple is as follows:
+    // 1. gene id
+    // 2. strand
+    // 3. start
+    // 4. end
+    // 5. effective length
+    std::map<std::string,std::tuple<int,int,int,int,int>> geneMap; // stores minimum and maximum gene coordinates of transcripts in a given gene as well as strand and unique ID, also stores gene identifier as well as the effective length
     std::pair< std::map<
             std::string,
-            std::tuple<int,int,int,int>
+            std::tuple<int,int,int,int,int>
     >::iterator,bool> exists_cur_gene;
-    std::map<std::string,std::tuple<int,int,int,int>>::iterator found_gene;
+    std::map<std::string,std::tuple<int,int,int,int,int>>::iterator found_gene;
 };
 
 #endif

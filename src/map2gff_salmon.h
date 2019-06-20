@@ -180,34 +180,36 @@ private:
 
 struct GffTranscript: public GSeg {
     GVec<GSeg> exons;
-    std::string gffID;
+    uint32_t gffID;
     uint32_t refID;
     uint32_t geneID;
     uint32_t numID;
     uint8_t strand;
+    uint32_t abundance; // only used if the salmon or kallisto quantifications are provided
+    bool empty = true;
     GffTranscript():exons(1), numID(-1), gffID(),
-                    refID(), strand(0), geneID(0) { }
+                    refID(), strand(0), geneID(0),abundance(0) { }
 
-    void set_gffID(uint32_t gffID){this->gffID=gffID;}
-    void set_refID(uint32_t refID){this->refID=refID;}
-    void set_geneID(uint32_t geneID){this->geneID=geneID;}
-    void set_numID(uint32_t numID){this->numID=numID;}
-    void set_strand(uint8_t strand){this->strand=strand;}
-    void add_exon(GSeg exon){ this->exons.Add(exon);}
+    void set_gffID(uint32_t gffID){this->gffID=gffID;this->empty=false;}
+    void set_refID(uint32_t refID){this->refID=refID;this->empty=false;}
+    void set_geneID(uint32_t geneID){this->geneID=geneID;this->empty=false;}
+    void set_numID(uint32_t numID){this->numID=numID;this->empty=false;}
+    void set_strand(uint8_t strand){this->strand=strand;this->empty=false;}
+    void add_exon(GSeg exon){ this->exons.Add(exon);this->empty=false;}
 
-    uint32_t getRefID() {return refID;}
+    uint32_t get_refID() {return refID;}
     uint32_t get_geneID(){return geneID;}
 
     void clear(){
         this->exons.Clear();
+        this->empty = true;
     }
-    // TODO: this re-implementation needs to be tested by printing out all transcripts in the transcriptome after parsing a .tlst file
     void print(){
-        std::cout<<this->gffID<<"\t"<<this->geneID<<"@"<<this->refID<<this->strand;
+        std::cerr<<this->gffID<<"\t"<<this->geneID<<"@"<<this->refID<<this->strand;
         for(int i=0;i<this->exons.Count();i++){
-            std::cout<<this->exons[i].start<<"_"<<this->exons[i].end<<",";
+            std::cerr<<this->exons[i].start<<"_"<<this->exons[i].end<<",";
         }
-        std::cout<<std::endl;
+        std::cerr<<std::endl;
     }
 };
 
@@ -476,6 +478,9 @@ private:
     void process_single(bam1_t* curAl);
     size_t process_read(bam1_t* curAl);
     void finish_read(bam1_t *curAl);
+
+    // various printers relevant only for debug
+    void print_transcriptome();
 
 };
 
