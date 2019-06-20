@@ -28,7 +28,7 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
     if (length>this->kmerlen and this->multi){ // sanity check for 0 and 1 base exons
         this->found_gene = this->geneMap.find(std::string(p_trans.getGeneID()));
         if(this->found_gene != this->geneMap.end()){
-            this->mmap.add_sequence(exon_seq,p_trans,std::get<0>(this->found_gene->second));
+            this->mmap.add_sequence(exon_seq,p_trans,this->found_gene->second.get_locid());
         }
         else{
             std::cerr<<"something went wrong with gene ID assignment"<<std::endl;
@@ -103,16 +103,9 @@ void GTFToFasta::add_to_geneMap(GffObj &p_trans){
             exit(1);
         }
     }
-    exists_cur_gene=this->geneMap.insert(std::make_pair(std::string(geneID),std::make_tuple(this->curGeneID,p_trans.strand,nst,nen)));
-    if(!exists_cur_gene.second){ // the key did exist - update start and min
-        int &st=std::get<2>(exists_cur_gene.first->second);
-        int &en=std::get<3>(exists_cur_gene.first->second);
-        if(nen>en){ //update end
-            en=nen;
-        }
-        if(nst<st){ //update start
-            st=nst;
-        }
+    exists_cur_gene = this->geneMap.insert(std::make_pair(std::string(geneID),Gene(this->curGeneID,p_trans)));
+    if(!exists_cur_gene.second){ // the key did exist - update start and end and add new exons
+        exists_cur_gene.first->second.add_transcript(p_trans);
     }
     else{ // saw a new gene, so need to create a new identifier
         this->curGeneID++;
@@ -161,7 +154,7 @@ void GTFToFasta::make_transcriptome(){
                 std::cout << "an error in GeneID ocurred" << std::endl;
                 exit(-1);
             }
-            out_rec.desc_.append(std::to_string(std::get<0>(this->found_gene->second)));
+            out_rec.desc_.append(std::to_string(this->found_gene->second.get_locid()));
             out_rec.desc_.push_back('@');
             out_rec.desc_.append(std::to_string(p_trans->gseq_id));
             out_rec.desc_.push_back(p_trans->strand);
@@ -179,8 +172,8 @@ void GTFToFasta::make_transcriptome(){
     int max_locid = 0; // find what the maximum locus ID is in the current data to be saved into the info file
     auto it=this->geneMap.begin();
     while(it!=this->geneMap.end()){
-        max_locid = (std::get<0>(it->second)>max_locid) ? std::get<0>(it->second) : max_locid;
-        *this->genefp<<std::get<0>(it->second)<<char(std::get<1>(it->second))<<std::get<2>(it->second)<<" "<<std::get<3>(it->second)<<std::endl;
+        max_locid = (it->second.get_locid()>max_locid) ? it->second.get_locid() : max_locid;
+        *this->genefp<<it->second.get_locid()<<":"<<it->second.get_elen()<<char(it->second.get_strand())<<it->second.get_start()<<" "<<it->second.get_end()<<std::endl;
         it++;
     }
 

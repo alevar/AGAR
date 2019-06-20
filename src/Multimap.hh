@@ -15,6 +15,7 @@
 #include <cstring>
 #include <unordered_map>
 #include <unordered_set>
+#include <set>
 
 #include "gff.h"
 
@@ -44,6 +45,7 @@ public:
     uint32_t get_start(){return this->start;}
     uint32_t get_end(){return this->end;}
     uint32_t get_locid(){return this->locid;}
+    uint8_t get_strand(){return this->strand;}
     bool is_empty(){return this->empty;}
 
     // return rpk difference which is used to increment the normalizing constant
@@ -65,16 +67,93 @@ public:
     }
 
     void print(){
-        std::cout<<this->locid<<this->strand<<this->start<<" "<<this->end<<std::endl;
+        std::cout<<this->locid<<":"<<this->elen<<this->strand<<this->start<<" "<<this->end<<std::endl;
     }
 private:
-    uint32_t elen;
-    double rpk;
-    uint32_t n_reads;
-    uint32_t start,end;
+    uint32_t elen = 1;
+    double rpk = 1;
+    uint32_t n_reads = 1;
+    uint32_t start=MAX_INT,end = 0;
     uint8_t strand;
-    uint32_t locid;
+    uint32_t locid=0;
     bool empty = true;
+};
+
+class Gene: public Locus{
+public:
+    Gene() = default;
+    Gene(uint32_t geneID,GffObj &p_trans){
+        this->set_id(geneID);
+        this->set_strand(p_trans.strand);
+        this->add_transcript(p_trans);
+    }
+
+    // the function below creates an exon map for the effective length calculation
+    // as well as updates the start and end of the current gene based on the exon coordinates
+    void add_transcript(GffObj &p_trans){
+        GList<GffExon>& exon_list = p_trans.exons;
+        for (int i = 0; i < exon_list.Count(); ++i) {
+            // add exon to the current exon-intron coordinates
+            GffExon &cur_exon = *(exon_list.Get(i));
+            this->exons.insert(std::make_pair(cur_exon.start,cur_exon.end));
+            // update gene start and end coordinates
+            if(cur_exon.start<this->get_start()){
+                this->set_start(cur_exon.start);
+            }
+            if(cur_exon.end>this->get_end()){
+                this->set_end(cur_exon.end);
+            }
+        }
+
+    }
+    void add_exon(uint32_t start,uint32_t end){
+        this->exons.insert(std::make_pair(start,end));
+    }
+    uint32_t get_elen(){
+        uint32_t cur_elen = 0;
+        uint32_t eo = 0;
+        std::vector<std::pair<uint32_t,uint32_t> > stack;
+        if(this->exons.size()==1){
+            return (this->exons.begin()->second+1)-this->exons.begin()->first;
+        }
+        else if(this->exons.size()>1){
+            stack.push_back(*(this->exons.begin()));
+            for(auto it=this->exons.begin();it!=this->exons.end();it++){
+                eo = exons_overlap(it,stack.back());
+                if(eo){ // if the exons overlap, then top needs to be updated
+                    stack.back().second = eo;
+                }
+                else{ // no overlap
+                    // update the current effective length based on the previous entry in the stack
+                    cur_elen += ((stack.back().second+1)-stack.back().first);
+                    stack.push_back(*it);
+                }
+            }
+            // update the current effective length based on the previous entry in the stack
+            cur_elen += ((stack.back().second+1)-stack.back().first);
+        }
+        else{ // no exons in the data??? this is weird
+            return cur_elen;
+        }
+
+        return cur_elen;
+    }
+
+private:
+    uint32_t exons_overlap(std::set<std::pair<uint32_t,uint32_t> >::iterator e1,std::pair<uint32_t,uint32_t> e2){
+        if(e2.second >= e1->first){ // overlap
+            if(e2.second < e1->second){ // need to update the end
+                return e1->second;
+            }
+            else{
+                return e2.second;
+            }
+        }
+        else{ // do not overlap
+            return 0;
+        }
+    }
+    std::set<std::pair<uint32_t,uint32_t> > exons; // guarantees correct lexicographical sorting
 };
 
 // this object holds the map of loci and different means of accessing the contents and modifying it
@@ -143,19 +222,24 @@ private:
         int k = locfp.gcount();
         uint32_t locus=0,start=0,end=0,elen=0;
         enum Opt {LOCUS   = 0,
-                  START   = 1,
-                  END     = 2};
+                  ELEN    = 1,
+                  START   = 2,
+                  END     = 3};
         uint32_t elem = Opt::LOCUS;
         Locus loc;
         for(int i=0;i<k;i++){
             switch(buffer[i]){
                 case '\n':
                     loc.set_end(end);
-                    loc.set_elen((loc.get_end()+1)-loc.get_start());
                     this->loci[loc.get_locid()]=loc;
                     loc.clear();
                     elem = Opt::LOCUS;
                     end = 0;
+                    break;
+                case ':':
+                    loc.set_id(locus);
+                    elem = Opt::ELEN;
+                    locus = 0;
                     break;
                 case ' ':
                     loc.set_start(start);
@@ -163,10 +247,10 @@ private:
                     start = 0;
                     break;
                 case '-': case '+':
-                    loc.set_id(locus);
+                    loc.set_elen(elen);
                     loc.set_strand((uint8_t)buffer[i]);
                     elem = Opt::START;
-                    locus = 0;
+                    elen = 0;
                     break;
                 case '0': case '1': case '2': case '3':
                 case '4': case '5': case '6': case '7':
@@ -177,9 +261,12 @@ private:
                             locus = 10*locus + buffer[i] - '0';
                             break;
                         case 1:
-                            start = 10*start + buffer[i] - '0';
+                            elen = 10*elen + buffer[i] - '0';
                             break;
                         case 2:
+                            start = 10*start + buffer[i] - '0';
+                            break;
+                        case 3:
                             end = 10*end + buffer[i] - '0';
                             break;
                         default:

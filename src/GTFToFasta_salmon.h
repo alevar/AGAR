@@ -84,12 +84,11 @@ private:
     // 3. start
     // 4. end
     // 5. effective length
-    std::map<std::string,std::tuple<int,int,int,int,int>> geneMap; // stores minimum and maximum gene coordinates of transcripts in a given gene as well as strand and unique ID, also stores gene identifier as well as the effective length
+    std::map<std::string,Gene> geneMap; // stores minimum and maximum gene coordinates of transcripts in a given gene as well as strand and unique ID, also stores gene identifier as well as the effective length
     std::pair< std::map<
             std::string,
-            std::tuple<int,int,int,int,int>
-    >::iterator,bool> exists_cur_gene;
-    std::map<std::string,std::tuple<int,int,int,int,int>>::iterator found_gene;
+            Gene >::iterator,bool> exists_cur_gene;
+    std::map<std::string,Gene>::iterator found_gene;
 };
 
 #endif
