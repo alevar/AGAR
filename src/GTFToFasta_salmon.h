@@ -89,6 +89,8 @@ private:
             std::string,
             Gene >::iterator,bool> exists_cur_gene;
     std::map<std::string,Gene>::iterator found_gene;
+
+    // TODO: needs to handle reverse complement of a kmer for the multimapper index
 };
 
 #endif

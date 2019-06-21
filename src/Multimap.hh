@@ -317,6 +317,7 @@ public:
             res.append(std::to_string(mit));
             res += ' ';
         }
+        res.pop_back(); // removes the last whitespace
         return res;
     }
 
@@ -398,24 +399,33 @@ public:
 
     // print from the loaded index
     void print_multimapers(){
-        std::cerr<<this->index.size()<<std::endl;
+        std::cerr<<"NUMBER OF MULTIMAPPING POSITIONS: "<<this->index.size()<<std::endl;
         for(auto &mm : this->index){
-            std::cerr<<mm.get_strg()<<std::endl;
+            if(mm.second){
+                std::cerr<<mm.first.get_strg()<<"\t";
+            }
+            else{
+                std::cerr<<mm.first.get_strg()<<std::endl;
+            }
         }
     }
 
     void set_kmerlen(int kmerlen){this->kmerlen = kmerlen;}
 
     void save_multimappers(std::string& outFP){
-        std::ofstream multi_ss(outFP.c_str());
+        std::string res = "";
         for(auto &kv : this->kmer_coords){
             if(kv.second.size()>1) {
                 for (auto &cv : kv.second) {
-                    multi_ss << cv.get_strg() << "\t";
+                    res.append(cv.get_strg());
+                    res+='\t';
                 }
-                multi_ss << std::endl;
+                res.pop_back();
+                res+='\n';
             }
         }
+        std::ofstream multi_ss(outFP.c_str());
+        multi_ss << res;
         multi_ss.close();
     }
 
@@ -510,34 +520,38 @@ private:
         }
     };
 
-    // TODO: needs to handle reverse complement of a kmer
     // TODO: for efficient lookup pcord needs to contain pointers to related multimappers
     void _load(std::ifstream &infp,char *buffer){
         int k = infp.gcount();
         uint32_t cur=0,chr=0,strand=0,start=0,move=0,locus=0;
         enum Opt {CHR   = 0,
-            START = 1,
-            MOVE  = 2,
-            LOCUS = 3};
-        uint32_t elem = Opt::CHR;
+                START = 1,
+                MOVE  = 2,
+                LOCUS = 3};
+        uint32_t elem = Opt::LOCUS;
         Position pos;
+        // Multimappers are all stored on a single line, so instead of creating pointers for each, we can simply store two small integers, which describe which positions in the index characterize a multimapper
+        uint32_t multi_block_start = 0;
         for(int i=0;i<k;i++){
             switch(buffer[i]){
                 case '\n':
                     //end of line
                     pos.add_move(move);
-                    this->pce = this->index.insert(pos); // write the last entry
+                    this->index.push_back(std::make_pair(pos,false));
+                    this->lte = this->lookup_table.insert(std::make_pair(pos,multi_block_start));
+                    multi_block_start = this->index.size(); // end of line implies end of the multimapping block. Now set the start of the next block
                     pos.clear();
                     elem = Opt::LOCUS;
-                    chr = 0;
+                    move = 0;
                     break;
                 case '\t':
                     // end of a full coordinate - write last integer
                     pos.add_move(move);
-                    this->pce = this->index.insert(pos); // write the last entry
+                    this->index.push_back(std::make_pair(pos,true));
+                    this->lte = this->lookup_table.insert(std::make_pair(pos,multi_block_start));
                     pos.clear();
                     elem = Opt::LOCUS;
-                    chr = 0;
+                    move = 0;
                     break;
                 case ' ':
                     //end of current int - write move
@@ -549,7 +563,7 @@ private:
                     //end of current int - write start
                     pos.set_start(start);
                     elem = Opt::MOVE;
-                    move = 0;
+                    start = 0;
                     break;
                 case '@':
                     // got the geneID
@@ -561,7 +575,7 @@ private:
                     pos.set_chr(chr);
                     pos.set_strand((uint32_t)buffer[i]);
                     elem = Opt::START;
-                    start = 0;
+                    chr = 0;
                     break;
                 case '0': case '1': case '2': case '3':
                 case '4': case '5': case '6': case '7':
@@ -592,14 +606,14 @@ private:
             }
         }
         if(pos.size() >= 4){ // no end of line character, so need to write the last entry
-            this->pce = this->index.insert(pos);
+            this->index.push_back(std::make_pair(pos,false));
+            this->lte = this->lookup_table.insert(std::make_pair(pos,multi_block_start));
         }
     }
 
     int kmerlen;
 
     typedef std::unordered_set<Position> pcord;
-    pcord index;
     std::pair<pcord::iterator,bool> pce;
     std::unordered_map<std::string,pcord> kmer_coords;
     std::pair<std::unordered_map<std::string,pcord>::iterator,bool> kce;
@@ -607,6 +621,11 @@ private:
     // now time to write the unique kmers for transcripts
     std::unordered_map<std::string,int> uniq_cnt; // counts of unique kmers per transcript
     std::pair<std::unordered_map<std::string,int>::iterator,bool> ex_ucnt; // exists or not
+
+    std::unordered_map<Position,uint32_t> lookup_table;
+    std::pair<std::unordered_map<Position,uint32_t>::iterator,bool> lte; // entry exists in the lookup table
+    std::vector<std::pair<Position,bool>> index; // the actual position as well as whether the next position is related to the current
+    // every entry in the lookup table links to the first entry in the block of related multimappers
 
 };
 
