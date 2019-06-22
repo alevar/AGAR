@@ -422,7 +422,7 @@ public:
 
     void load_abundances(const std::string& abundFP); // add abundances to the transcripts
 
-    void convert_coords();
+    void convert_coords(bool unal);
     void print_multimappers();
 
 private:
@@ -465,10 +465,10 @@ private:
 
     // ALIGNMENT METHODS
     int convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_exon,int match_length,
-                      GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS]);
+                      GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS],Position& cur_pos);
     int merge_cigar(const std::vector<std::pair<int,int>> *cor,bam1_t *al, uint32_t *cur_cigar_full, int n_cigar);
     bool has_valid_mate(bam1_t *curAl);
-    bool get_read_start(GVec<GSeg>& exon_list,size_t gff_start,size_t& genome_start, int& exon_idx);
+    bool get_read_start(GVec<GSeg>& exon_list,int32_t gff_start,int32_t& genome_start, int& exon_idx);
     void add_cigar(bam1_t *curAl,int num_cigars,int* cigars);
     void add_aux(bam1_t *curAl,char xs);
     void fix_flag(bam1_t *curAl);
@@ -476,8 +476,11 @@ private:
     int collapse_genomic(bam1_t *curAl,bam1_t *mateAl,size_t cigar_hash,size_t mate_cigar_hash);
     void process_pair(bam1_t* curAl);
     void process_single(bam1_t* curAl);
-    size_t process_read(bam1_t* curAl);
+    size_t process_read(bam1_t* curAl,Position& cur_pos);
     void finish_read(bam1_t *curAl);
+
+    // Multimapper-related methods
+    bool evaluate_multimappers(bam1_t* curAl,Position& cur_pos);
 
     // various printers relevant only for debug
     void print_transcriptome();

@@ -33,7 +33,7 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
         length = (cur_exon.end+1) - cur_exon.start;
 
         // get coordinates into the map
-        if (length>1 and this->multi){ // sanity check for 0 and 1 base exons // TODO: need to refactor the multimapping index
+        if (length>1 and this->multi){ // sanity check for 0 and 1 base exons
             for(int j=0;j<length;j++){ // iterate over all kmers in the given exon
                 if ((length-j)+cur_len<this->kmerlen){ // not enough coordinates - need to look at the next exon
                     cur_coords.emplace_back(std::pair<int,int>(cur_exon.start+j,cur_exon.end));
@@ -422,7 +422,7 @@ int main(int argc, char *argv[])
     std::string gtf_fname(args.get_string(Opt::GFF_FP));
     std::string genome_fname(args.get_string(Opt::REF_FA));
     std::string out_fname(args.get_string(Opt::OUT_FA));
-    bool multi=args.get_flag(Opt::MULTI); // TODO: re-enable the multimapper mode
+    bool multi=args.get_flag(Opt::MULTI);
 
     GTFToFasta gtfToFasta(gtf_fname, genome_fname,out_fname, kmer_length,multi);
     gtfToFasta.make_transcriptome();

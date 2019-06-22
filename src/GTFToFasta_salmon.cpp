@@ -273,7 +273,7 @@ int main(int argc, char *argv[])
 
     GTFToFasta gtfToFasta(gtf_fname, genome_fname,out_fname, kmer_length,multi);
     gtfToFasta.make_transcriptome();
-    gtfToFasta.save(Opt::MULTI,Opt::UNIQ);
+    gtfToFasta.save(args.get_flag(Opt::MULTI),args.get_flag(Opt::UNIQ));
     return 0;
 }
 

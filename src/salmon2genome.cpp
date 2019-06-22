@@ -19,7 +19,8 @@ enum Opt {IN_AL     = 'i',
         THREADS   = 'p',
         INDEX     = 'x',
         MULTI     = 'm',
-        ABUNDANCE = 'a'};
+        ABUNDANCE = 'a',
+        UNALIGNED = 'u'};
 
 int main(int argc, char** argv) {
 
@@ -30,6 +31,7 @@ int main(int argc, char** argv) {
     args.add_string(Opt::INDEX,"index","","path and basename of the index built by gtf_to_fasta",true);
     args.add_flag(Opt::MULTI,"multi","whether to search and evaluate multimappers",false);
     args.add_string(Opt::ABUNDANCE,"abund","","use abundances precomputed",false);
+    args.add_flag(Opt::UNALIGNED,"unal","search for unaligned reads, extract from alignment into separate files",false);
 
     if(strcmp(argv[1],"--help")==0){
         std::cerr<<args.get_help()<<std::endl;
@@ -38,11 +40,11 @@ int main(int argc, char** argv) {
 
     args.parse_args(argc,argv);
 
-    // TODO: replace the separate files in the input with a single index to minimize the number of arguments to the functions
     Map2GFF_SALMON gffMapper(args.get_string(Opt::IN_AL),args.get_string(Opt::OUT_AL),args.get_string(Opt::INDEX),args.get_int(Opt::THREADS),args.get_flag(Opt::MULTI));
     if(args.is_set(Opt::ABUNDANCE)){
         gffMapper.load_abundances(args.get_string(Opt::ABUNDANCE));
     }
-    gffMapper.convert_coords(); // TODO: need to make sure that multimappers are evaluated if the index is provided
+    std::cerr<<"Begin Translating Coordinates"<<std::endl;
+    gffMapper.convert_coords(args.get_flag(Opt::UNALIGNED)); // TODO: need to make sure that multimappers are evaluated if the index is provided
     return 0;
 }

@@ -29,8 +29,8 @@ def main(args):
 	# gtf_to_fasta
 	print("Extracting fasta from gtf")
 	gtf_to_fasta_path=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'gtf_to_fasta_salmon') # get path to the gtf_to_fasta that was compiled with the package
-	print(" ".join([gtf_to_fasta_path,"-k",str(args.kmerlen),"-a",args.gff,"-r",args.ref,"-o",os.path.abspath(args.output)+"/db"]))
-	subprocess.call([gtf_to_fasta_path,"-k",str(args.kmerlen),"-a",args.gff,"-r",args.ref,"-o",os.path.abspath(args.output)+"/db"])
+	print(" ".join([gtf_to_fasta_path,"-k",str(args.kmerlen),"-a",args.gff,"-r",args.ref,"-o",os.path.abspath(args.output)+"/db","-m"]))
+	subprocess.call([gtf_to_fasta_path,"-k",str(args.kmerlen),"-a",args.gff,"-r",args.ref,"-o",os.path.abspath(args.output)+"/db","-m"])
 	# buildGenomeHeader.py
 	print("Building genome header file")
 	buildHeader(os.path.abspath(args.ref)+".fai",os.path.abspath(args.output)+"/db.genome_header")
@@ -41,6 +41,8 @@ def main(args):
 	elif args.type=="hisat":
 		print("Building transcriptome database for HISAT2")
 		subprocess.call(["hisat2-build","-p",args.threads,os.path.abspath(args.output)+"/db.fasta",os.path.abspath(args.output)+"/db"])
+	else:
+		print("unknown aligner specified")
 	if args.locus:
 		print("building a locus specific bowtie index for the second bowtie stage")
 		# first extract the locus information
@@ -49,6 +51,3 @@ def main(args):
 		subprocess.call["bedtools","maskfasta","-fo",s.path.abspath(args.output)+"/db.locus.fasta","-fi",args.ref,"-bed",s.path.abspath(args.output)+"/db.locus.gff"]
 		# third build the index
 		subprocess.call(["bowtie2-build",os.path.abspath(args.output)+"/db.locus.fasta",os.path.abspath(args.output)+"/db.locus"])
-
-	else:
-		print("unknown aligner specified")

@@ -41,7 +41,12 @@ Map2GFF_SALMON::Map2GFF_SALMON(const std::string& alFP,const std::string& outFP,
     this->load_index(index_base,multi);
 
     // now initialize the sam file
-    this->al=hts_open(this->alFP.c_str(),"r");
+    struct stat buffer{};
+    if(stat (alFP.c_str(), &buffer) != 0){ // if file does not exists
+        std::cerr<<"Alignment file: "<<alFP<<" is not found."<<std::endl;
+        exit(1);
+    }
+    this->al=hts_open(alFP.c_str(),"r");
     this->al_hdr=sam_hdr_read(this->al); // read the current alignment header
 
     genome_al_hdr=sam_hdr_read(genome_al);
@@ -343,16 +348,16 @@ void Map2GFF_SALMON::load_abundances(const std::string& abundFP){
     std::cerr<<"Loaded transcript abundance data"<<std::endl;
 }
 
-void Map2GFF_SALMON::convert_coords(){
+void Map2GFF_SALMON::convert_coords(bool unal){
     GffTranscript *p_trans=NULL;
     GffTranscript *mate_p_trans=NULL;
 
-    bool start=true;
-
     bam1_t *curAl = bam_init1(); // initialize the alignment record
 
-    while(sam_read1(al,al_hdr,curAl)>0) {
-        if (curAl->core.flag & 4) { // if read is unmapped
+    // TODO: secondly need to implement abundance incrementation
+    // TODO: lastly deal with the multimappers
+    while(sam_read1(al,al_hdr,curAl)>0) { // only perfom if unaligned flag is set to true
+        if (unal && curAl->core.flag & 4) { // if read is unmapped
             // output unaligned reads for hisat2 to realign
             this->umap.insert(curAl);
             continue;
@@ -365,13 +370,16 @@ void Map2GFF_SALMON::convert_coords(){
 
         // first check if belongs to a valid pair
         if(this->has_valid_mate(curAl)){ // belongs to a valid pair
-            this->process_pair(curAl);
+            this->process_pair(curAl); // TODO: first implement for process_single
         }
         else{ // does not belong to a valid pair
-            this->process_single(curAl);
+            this->process_single(curAl); // TODO: first re-apply multimapper search here
         }
     }
     bam_destroy1(curAl);
+
+    // let's test the locus abundances here:
+    this->loci.print();
 }
 
 bool Map2GFF_SALMON::has_valid_mate(bam1_t *curAl){
@@ -381,7 +389,11 @@ bool Map2GFF_SALMON::has_valid_mate(bam1_t *curAl){
           !(curAl->core.flag & 0x8);   // mate is mapped
 }
 
-bool Map2GFF_SALMON::get_read_start(GVec<GSeg>& exon_list,size_t gff_start,size_t& genome_start, int& exon_idx){
+bool Map2GFF_SALMON::get_read_start(GVec<GSeg>& exon_list,int32_t gff_start,int32_t& genome_start, int& exon_idx){
+    if(gff_start==-1){ // conforming to SAM specification where 0 pos PNEXT means it is not set (for bowtie means reads are not paired)
+        genome_start = -1;
+        return true;
+    }
     const GSeg* cur_exon;
     size_t cur_intron_dist=0;
     size_t trans_start=exon_list[0].start;
@@ -408,10 +420,11 @@ bool Map2GFF_SALMON::get_read_start(GVec<GSeg>& exon_list,size_t gff_start,size_
 }
 
 int Map2GFF_SALMON::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_exon,int match_length,
-        GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS]){
+        GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS],Position& pos_obj){
 
     int cur_total_pos=read_start; // same as cur_pos but includes the soft clipping bases
     int cur_pos=read_start;
+    int move = 0;
     for (uint8_t c=0;c<curAl->core.n_cigar;++c){
         uint32_t *cigar_full=bam_get_cigar(curAl);
         int opcode=bam_cigar_op(cigar_full[c]);
@@ -421,7 +434,11 @@ int Map2GFF_SALMON::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg 
             cigars[num_cigars]=opcode|(length<<BAM_CIGAR_SHIFT);
             ++num_cigars;
         }
+        if (opcode==BAM_CDEL){
+            move+=length;
+        }
         if (opcode==BAM_CSOFT_CLIP){
+            move+=length;
             cigars[num_cigars]=opcode|(length<<BAM_CIGAR_SHIFT);
             ++num_cigars;
             cur_total_pos+=bam_cigar_oplen(cigars[num_cigars]);
@@ -433,6 +450,7 @@ int Map2GFF_SALMON::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg 
         for (;i<exon_list.Count();++i){
             GSeg& cur_exon=exon_list[i];
             if (cur_pos>=(int)cur_exon.start && cur_pos+remaining_length-1<=(int)cur_exon.end){
+                move+=remaining_length;
                 cigars[num_cigars]=opcode | (remaining_length <<BAM_CIGAR_SHIFT);
                 ++num_cigars;
                 cur_pos+=remaining_length;
@@ -442,6 +460,7 @@ int Map2GFF_SALMON::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg 
             else if (cur_pos >= (int)cur_exon.start && cur_pos+remaining_length-1>(int)cur_exon.end){
                 match_length=(int)cur_exon.end-cur_pos+1;
                 if (match_length>0){
+                    move+=match_length;
                     cigars[num_cigars]=opcode | (match_length << BAM_CIGAR_SHIFT);
                     ++num_cigars;
                 }
@@ -454,6 +473,10 @@ int Map2GFF_SALMON::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg 
                 miss_length=next_exon->start-cur_exon.end-1;
                 cur_intron_len+=miss_length;
 
+                // when an intron is encountered need to push the move, set the new move to zero and push an intron to the moves
+                pos_obj.add_move(move);
+                pos_obj.add_move(miss_length+1);
+                move = 0;
                 cigars[num_cigars]=BAM_CREF_SKIP | (miss_length <<BAM_CIGAR_SHIFT);
                 ++num_cigars;
 
@@ -465,10 +488,10 @@ int Map2GFF_SALMON::convert_cigar(int i,int cur_intron_len,int miss_length,GSeg 
             }
         }
     }
+    pos_obj.add_move(move);
     return 1;
 }
 
-// TODO: store all of the computed information about genomic positions within a structure which can be easily created and passed as a single argument to any function
 void Map2GFF_SALMON::add_cigar(bam1_t *curAl,int num_cigars,int* cigars){
     int old_num_cigars = curAl->core.n_cigar;
     int data_len=curAl->l_data+4*(num_cigars-old_num_cigars);
@@ -532,9 +555,6 @@ void Map2GFF_SALMON::fix_flag(bam1_t *curAl){
 // this function performs analysis of the genomic coordinates of a read
 // and notifies whether the read needs to be outputted or not (1 or 0)
 int Map2GFF_SALMON::collapse_genomic(bam1_t *curAl,size_t cigar_hash){
-    // TODO: need to re-implement outputting of unique genomic coordinates per read
-    //      consider whether cigar string information is needed
-
     // this function needs several things.
     // 1. read start and mate start postitions
     // 2. strand
@@ -551,8 +571,6 @@ int Map2GFF_SALMON::collapse_genomic(bam1_t *curAl,size_t cigar_hash){
 // this function performs analysis of the genomic coordinates of a read
 // and notifies whether the read needs to be outputted or not (1 or 0)
 int Map2GFF_SALMON::collapse_genomic(bam1_t *curAl, bam1_t *mateAl,size_t cigar_hash,size_t mate_cigar_hash){
-    // TODO: need to re-implement outputting of unique genomic coordinates per read
-    //      consider whether cigar string information is needed
 
     // this function needs several things.
     // 1. read start and mate start postitions
@@ -576,29 +594,47 @@ void Map2GFF_SALMON::process_pair(bam1_t *curAl) {
         bam_destroy1(mate);
         return;
     }
-
-    cigar_hash = process_read(curAl);
-    mate_cigar_hash = process_read(mate);
+    Position cur_pos,cur_pos_mate;
+    cigar_hash = process_read(curAl,cur_pos);
+    mate_cigar_hash = process_read(mate,cur_pos_mate);
 
     int ret_val = collapse_genomic(curAl,mate,cigar_hash,mate_cigar_hash);
 
-    if(ret_val) {
-        finish_read(curAl);
-        finish_read(mate);
+    if(!ret_val) {
+        return;
     }
+    this->evaluate_multimappers(curAl,cur_pos);
+    this->evaluate_multimappers(mate,cur_pos_mate);
+
+    finish_read(curAl);
+    finish_read(mate);
     bam_destroy1(mate);
 }
 
 void Map2GFF_SALMON::process_single(bam1_t *curAl){
-    size_t cigar_hash = this->process_read(curAl);
+    Position cur_pos;
+    size_t cigar_hash = this->process_read(curAl,cur_pos);
 
-    int ret_val = collapse_genomic(curAl,cigar_hash);
-    if(ret_val) {
-        this->finish_read(curAl);
+    int ret_val = collapse_genomic(curAl,cigar_hash); // TODO: this function should only run if not in "-k=1" mode
+    if(!ret_val) {
+        return;
+    }
+
+    // TODO: find and evaluate multimappers here
+    //       Since each read will go through this function, the function will also allocate abundances based on non-multimapping reads
+    this->evaluate_multimappers(curAl,cur_pos);
+
+    this->finish_read(curAl);
+}
+
+bool Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos){ // TODO: make sure only mapped reads are passed through this function
+    bool unique = this->mmap.process_pos(cur_pos);
+    if(unique){ // increment abundance
+        this->loci.add_read(cur_pos.locus);
     }
 }
 
-size_t Map2GFF_SALMON::process_read(bam1_t *curAl) {
+size_t Map2GFF_SALMON::process_read(bam1_t *curAl,Position& cur_pos) {
     // let's deal with this case first since there is less stuff
     int target_name = atoi(al_hdr->target_name[curAl->core.tid]); // name of the transcript from the input alignment
     GffTranscript& p_trans = transcriptome[target_name]; // get the transcript
@@ -607,7 +643,7 @@ size_t Map2GFF_SALMON::process_read(bam1_t *curAl) {
     GSeg *next_exon=nullptr;
     int cigars[MAX_CIGARS];
     int match_length,miss_length,cur_intron_len=0,i=0,num_cigars=0;
-    size_t read_start=0;
+    int32_t read_start=0;
 
     // first find the genomic read start
     bool ret_val = Map2GFF_SALMON::get_read_start(exon_list,curAl->core.pos,read_start,i);
@@ -617,20 +653,25 @@ size_t Map2GFF_SALMON::process_read(bam1_t *curAl) {
     }
 
     // now get mate read start
-    int match_length_mate,miss_length_mate,cur_intron_len_mate=0,i_mate=0,num_cigars_mate=0;
-    size_t read_start_mate=0;
+    int i_mate=0;
+    int32_t read_start_mate=0;
     ret_val = Map2GFF_SALMON::get_read_start(exon_list,curAl->core.mpos,read_start_mate,i_mate);
     if(!ret_val){
         std::cerr<<"Can not get the genomic read start of the mate"<<std::endl;
         exit(1);
     }
 
+    cur_pos.set_chr(p_trans.get_refID());
+    cur_pos.set_start(read_start);
+    cur_pos.set_locus(p_trans.get_geneID());
+    cur_pos.set_strand(p_trans.strand);
+
     // secondly build a new cigar string
     int cur_cigar_full[MAX_CIGARS];
     memcpy(cur_cigar_full, bam_get_cigar(curAl), curAl->core.n_cigar);
 
     ret_val = Map2GFF_SALMON::convert_cigar(i, cur_intron_len, miss_length, next_exon, match_length,
-                                            exon_list, num_cigars, read_start, curAl, cigars);
+                                            exon_list, num_cigars, read_start, curAl, cigars,cur_pos);
     if (!ret_val) {
         std::cerr << "Can not create a new cigar string for the single read" << std::endl;
         exit(1);
@@ -648,8 +689,11 @@ size_t Map2GFF_SALMON::process_read(bam1_t *curAl) {
     curAl->core.pos = read_start - 1; // assign new position
 
     // convert the mate information for single reads without a concordantly mapped mate
-    curAl->core.mtid = p_trans.refID;
-    curAl->core.mpos = read_start_mate - 1;
+    // unless the read is not paired, in which case the paired information should stay the same
+    if(curAl->core.mpos != -1 || curAl->core.mtid != -1){
+        curAl->core.mtid = p_trans.refID;
+        curAl->core.mpos = read_start_mate - 1;
+    }
 
     // assign new cigar string to the record
     add_cigar(curAl, num_cigars, cigars);

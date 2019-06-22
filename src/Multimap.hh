@@ -26,8 +26,6 @@
 // Allows the following methods:
 // 1. get abundance from reads and effective length
 // 2. count reads and etc
-// TODO: need to compute effective length in gtf_to_fasta and include the value in the .glst
-//      current implementation relies on the actual gene length without taking into account the introns
 class Locus{
 public:
     Locus()=default;
@@ -46,13 +44,15 @@ public:
     uint32_t get_end(){return this->end;}
     uint32_t get_locid(){return this->locid;}
     uint8_t get_strand(){return this->strand;}
+    uint32_t get_elen(){return this->elen;}
+    uint32_t get_nreads(){return this->n_reads;}
     bool is_empty(){return this->empty;}
 
     // return rpk difference which is used to increment the normalizing constant
     double inc(){ // increments the read count and recomputes the TPM
         this->n_reads++;
         double old_rpk = this->rpk;
-        this->rpk = this->n_reads/this->elen;
+        this->rpk = (double)this->n_reads/(double)this->elen;
         return this->rpk - old_rpk;
     }
     double get_rpk(){ // return the RPK
@@ -61,9 +61,9 @@ public:
 
     void clear(){
         this->empty=true;
-        this->elen=0;
-        this->rpk=0;
-        this->n_reads=0;
+        this->elen=1;
+        this->rpk=1;
+        this->n_reads=1;
     }
 
     void print(){
@@ -71,7 +71,7 @@ public:
     }
 private:
     uint32_t elen = 1;
-    double rpk = 1;
+    double rpk = 0.0;
     uint32_t n_reads = 1;
     uint32_t start=MAX_INT,end = 0;
     uint8_t strand;
@@ -167,13 +167,17 @@ public:
     Loci() = default;
     ~Loci()=default;
 
+    Locus& operator[] (const int index){
+        return this->loci[index];
+    }
+
     void add_locus(uint32_t lid,uint32_t elen){
         this->loci[lid].set_elen(elen);
     }
 
-    void add_read(uint32_t lid){
-        double rpk_diff = this->loci[lid].inc(); // update locus abundance
-        this->scaling_factor += rpk_diff/1000000; // update the scaling factor
+    void add_read(const int index){
+        double rpk_diff = this->loci[index].inc(); // update locus abundance
+        this->scaling_factor += (rpk_diff/1000000.0); // update the scaling factor
     }
 
     // the following method is used to normalize the locus counts
@@ -210,13 +214,14 @@ public:
     void print(){
         for(auto &v : this->loci){
             v.print();
+            std::cout<<this->scaling_factor<<"\t"<<v.get_nreads()<<"\t"<<v.get_rpk()<<"\t"<<this->get_abund(v.get_locid())<<std::endl;
         }
     }
 
 private:
     std::vector<Locus> loci;
     uint32_t nloc;
-    double scaling_factor = 0;
+    double scaling_factor = 1.0;
 
     void _load(std::ifstream& locfp,char* buffer){
         int k = locfp.gcount();
@@ -297,6 +302,10 @@ public:
         this->start = start;
         this->locus = locus;
     }
+    Position(bam1_t* curAl){ // generate position from an alignment
+        this->chr = (uint32_t)curAl->core.tid;
+        this->start = (uint32_t)curAl->core.pos;
+    }
     ~Position() = default;
 
     void add_move(uint32_t move){this->moves.push_back(move);this->num_elems++;}
@@ -365,6 +374,26 @@ class Multimap{
 public:
     Multimap() = default;
     ~Multimap() = default;
+
+    // given a position generated from an alignment this function searches for multimapper
+    // and returns true if the position is not multimapping or false if it is multimapping
+    // for multimappers, it also replaces the data in the position with a position selected by likelihood
+    bool process_pos(Position& pos){
+        this->ltf = this->lookup_table.find(pos);
+        if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
+            return true;
+        }
+        else{ // multimappers exist - need to evaluate
+            this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
+            while(this->ii->second){ // iterate until the end of the block
+
+                this->ii++; // step to the next position
+            }
+            // handle the last multimaper in the sequence
+
+            return false;
+        }
+    }
 
     void load(const std::string& input_file){
         std::cerr<<"loading multimapper data from: "<<input_file<<std::endl;
@@ -520,7 +549,6 @@ private:
         }
     };
 
-    // TODO: for efficient lookup pcord needs to contain pointers to related multimappers
     void _load(std::ifstream &infp,char *buffer){
         int k = infp.gcount();
         uint32_t cur=0,chr=0,strand=0,start=0,move=0,locus=0;
@@ -624,7 +652,9 @@ private:
 
     std::unordered_map<Position,uint32_t> lookup_table;
     std::pair<std::unordered_map<Position,uint32_t>::iterator,bool> lte; // entry exists in the lookup table
+    std::unordered_map<Position,uint32_t>::iterator ltf; // iterator to found entry or the end
     std::vector<std::pair<Position,bool>> index; // the actual position as well as whether the next position is related to the current
+    std::vector<std::pair<Position,bool>>::iterator ii; // iterator within the index
     // every entry in the lookup table links to the first entry in the block of related multimappers
 
 };
