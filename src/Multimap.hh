@@ -19,6 +19,44 @@
 
 #include "gff.h"
 
+class PID{
+public:
+    PID() = default;
+    PID(double kp, double ki){
+        // set tunings here
+        if (kp<0 || ki<0){
+            std::cerr<<"wrong PID tunings specified"<<std::endl;
+            exit(1);
+        };
+
+        this->kp = kp;
+        this->ki = ki;
+        prev_input = 0;
+
+    }
+    ~PID() = default;
+
+    double compute(double &setpoint,double &pv){
+        /*Compute all the working error variables*/
+        double error = setpoint - pv;
+        this->I_term += (this->ki * error);
+
+        /*Compute PID Output*/
+        double res = (this->kp * error) + this->I_term;
+
+        /*Remember some variables for next time*/
+        this->prev_input = pv;
+        return res;
+    }
+
+private:
+    double kp, ki;                  // Tuning Parameters
+    double prev_input = 0;
+
+    double I_term = 0;
+
+};
+
 // this class holds a description of a single Locus
 // the description includes:
 // 1. effective length of the locus (excludes the intronic sequences)
@@ -55,8 +93,20 @@ public:
         this->rpk = (double)this->n_reads/(double)this->elen;
         return this->rpk - old_rpk;
     }
+
+    double inc_multi(){ // this function is used to keep track of how many multimapping reads have been allocated to this locus
+        this->n_reads_multi++;
+        double old_rpk_total = this->rpk_total;
+        this->rpk_total = (double)(this->n_reads_multi+this->n_reads)/(double)this->elen;
+        return this->rpk_total - old_rpk_total;
+    }
+
     double get_rpk(){ // return the RPK
         return this->rpk;
+    }
+
+    double get_rpk_total(){
+        return this->rpk_total;
     }
 
     void clear(){
@@ -69,10 +119,25 @@ public:
     void print(){
         std::cout<<this->locid<<":"<<this->elen<<this->strand<<this->start<<" "<<this->end<<std::endl;
     }
+
+    double compute_pid(double &setpoint,double &pv){
+        return this->controller.compute(setpoint,pv);
+    }
 private:
-    uint32_t elen = 1;
+    // PID
+    PID controller = PID(1.5,0.2);
+
+    // members for abundance estimation with unique reads
     double rpk = 0.0;
     uint32_t n_reads = 1;
+
+    // members for abundance estimation with both unique and multimapping reads
+    // these members are used to compute the error from the current state (unique+multi) to the target (unique only)
+    double rpk_total = 0.0;
+    uint32_t n_reads_multi = 1;
+
+    // general purpose members
+    uint32_t elen = 1;
     uint32_t start=MAX_INT,end = 0;
     uint8_t strand;
     uint32_t locid=0;
@@ -109,7 +174,7 @@ public:
     void add_exon(uint32_t start,uint32_t end){
         this->exons.insert(std::make_pair(start,end));
     }
-    uint32_t get_elen(){
+    uint32_t compute_elen(){
         uint32_t cur_elen = 0;
         uint32_t eo = 0;
         std::vector<std::pair<uint32_t,uint32_t> > stack;
@@ -180,9 +245,23 @@ public:
         this->scaling_factor += (rpk_diff/1000000.0); // update the scaling factor
     }
 
+    void add_read_multi(const int index){
+        double rpk_diff_total = this->loci[index].inc_multi();
+        this->scaling_factor_total += (rpk_diff_total/1000000.0);
+    }
+
     // the following method is used to normalize the locus counts
     double get_abund(uint32_t locid){
         return this->loci[locid].get_rpk()/this->scaling_factor;
+    }
+
+    double get_abund_total(uint32_t locid){
+        return this->loci[locid].get_rpk_total()/this->scaling_factor_total;
+    }
+
+    double get_corrected(uint32_t locid,double setpoint, double pv){
+        // perform PID computation for a given locus
+        return this->loci[locid].compute_pid(setpoint,pv);
     }
 
     // load from a .glst file
@@ -221,7 +300,7 @@ public:
 private:
     std::vector<Locus> loci;
     uint32_t nloc;
-    double scaling_factor = 1.0;
+    double scaling_factor = 1.0,scaling_factor_total = 1.0;
 
     void _load(std::ifstream& locfp,char* buffer){
         int k = locfp.gcount();
@@ -378,18 +457,37 @@ public:
     // given a position generated from an alignment this function searches for multimapper
     // and returns true if the position is not multimapping or false if it is multimapping
     // for multimappers, it also replaces the data in the position with a position selected by likelihood
-    bool process_pos(Position& pos){
+    bool process_pos(Position& pos,Loci& loci){
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
             return true;
         }
         else{ // multimappers exist - need to evaluate
+            std::vector<double> uniq,multi,res; // holds pid-corrected abundances
+            double utotal=0,mtotal=0,rtotal=0;
+
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
             while(this->ii->second){ // iterate until the end of the block
+                // first need to compute expected values
+                // for this we need the uniq abundances which determine base likelihood
+                // as well as current assignments of multimappers
+                uniq.push_back(loci.get_abund(this->ii->first.locus));
+                utotal+=uniq.back();
+                multi.push_back(loci.get_abund_total(this->ii->first.locus));
+                mtotal+=multi.back();
 
                 this->ii++; // step to the next position
             }
-            // handle the last multimaper in the sequence
+            uniq.push_back(loci.get_abund(this->ii->first.locus));
+            utotal+=uniq.back();
+            multi.push_back(loci.get_abund_total(this->ii->first.locus));
+            mtotal+=multi.back();
+
+            // get expected and compute PID
+            for(int i=0; i<uniq.size();i++){
+                double expected = (uniq[i]/utotal)*mtotal;
+                loci.get_corrected(this->ii->first.locus,expected+uniq[i],multi[i]+uniq[i]);
+            }
 
             return false;
         }

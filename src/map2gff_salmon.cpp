@@ -379,7 +379,7 @@ void Map2GFF_SALMON::convert_coords(bool unal){
     bam_destroy1(curAl);
 
     // let's test the locus abundances here:
-    this->loci.print();
+//    this->loci.print();
 }
 
 bool Map2GFF_SALMON::has_valid_mate(bam1_t *curAl){
@@ -628,9 +628,16 @@ void Map2GFF_SALMON::process_single(bam1_t *curAl){
 }
 
 bool Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos){ // TODO: make sure only mapped reads are passed through this function
-    bool unique = this->mmap.process_pos(cur_pos);
+    bool unique = this->mmap.process_pos(cur_pos,this->loci);
     if(unique){ // increment abundance
         this->loci.add_read(cur_pos.locus);
+    }
+    else{
+        // increment total abundances of the locus to which the new cur_pos belongs
+        this->loci.add_read_multi(cur_pos.locus);
+
+        // reconvert the cur_pos into a read and output
+
     }
 }
 
