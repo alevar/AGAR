@@ -637,8 +637,94 @@ bool Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos){ // 
         this->loci.add_read_multi(cur_pos.locus);
 
         // reconvert the cur_pos into a read and output
+        // TODO: need to fill in this part
+        this->pos2al(curAl,cur_pos);
 
     }
+}
+
+// given a position and an alignment record, replace the alignment data with the data from position
+int Map2GFF_SALMON::pos2al(bam1_t* curAl,Position& cur_pos){
+    // first change the read start, chromosome - no need to modify the reverse/non-reverse in flag right now, since multimappers don't take that into account
+    curAl->core.pos=cur_pos.start-1; // set read start
+
+    curAl->core.tid=cur_pos.chr; // set sequence id
+    // second need to change cigar string
+
+    int mult_num_cigars=0; // defines the current position in the cigar string to which we are adding
+    int mult_cigars[MAX_CIGARS];
+
+    int cur_move;
+    int trans_pos=0; // keeps track of the position within query on the transcriptome side of the cigar string
+    int genome_pos=0; // keep strack of position within query on the genome side
+    int idx1=0; // index of the current position in the original cigar
+    int cql,cqo; // current length and type of cigar position
+    int ntleft=0; // number of nucleotides left from previous operation
+    int intron_len=0; // length of an intron
+    for(uint8_t i=0;i<cur_pos.moves.size();i++){
+        cur_move = cur_pos.moves[i];
+        genome_pos=genome_pos+cur_move; // TODO: this needs to be dealt with as a state machine
+        while(trans_pos<=genome_pos && idx1<n_cigar){
+            cql=bam_cigar_oplen(cur_cigar_full[idx1])-ntleft;
+            ntleft=0;
+            cqo=bam_cigar_op(cur_cigar_full[idx1]);
+            idx1++;
+            if(cql==0){
+                continue;
+            }
+            if(cqo!=BAM_CDEL){
+                trans_pos=trans_pos+cql;
+            }
+            if(trans_pos<genome_pos){
+                mult_cigars[mult_num_cigars]=cqo|(cql<<BAM_CIGAR_SHIFT);
+                // std::cout<<"1: "<<cql<<bam_cigar_opchr(cqo)<<std::endl;
+                ++mult_num_cigars;
+            }
+            else{
+                idx1--;
+                ntleft=genome_pos-(trans_pos-cql);
+                trans_pos=(trans_pos-cql)+ntleft;
+                // std::cout<<"2: "<<ntleft<<std::endl;
+                if(ntleft>0){
+                    mult_cigars[mult_num_cigars]=cqo|(ntleft<<BAM_CIGAR_SHIFT);
+                    // std::cout<<"3: "<<ntleft<<bam_cigar_opchr(cqo)<<std::endl;
+                    ++mult_num_cigars;
+                }
+                break;
+            }
+        }
+        if(i<(cor->size()-1)){
+            intron_len=(cor->operator[](i+1).first-cur_pair.second)-1;
+            mult_cigars[mult_num_cigars]=BAM_CREF_SKIP|(intron_len<<BAM_CIGAR_SHIFT);
+            // std::cout<<"4: "<<intron_len<<bam_cigar_opchr(BAM_CREF_SKIP)<<std::endl;
+            ++mult_num_cigars;
+        }
+    }
+
+    int data_len=curAl->l_data+4*(mult_num_cigars-curAl->core.n_cigar);
+    int m_data=std::max(data_len,(int)curAl->m_data);
+    kroundup32(m_data);
+
+    auto* data = (uint8_t*)calloc(m_data,1);
+
+    int copy1_len = (uint8_t*)bam_get_cigar(curAl) - curAl->data;
+    memcpy(data, curAl->data, copy1_len);
+
+    int copy2_len = mult_num_cigars * 4;
+    memcpy(data + copy1_len, mult_cigars, copy2_len);
+
+    int copy3_len = curAl->l_data - copy1_len - (curAl->core.n_cigar * 4);
+    memcpy(data + copy1_len + copy2_len, bam_get_seq(curAl), copy3_len);
+
+    curAl->core.n_cigar = mult_num_cigars;
+
+    free(curAl->data);
+    curAl->data = data;
+    curAl->l_data = data_len;
+    curAl->m_data = m_data;
+    memset(mult_cigars,0,sizeof(mult_cigars));
+
+    return 1;
 }
 
 size_t Map2GFF_SALMON::process_read(bam1_t *curAl,Position& cur_pos) {

@@ -16,6 +16,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <set>
+#include <random>
+#include <ctime>
 
 #include "gff.h"
 
@@ -91,6 +93,7 @@ public:
         this->n_reads++;
         double old_rpk = this->rpk;
         this->rpk = (double)this->n_reads/(double)this->elen;
+        this->rpk_total = (double)(this->n_reads_multi+this->n_reads)/(double)this->elen;
         return this->rpk - old_rpk;
     }
 
@@ -112,8 +115,8 @@ public:
     void clear(){
         this->empty=true;
         this->elen=1;
-        this->rpk=1;
-        this->n_reads=1;
+        this->rpk=0.0;
+        this->n_reads=0;
     }
 
     void print(){
@@ -125,16 +128,16 @@ public:
     }
 private:
     // PID
-    PID controller = PID(1.5,0.2);
+    PID controller = PID(2.0,1.0);
 
     // members for abundance estimation with unique reads
     double rpk = 0.0;
-    uint32_t n_reads = 1;
+    uint32_t n_reads = 0;
 
     // members for abundance estimation with both unique and multimapping reads
     // these members are used to compute the error from the current state (unique+multi) to the target (unique only)
     double rpk_total = 0.0;
-    uint32_t n_reads_multi = 1;
+    uint32_t n_reads_multi = 0;
 
     // general purpose members
     uint32_t elen = 1;
@@ -243,6 +246,7 @@ public:
     void add_read(const int index){
         double rpk_diff = this->loci[index].inc(); // update locus abundance
         this->scaling_factor += (rpk_diff/1000000.0); // update the scaling factor
+        this->scaling_factor_total += (rpk_diff/1000000.0); // update the scaling factor
     }
 
     void add_read_multi(const int index){
@@ -463,7 +467,7 @@ public:
             return true;
         }
         else{ // multimappers exist - need to evaluate
-            std::vector<double> uniq,multi,res; // holds pid-corrected abundances
+            std::vector<double> uniq,multi,tmp_res,res; // holds pid-corrected abundances
             double utotal=0,mtotal=0,rtotal=0;
 
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
@@ -484,12 +488,37 @@ public:
             mtotal+=multi.back();
 
             // get expected and compute PID
+            utotal = (utotal==0)?1:utotal;
+            mtotal = (mtotal==0)?1:mtotal;
+            double min = (double)MAX_INT;
             for(int i=0; i<uniq.size();i++){
                 double expected = (uniq[i]/utotal)*mtotal;
-                loci.get_corrected(this->ii->first.locus,expected+uniq[i],multi[i]+uniq[i]);
+                double tmp = uniq[i]+loci.get_corrected(this->ii->first.locus,expected+uniq[i],multi[i]+uniq[i]);
+                tmp = (tmp>0.0)?tmp:0.000001;
+                tmp_res.push_back(tmp);
+                min = (tmp<min)?tmp:min;
+                rtotal+=tmp_res.back();
             }
 
+            // now need to make the decision which is best
+            int pos_idx = this->get_likely(tmp_res,min,rtotal);
+            // now follow the iterator to get the actual position object which corresponds to the selected item
+            pos = (this->index.begin()+this->ltf->second+pos_idx)->first;
+
             return false;
+        }
+    }
+
+    // thanks to https://medium.com/@dimonasdf/hi-your-code-is-correct-but-in-pseudocode-it-should-be-fc1875cf9de3 for the idea
+    int get_likely(std::vector<double>& abunds,double& min, double& max){
+        srand(time(NULL));
+        double rv = (max - min) * ( (double)rand() / (double)RAND_MAX ) + min;
+
+        for(int i=0;i<abunds.size();i++){
+            rv = rv - abunds[i];
+            if(rv<=0){
+                return i;
+            }
         }
     }
 
