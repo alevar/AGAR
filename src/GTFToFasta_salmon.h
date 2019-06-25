@@ -63,7 +63,7 @@ private:
     std::ofstream *genefp;
 
     void transcript_map();
-    std::string get_exonic_sequence(GffObj& p_trans, FastaRecord& rec, std::string& coords);
+    std::string get_exonic_sequence(GffObj& p_trans, FastaRecord& rec, std::string& coords,int transID);
     void add_to_geneMap(GffObj &p_trans);
 
     GTFToFasta() = default; // Don't want anyone calling the constructor w/o options
