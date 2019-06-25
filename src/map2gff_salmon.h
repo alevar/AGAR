@@ -464,8 +464,7 @@ private:
     Collapser collapser;
 
     // ALIGNMENT METHODS
-    int convert_cigar(int i,int cur_intron_len,int miss_length,GSeg *next_exon,int match_length,
-                      GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS],Position& cur_pos);
+    int convert_cigar(int i,GSeg *next_exon,GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS],Position& pos_obj);
     bool has_valid_mate(bam1_t *curAl);
     bool get_read_start(GVec<GSeg>& exon_list,int32_t gff_start,int32_t& genome_start, int& exon_idx);
     void add_cigar(bam1_t *curAl,int num_cigars,int* cigars);
@@ -475,12 +474,12 @@ private:
     int collapse_genomic(bam1_t *curAl,bam1_t *mateAl,size_t cigar_hash,size_t mate_cigar_hash);
     void process_pair(bam1_t* curAl);
     void process_single(bam1_t* curAl);
-    size_t process_read(bam1_t* curAl,Position& cur_pos);
+    size_t process_read(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
     void finish_read(bam1_t *curAl);
     int pos2al(bam1_t* curAl,Position& cur_pos);
 
     // Multimapper-related methods
-    bool evaluate_multimappers(bam1_t* curAl,Position& cur_pos);
+    bool evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
 
     // various printers relevant only for debug
     void print_transcriptome();

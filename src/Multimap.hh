@@ -20,6 +20,7 @@
 #include <ctime>
 
 #include "gff.h"
+#include <htslib/sam.h>
 
 class PID{
 public:
@@ -379,11 +380,12 @@ private:
 class Position{
 public:
     Position() = default;
-    Position(uint32_t chr,uint32_t strand,uint32_t start,uint32_t locus){
+    Position(uint32_t chr,uint32_t strand,uint32_t start,uint32_t locus,uint32_t transID){
         this->chr = chr;
         this->strand = strand;
         this->start = start;
         this->locus = locus;
+        this->transID = transID;
     }
     Position(bam1_t* curAl){ // generate position from an alignment
         this->chr = (uint32_t)curAl->core.tid;
@@ -396,9 +398,12 @@ public:
     void set_strand(uint32_t strand){this->strand=strand;this->num_elems++;}
     void set_start(uint32_t start){this->start=start;this->num_elems++;}
     void set_locus(uint32_t locus){this->locus=locus;this->num_elems++;}
+    void set_trans(uint32_t trans){this->transID=trans;this->num_elems++;}
 
     std::string get_strg() const {
         std::string res;
+        res.append(std::to_string(this->transID));
+        res += ">";
         res.append(std::to_string(this->locus));
         res += "@";
         res.append(std::to_string(this->chr));
@@ -430,6 +435,7 @@ public:
 
     uint8_t num_elems = 0;
     uint32_t chr,strand,start,locus;
+    uint32_t transID; // transID can be any transcript which can describe the position to which it belongs; it does not participate in the equality computation
     std::vector<uint32_t> moves; // simplified CIGAR describing the intron-exon coverage of the given kmer
 };
 
@@ -600,7 +606,7 @@ public:
 
     // given a full transcript sequence and the pointer to the transcript description (constituent exons)
     // get all kmers and coordinates and load them into the multimapper index
-    void add_sequence(std::string& seq,GffObj &p_trans,uint32_t geneID){
+    void add_sequence(std::string& seq,GffObj &p_trans,uint32_t geneID,int transID){
         GList<GffExon>& exon_list = p_trans.exons;
 
         int el_pos = 0; // current position within the exon list
@@ -610,7 +616,7 @@ public:
         for(int i=0;i<seq.size()-this->kmerlen+1;i++){ // iterate over all kmers in the sequence
             kmer=seq.substr(i,this->kmerlen);
 
-            Position p(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos,geneID); // initialize position and add information to it accordingly
+            Position p(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos,geneID,transID); // initialize position and add information to it accordingly
 
             this->kce = this->kmer_coords.insert(std::make_pair(kmer,pcord{}));
 
@@ -630,7 +636,7 @@ public:
 
 private:
     // we know that the kmer spans an intron
-    // this function appends the intron/exon information to moves of of the position object
+    // this function appends the intron/exon information to moves of the position object
     void process_remaining(int& el_pos,int& exon_pos,Position& p,GList<GffExon>& exon_list,GffExon* cur_exon){
         int ee = cur_exon->end;
         int es = cur_exon->start;
@@ -678,12 +684,13 @@ private:
 
     void _load(std::ifstream &infp,char *buffer){
         int k = infp.gcount();
-        uint32_t cur=0,chr=0,strand=0,start=0,move=0,locus=0;
+        uint32_t cur=0,chr=0,strand=0,start=0,move=0,locus=0,trans=0;
         enum Opt {CHR   = 0,
                 START = 1,
                 MOVE  = 2,
-                LOCUS = 3};
-        uint32_t elem = Opt::LOCUS;
+                LOCUS = 3,
+                TRANS = 4};
+        uint32_t elem = Opt::TRANS;
         Position pos;
         // Multimappers are all stored on a single line, so instead of creating pointers for each, we can simply store two small integers, which describe which positions in the index characterize a multimapper
         uint32_t multi_block_start = 0;
@@ -696,7 +703,7 @@ private:
                     this->lte = this->lookup_table.insert(std::make_pair(pos,multi_block_start));
                     multi_block_start = this->index.size(); // end of line implies end of the multimapping block. Now set the start of the next block
                     pos.clear();
-                    elem = Opt::LOCUS;
+                    elem = Opt::TRANS;
                     move = 0;
                     break;
                 case '\t':
@@ -705,7 +712,7 @@ private:
                     this->index.push_back(std::make_pair(pos,true));
                     this->lte = this->lookup_table.insert(std::make_pair(pos,multi_block_start));
                     pos.clear();
-                    elem = Opt::LOCUS;
+                    elem = Opt::TRANS;
                     move = 0;
                     break;
                 case ' ':
@@ -716,17 +723,28 @@ private:
                     break;
                 case ':':
                     //end of current int - write start
+//                    std::cerr<<"start: "<<start<<std::endl;
                     pos.set_start(start);
                     elem = Opt::MOVE;
                     start = 0;
                     break;
                 case '@':
                     // got the geneID
+//                    std::cerr<<"locus: "<<locus<<std::endl;
                     pos.set_locus(locus);
                     elem = Opt::CHR;
                     locus = 0;
+                    break;
+                case '>':
+                    // got the sample transcript ID
+//                    std::cerr<<"trans: "<<trans<<std::endl;
+                    pos.set_trans(trans);
+                    elem = Opt::LOCUS;
+                    trans = 0;
+                    break;
                 case '-': case '+':
                     // negative strand - write chromosome
+//                    std::cerr<<"chr: "<<chr<<std::endl;
                     pos.set_chr(chr);
                     pos.set_strand((uint32_t)buffer[i]);
                     elem = Opt::START;
@@ -749,8 +767,11 @@ private:
                         case 3:
                             locus = 10*locus + buffer[i] - '0';
                             break;
+                        case 4:
+                            trans = 10*trans + buffer[i] - '0';
+                            break;
                         default:
-                            std::cerr<<"should never happen"<<std::endl;
+                            std::cerr<<"should never happen _load from Multimap with value: "<<elem<<std::endl;
                             exit(1);
                     }
                     break;

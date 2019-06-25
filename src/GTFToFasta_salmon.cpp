@@ -8,7 +8,7 @@
 //
 #include "GTFToFasta_salmon.h"
 
-std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::string& coords){
+std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::string& coords,int transID){
     GList<GffExon>& exon_list = p_trans.exons;
 
     std::string exon_seq;
@@ -28,7 +28,7 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
     if (length>this->kmerlen and this->multi){ // sanity check for 0 and 1 base exons
         this->found_gene = this->geneMap.find(std::string(p_trans.getGeneID()));
         if(this->found_gene != this->geneMap.end()){
-            this->mmap.add_sequence(exon_seq,p_trans,this->found_gene->second.get_locid());
+            this->mmap.add_sequence(exon_seq,p_trans,this->found_gene->second.get_locid(),transID);
         }
         else{
             std::cerr<<"something went wrong with gene ID assignment"<<std::endl;
@@ -138,8 +138,8 @@ void GTFToFasta::make_transcriptome(){
             this->add_to_geneMap(*p_trans);
 
             std::string coordstr;
-            out_rec.seq_ = get_exonic_sequence(*p_trans, cur_contig, coordstr);
-            if (out_rec.seq_.empty()) continue;
+            out_rec.seq_ = get_exonic_sequence(*p_trans, cur_contig, coordstr,trans_idx);
+            if (out_rec.seq_.empty());
             std::stringstream ss;
             ss << trans_idx;
             out_rec.id_ = ss.str();
