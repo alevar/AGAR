@@ -42,10 +42,10 @@ public:
     double compute(double &setpoint,double &pv){
         /*Compute all the working error variables*/
         double error = setpoint - pv;
-        this->I_term += (this->ki * error);
+        this->I_term += error;
 
         /*Compute PID Output*/
-        double res = (this->kp * error) + this->I_term;
+        double res = (this->kp * error) + (this->I_term * this->ki);
 
         /*Remember some variables for next time*/
         this->prev_input = pv;
@@ -129,7 +129,7 @@ public:
     }
 private:
     // PID
-    PID controller = PID(2.0,1.0);
+    PID controller = PID(3.0,1.0);
 
     // members for abundance estimation with unique reads
     double rpk = 0.0;
@@ -497,31 +497,43 @@ public:
             utotal = (utotal==0)?1:utotal;
             mtotal = (mtotal==0)?1:mtotal;
             double min = (double)MAX_INT;
-            for(int i=0; i<uniq.size();i++){
+            for(int i=0; i<uniq.size();i++){ // TODO: this is incorrect; need to create an array of abundances normalized to 0-1 and then evaluate, since otherwise minimum is hard to set
                 double expected = (uniq[i]/utotal)*mtotal;
                 double tmp = uniq[i]+loci.get_corrected(this->ii->first.locus,expected+uniq[i],multi[i]+uniq[i]);
                 tmp = (tmp>0.0)?tmp:0.000001;
                 tmp_res.push_back(tmp);
                 min = (tmp<min)?tmp:min;
                 rtotal+=tmp_res.back();
+//                std::cerr<<tmp_res.back()<<"\t";
             }
+//            std::cerr<<std::endl;
+
+            for(auto &v : tmp_res){
+                res.push_back(v/rtotal);
+//                std::cerr<<res.back()<<"\t";
+            }
+//            std::cerr<<std::endl;
+
+            // TODO: need to understand why r2s are never present at the second locus, seems like a bug
 
             // now need to make the decision which is best
-            int pos_idx = this->get_likely(tmp_res,min,rtotal);
+            int pos_idx = this->get_likely(res,0.0,1.0);
             // now follow the iterator to get the actual position object which corresponds to the selected item
+//            std::cerr<<pos_idx<<"\t"<<pos.start<<"\t"<<(this->index.begin()+this->ltf->second+pos_idx)->first.start;
             pos = (this->index.begin()+this->ltf->second+pos_idx)->first;
-
+//            std::cerr<<"\t"<<pos.start<<std::endl;
             return false;
         }
     }
 
     // thanks to https://medium.com/@dimonasdf/hi-your-code-is-correct-but-in-pseudocode-it-should-be-fc1875cf9de3 for the idea
-    int get_likely(std::vector<double>& abunds,double& min, double& max){
-        srand(time(NULL));
+    int get_likely(std::vector<double>& abunds,double min, double max){
         double rv = (max - min) * ( (double)rand() / (double)RAND_MAX ) + min;
+//        std::cerr<<"likely: "<<rv<<std::endl;
 
         for(int i=0;i<abunds.size();i++){
             rv = rv - abunds[i];
+//            std::cerr<<"rv: "<<rv<<std::endl;
             if(rv<=0){
                 return i;
             }
@@ -529,6 +541,7 @@ public:
     }
 
     void load(const std::string& input_file){
+        srand(time(0));
         std::cerr<<"loading multimapper data from: "<<input_file<<std::endl;
         std::ifstream infp(input_file,std::ifstream::binary);
         if(infp){

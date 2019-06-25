@@ -582,9 +582,7 @@ void Map2GFF_SALMON::process_single(bam1_t *curAl){
 }
 
 bool Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){ // TODO: make sure only mapped reads are passed through this function
-//    std::cerr<<"prev: "<<cur_pos.start<<std::endl;
     bool unique = this->mmap.process_pos(cur_pos,this->loci);
-//    std::cerr<<"next: "<<cur_pos.start<<std::endl;
     if(unique){ // increment abundance
         this->loci.add_read(cur_pos.locus);
         // add already computed cigar to the read
@@ -592,6 +590,7 @@ bool Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int c
     }
     else{
         // increment total abundances of the locus to which the new cur_pos belongs
+
         this->loci.add_read_multi(cur_pos.locus);
 
         // first get the transcript
@@ -605,6 +604,8 @@ bool Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int c
                 break;
             }
         }
+
+        curAl->core.pos = cur_pos.start-1; // assign new position
 
         // reconvert the cur_pos into a read and output
         num_cigars = 0;
