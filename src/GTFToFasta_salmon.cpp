@@ -55,17 +55,14 @@ GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std
     gtfReader_.readAll();
     std::cout << "loaded the annotation"<<std::endl;
 
-    std::string tlst_fname(out_fname);
-    tlst_fname.append(".tlst");
-    this->tlst = new std::ofstream(tlst_fname.c_str());
+    this->tlst_fname = out_fname;
+    this->tlst_fname.append(".tlst");
 
-    std::string gene_fname(out_fname);
-    gene_fname.append(".glst");
-    this->genefp = new std::ofstream(gene_fname.c_str());
+    this->gene_fname = out_fname;
+    this->gene_fname.append(".glst");
 
-    std::string info_fname(out_fname);
-    info_fname.append(".info");
-    this->infofp = new std::ofstream(info_fname.c_str());
+    this->info_fname = out_fname;
+    this->info_fname.append(".info");
 
     this->trans_fastaname = out_fname;
     this->trans_fastaname.append(".fasta");
@@ -86,9 +83,6 @@ GTFToFasta::~GTFToFasta(){
     for (it = contigTransMap_.begin(); it != contigTransMap_.end(); ++it) {
         delete it->second;
     }
-    this->infofp->close();
-    this->tlst->close();
-    this->genefp->close();
 }
 
 void GTFToFasta::add_to_geneMap(GffObj &p_trans){
@@ -119,6 +113,8 @@ void GTFToFasta::make_transcriptome(){
     FastaWriter fastaWriter(this->trans_fastaname);
     FastaRecord cur_contig;
 
+    std::cerr<<"begin parsing transcriptome"<<std::endl;
+
     while (fastaReader.good()) {
         fastaReader.next(cur_contig);
         // If this contig isn't in the map, then there are no transcripts
@@ -130,6 +126,9 @@ void GTFToFasta::make_transcriptome(){
 
         p_contig_vec = contigTransMap_[cur_contig.id_];
 
+        std::cerr<<cur_contig.id_<<std::endl;
+
+        std::ofstream tlst(this->tlst_fname);
         FastaRecord out_rec;
         for (int trans_idx : *p_contig_vec) {
             GffObj *p_trans = gtfReader_.gflst.Get(trans_idx);
@@ -159,27 +158,30 @@ void GTFToFasta::make_transcriptome(){
             out_rec.desc_.append(std::to_string(p_trans->gseq_id));
             out_rec.desc_.push_back(p_trans->strand);
             out_rec.desc_.append(coordstr); //list of exon coordinates
-            *this->tlst << out_rec.id_ << '\t' << out_rec.desc_ << std::endl;
+            tlst << out_rec.id_ << '\t' << out_rec.desc_ << std::endl;
             fastaWriter.write(out_rec);
         }
     }
+    std::cerr<<"done parsing transcriptome"<<std::endl;
 
-    // now time to write the unique kmers for transcripts
-    std::unordered_map<std::string,int> uniq_cnt; // counts of unique kmers per transcript
-    std::pair<std::unordered_map<std::string,int>::iterator,bool> ex_ucnt; // exists or not
-
+    std::cerr<<"writing gene information"<<std::endl;
+    std::ofstream genefp(this->gene_fname);
     // write genes to file
     int max_locid = 0; // find what the maximum locus ID is in the current data to be saved into the info file
     auto it=this->geneMap.begin();
     while(it!=this->geneMap.end()){
         max_locid = (it->second.get_locid()>max_locid) ? it->second.get_locid() : max_locid;
-        *this->genefp<<it->second.get_locid()<<":"<<it->second.compute_elen()<<char(it->second.get_strand())<<it->second.get_start()<<" "<<it->second.get_end()<<std::endl;
+        genefp<<it->second.get_locid()<<":"<<it->second.compute_elen()<<char(it->second.get_strand())<<it->second.get_start()<<" "<<it->second.get_end()<<std::endl;
         it++;
     }
+    std::cerr<<"done writing gene information"<<std::endl;
 
+    std::cerr<<"writing general information"<<std::endl;
     // write the information about the index now
-    *this->infofp<<this->topTransID<<std::endl;
-    *this->infofp<<max_locid<<std::endl;
+    std::ofstream infofp(this->info_fname);
+    infofp<<this->topTransID<<std::endl;
+    infofp<<max_locid<<std::endl;
+    std::cerr<<"done writing general information"<<std::endl;
 }
 
 void GTFToFasta::transcript_map(){

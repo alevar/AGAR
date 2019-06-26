@@ -304,8 +304,6 @@ void Map2GFF_SALMON::convert_coords(bool unal){
 
     bam1_t *curAl = bam_init1(); // initialize the alignment record
 
-    // TODO: secondly need to implement abundance incrementation
-    // TODO: lastly deal with the multimappers
     while(sam_read1(al,al_hdr,curAl)>0) { // only perfom if unaligned flag is set to true
         if (unal && curAl->core.flag & 4) { // if read is unmapped
             // output unaligned reads for hisat2 to realign
@@ -320,10 +318,10 @@ void Map2GFF_SALMON::convert_coords(bool unal){
 
         // first check if belongs to a valid pair
         if(this->has_valid_mate(curAl)){ // belongs to a valid pair
-            this->process_pair(curAl); // TODO: first implement for process_single
+            this->process_pair(curAl);
         }
         else{ // does not belong to a valid pair
-            this->process_single(curAl); // TODO: first re-apply multimapper search here
+            this->process_single(curAl);
         }
     }
     bam_destroy1(curAl);
@@ -574,8 +572,6 @@ void Map2GFF_SALMON::process_single(bam1_t *curAl){
         return;
     }
 
-    // TODO: find and evaluate multimappers here
-    //       Since each read will go through this function, the function will also allocate abundances based on non-multimapping reads
     this->evaluate_multimappers(curAl,cur_pos,cigars,num_cigars);
 
     this->finish_read(curAl);

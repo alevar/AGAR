@@ -594,7 +594,7 @@ public:
             if(multi_pairs.empty()){
                 return true; // means no valid multimapping pairs were detected
             }
-            // now compute abundances for all these blocks // TODO: both mates should be added to the locus read counts
+            // now compute abundances for all these blocks
             for(auto & mp: multi_pairs){
                 // first need to compute expected values
                 // for this we need the uniq abundances which determine base likelihood
@@ -696,6 +696,8 @@ public:
     void set_kmerlen(int kmerlen){this->kmerlen = kmerlen;}
 
     void save_multimappers(std::string& outFP){
+        std::cerr<<"writing multimappers"<<std::endl;
+        std::ofstream multi_ss(outFP.c_str());
         std::string res = "";
         for(auto &kv : this->kmer_coords){
             if(kv.second.size()>1) {
@@ -709,11 +711,14 @@ public:
                 }
                 res.pop_back();
                 res+='\n';
+                multi_ss << res;
+                res = "";
             }
         }
-        std::ofstream multi_ss(outFP.c_str());
-        multi_ss << res;
+
         multi_ss.close();
+        std::cerr<<"done writing multimappers"<<std::endl;
+
     }
 
     void save_unique(std::string& outFP){

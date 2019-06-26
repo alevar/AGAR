@@ -56,11 +56,7 @@ private:
     int topTransID = 0; // the highest transcript ID assigned for any transcript in the current transcriptome. This information is written to the info file
 
     std::string trans_fastaname;
-    std::ofstream *infofp;
-    std::ofstream *tlst;
-    std::ofstream *multimap;
-    std::ofstream *uniquefp;
-    std::ofstream *genefp;
+    std::string info_fname,tlst_fname,multimap_fname,unique_fname,gene_fname;
 
     void transcript_map();
     std::string get_exonic_sequence(GffObj& p_trans, FastaRecord& rec, std::string& coords,int transID);
