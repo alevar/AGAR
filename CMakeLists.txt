@@ -73,6 +73,9 @@ add_executable(gtf_to_fasta_salmon
         src/tokenize.cpp
         src/Multimap.hh)
 
+add_dependencies(gtf_to_fasta_salmon htslib zlib)
+target_link_libraries(gtf_to_fasta_salmon ${htslib_LIB} ${zlib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl)
+
 add_executable(trans2genome
         src/arg_parse.cpp
         src/arg_parse.h
