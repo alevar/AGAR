@@ -456,21 +456,36 @@ public:
     std::vector<uint32_t> moves; // simplified CIGAR describing the intron-exon coverage of the given kmer
 };
 
+inline void hash_combine(std::size_t& seed) { }
+
+template <typename T, typename... Rest>
+inline void hash_combine(std::size_t& seed, const T& v, Rest... rest) {
+    std::hash<T> hasher;
+    seed ^= hasher(v) + 0x9e3779b9 + (seed<<6) + (seed>>2);
+    hash_combine(seed, rest...);
+}
+
+
 // hash function to be used for
 namespace std {
     template<>
     struct hash<Position> {
         size_t operator()(const Position &p) const {
-            int hash = 1;
-            hash ^= p.chr + 0x9e3779b9 + (hash<<6) + (hash>>2);
-            hash ^= p.strand + 0x9e3779b9 + (hash<<6) + (hash>>2);
-            hash ^= p.start + 0x9e3779b9 + (hash<<6) + (hash>>2);
-            hash ^= p.locus + 0x9e3779b9 + (hash<<6) + (hash>>2);
-            for(auto &v : p.moves){
-                hash ^= v + 0x9e3779b9 + (hash<<6) + (hash>>2);
-            }
-            return hash;
+            size_t ret = 0;
+            hash_combine(ret,p.chr,p.strand,p.start,p.locus);
+            return ret;
         }
+//        size_t operator()(const Position &p) const {
+//            int hash = 1;
+//            hash ^= p.chr + 0x9e3779b9 + (hash<<6) + (hash>>2);
+//            hash ^= p.strand + 0x9e3779b9 + (hash<<6) + (hash>>2);
+//            hash ^= p.start + 0x9e3779b9 + (hash<<6) + (hash>>2);
+//            hash ^= p.locus + 0x9e3779b9 + (hash<<6) + (hash>>2);
+//            for(auto &v : p.moves){
+//                hash ^= v + 0x9e3779b9 + (hash<<6) + (hash>>2);
+//            }
+//            return hash;
+//        }
     };
 }
 
@@ -527,9 +542,9 @@ public:
 
             for(auto &v : tmp_res){
                 res.push_back(v/rtotal);
-//                std::cerr<<res.back()<<"\t";
+                std::cerr<<res.back()<<"\t";
             }
-//            std::cerr<<std::endl;
+            std::cerr<<std::endl;
 
             // now need to make the decision which is best
             int pos_idx = this->get_likely(res,0.0,1.0);
@@ -712,6 +727,7 @@ public:
                 res.pop_back();
                 res+='\n';
                 multi_ss << res;
+                multi_ss.flush();
                 res = "";
             }
         }

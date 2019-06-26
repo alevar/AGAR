@@ -115,6 +115,8 @@ void GTFToFasta::make_transcriptome(){
 
     std::cerr<<"begin parsing transcriptome"<<std::endl;
 
+    std::ofstream tlst(this->tlst_fname);
+
     while (fastaReader.good()) {
         fastaReader.next(cur_contig);
         // If this contig isn't in the map, then there are no transcripts
@@ -128,7 +130,6 @@ void GTFToFasta::make_transcriptome(){
 
         std::cerr<<cur_contig.id_<<std::endl;
 
-        std::ofstream tlst(this->tlst_fname);
         FastaRecord out_rec;
         for (int trans_idx : *p_contig_vec) {
             GffObj *p_trans = gtfReader_.gflst.Get(trans_idx);
@@ -159,9 +160,11 @@ void GTFToFasta::make_transcriptome(){
             out_rec.desc_.push_back(p_trans->strand);
             out_rec.desc_.append(coordstr); //list of exon coordinates
             tlst << out_rec.id_ << '\t' << out_rec.desc_ << std::endl;
+            tlst.flush();
             fastaWriter.write(out_rec);
         }
     }
+    tlst.close();
     std::cerr<<"done parsing transcriptome"<<std::endl;
 
     std::cerr<<"writing gene information"<<std::endl;

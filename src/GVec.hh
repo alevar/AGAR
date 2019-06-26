@@ -98,19 +98,27 @@ template <class OBJ> class GVec {
     void Add(GVec<OBJ>& list); //append copies of all items from another list
 
     OBJ& Get(int idx) {
-          TEST_INDEX(idx);
+        if (idx<0 || idx>=fCount){
+            GError(GVEC_INDEX_ERR, idx);
+        }
           return fArray[idx];
           }
     inline OBJ& operator[](int i) {
-          TEST_INDEX(i);
+        if (i<0 || i>=fCount){
+            GError(GVEC_INDEX_ERR, i);
+        }
           return fArray[i];
           }
     OBJ& Last() {
-         TEST_INDEX(fCount-1);
+        if (fCount-1<0 || fCount-1>=fCount){
+            GError(GVEC_INDEX_ERR, fCount-1);
+        }
          return fArray[fCount-1];
          }
     OBJ& First() {
-         TEST_INDEX(0);
+        if (0<0 || 0>=fCount){
+            GError(GVEC_INDEX_ERR, 0);
+        }
          return fArray[0];
          }
     void Clear();
@@ -431,7 +439,9 @@ template <class OBJ> void GVec<OBJ>::Insert(int idx, OBJ* item) {
  //idx must be the new position this new item must have
  //so the allowed range is [0..fCount]
  //the old idx item all the above will be shifted to idx+1
- if (idx<0 || idx>fCount) GError(GVEC_INDEX_ERR, idx);
+ if (idx<0 || idx>fCount){
+     GError(GVEC_INDEX_ERR, idx);
+ }
  if (fCount==fCapacity) { //need to resize the array
     Grow(idx, *item); //expand and also copy/move data and insert the new item
     return;
@@ -463,13 +473,19 @@ template <class OBJ> void GVec<OBJ>::Insert(int idx, OBJ* item) {
 
 
 template <class OBJ> void GVec<OBJ>::Replace(int idx, OBJ& item) {
- TEST_INDEX(idx);
+    if (idx<0 || idx>=fCount){
+        GError(GVEC_INDEX_ERR, idx);
+    }
  fArray[idx]=item;
 }
 
 template <class OBJ> void GVec<OBJ>::Exchange(int idx1, int idx2) {
- TEST_INDEX(idx1);
- TEST_INDEX(idx2);
+    if (idx1<0 || idx1>=fCount){
+        GError(GVEC_INDEX_ERR, idx1);
+    }
+    if (idx2<0 || idx2>=fCount){
+        GError(GVEC_INDEX_ERR, idx2);
+    }
  OBJ item=fArray[idx1];
  fArray[idx1]=fArray[idx2];
  fArray[idx2]=item;
@@ -477,7 +493,9 @@ template <class OBJ> void GVec<OBJ>::Exchange(int idx1, int idx2) {
 
 
 template <class OBJ> void GVec<OBJ>::Delete(int index) {
- TEST_INDEX(index);
+    if (index<0 || index>=fCount){
+        GError(GVEC_INDEX_ERR, index);
+    }
  fCount--;
  if (IsPrimitiveType<OBJ>::VAL) {
    if (index<fCount) 
@@ -681,8 +699,12 @@ template <class OBJ> void GPVec<OBJ>::Clear() {
 }
 
 template <class OBJ> void GPVec<OBJ>::Exchange(int idx1, int idx2) {
- TEST_INDEX(idx1);
- TEST_INDEX(idx2);
+ if (idx1<0 || idx1>=fCount){
+        GError(GVEC_INDEX_ERR, idx1);
+    }
+    if (idx2<0 || idx2>=fCount){
+        GError(GVEC_INDEX_ERR, idx2);
+    }
  OBJ* item=fList[idx1];
  fList[idx1]=fList[idx2];
  fList[idx2]=item;
@@ -694,7 +716,9 @@ template <class OBJ> void GPVec<OBJ>::Expand() {
 }
 
 template <class OBJ> OBJ* GPVec<OBJ>::Get(int idx) {
- TEST_INDEX(idx);
+    if (idx<0 || idx>=fCount){
+        GError(GVEC_INDEX_ERR, idx);
+    }
  return fList[idx];
 }
 
@@ -773,7 +797,9 @@ template <class OBJ> int GPVec<OBJ>::Add(OBJ* item) {
 
 template <class OBJ> void GPVec<OBJ>::Insert(int idx, OBJ* item) {
  //idx can be [0..fCount] so an item can be actually added
- if (idx<0 || idx>fCount) GError(GVEC_INDEX_ERR, idx);
+ if (idx<0 || idx>fCount){
+     GError(GVEC_INDEX_ERR, idx);
+ }
  if (fCount==fCapacity) {
    Grow(idx, item);
    return;
@@ -786,8 +812,10 @@ template <class OBJ> void GPVec<OBJ>::Insert(int idx, OBJ* item) {
 
 template <class OBJ> void GPVec<OBJ>::Move(int curidx, int newidx) { //s
  //BE_UNSORTED; //cannot do that in a sorted list!
- if (curidx!=newidx || newidx>=fCount)
+ if (curidx!=newidx || newidx>=fCount){
      GError(GVEC_INDEX_ERR, newidx);
+ }
+
  OBJ* p;
  p=Get(curidx);
  //this is a delete:
@@ -800,17 +828,23 @@ template <class OBJ> void GPVec<OBJ>::Move(int curidx, int newidx) { //s
 
 template <class OBJ> void GPVec<OBJ>::Put(int idx, OBJ* item) {
  //WARNING: this will never free the replaced item!
- TEST_INDEX(idx);
+    if (idx<0 || idx>=fCount){
+        GError(GVEC_INDEX_ERR, idx);
+    }
  fList[idx]=item;
 }
 
 template <class OBJ> void GPVec<OBJ>::Forget(int idx) {
- TEST_INDEX(idx);
+    if (idx<0 || idx>=fCount){
+        GError(GVEC_INDEX_ERR, idx);
+    }
  fList[idx]=NULL; //user should free that somewhere else
 }
 
 template <class OBJ> void GPVec<OBJ>::freeItem(int idx) {
-  TEST_INDEX(idx);
+    if (idx<0 || idx>=fCount){
+        GError(GVEC_INDEX_ERR, idx);
+    }
   if (fFreeProc!=NULL) {
       (*fFreeProc)(fList[idx]);
       }
@@ -819,7 +853,9 @@ template <class OBJ> void GPVec<OBJ>::freeItem(int idx) {
 }
 
 template <class OBJ> void GPVec<OBJ>::Delete(int index) {
- TEST_INDEX(index);
+    if (index<0 || index>=fCount){
+        GError(GVEC_INDEX_ERR, index);
+    }
  if (fFreeProc!=NULL && fList[index]!=NULL) {
    (*fFreeProc)(fList[index]); //freeItem
    }

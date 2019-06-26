@@ -478,8 +478,8 @@ private:
     void finish_read(bam1_t *curAl);
 
     // Multimapper-related methods
-    bool evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
-    bool evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
+    void evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
+    void evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
                                     int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate);
 
     // various printers relevant only for debug

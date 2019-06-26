@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <iomanip>
 #include <sstream>
+#include <string>
 #include "arg_parse.h"
 
 ArgParse::ArgParse(std::string desc) {
@@ -102,19 +103,19 @@ void ArgParse::parse_args(int argc, char **argv) {
         a.set = true; // this flag is set in the command line
         switch(a.type) {
             case Type::FLAG:
-            *( (bool *) a.value ) = true;
+            a.value = "1";
             break;
 
             case Type::INT:
-            *( (int *) a.value ) = atoi(optarg);
+            a.value = optarg;
             break;
             
             case Type::DOUBLE:
-            *( (double *) a.value ) = atof(optarg);
+            a.value = optarg;
             break;
 
             case Type::STRING:
-            *( (std::string *) a.value ) = std::string(optarg);
+            a.value = optarg;
             break;
             
             default:
@@ -139,10 +140,7 @@ bool ArgParse::add_flag(char c, std::string name, std::string desc="",bool requi
         return false;
     }
 
-    bool *val_bool = new bool;
-    *val_bool = false;
-
-    Arg a = {Type::FLAG, std::move(name), std::move(desc), (void *) val_bool,required,false};
+    Arg a = {Type::FLAG, std::move(name), std::move(desc),"0",required,false};
     args_[c] = a;
 
     return true;
@@ -155,10 +153,7 @@ bool ArgParse::add_int(char c, std::string name,
         return false;
     }
 
-    int *val_int = new int;
-    *val_int = def;
-
-    Arg a = {Type::INT, std::move(name), std::move(desc), (void *) val_int,required,false};
+    Arg a = {Type::INT, std::move(name), std::move(desc), std::to_string(def),required,false};
     args_[c] = a;
 
     return true;
@@ -171,10 +166,7 @@ bool ArgParse::add_double(char c, std::string name,
         return false;
     }
 
-    double *val_double = new double;
-    *val_double = def;
-
-    Arg a = {Type::DOUBLE, std::move(name), std::move(desc), (void *) val_double,required,false};
+    Arg a = {Type::DOUBLE, std::move(name), std::move(desc), std::to_string(def),required,false};
     args_[c] = a;
 
     return true;
@@ -188,10 +180,7 @@ bool ArgParse::add_string(char c, std::string name,
         return false;
     }
 
-    std::string *val_string = new std::string;
-    *val_string = std::move(def);
-
-    Arg a = {Type::STRING, std::move(name), std::move(desc), (void *) val_string,required,false};
+    Arg a = {Type::STRING, std::move(name), std::move(desc),def,required,false};
     args_[c] = a;
 
     return true;
@@ -207,22 +196,22 @@ std::string ArgParse::get_desc(char c) {
 
 bool ArgParse::get_flag(char c) {
     Arg &a = args_[c];
-    return *( (bool *) a.value );
+    return (a.value == "1")?true:false;
 }
 
 int ArgParse::get_int(char c) {
     Arg &a = args_[c];
-    return *( (int *) a.value );
+    return std::stoi(a.value);
 }
 
 double ArgParse::get_double(char c) {
     Arg &a = args_[c];
-    return *( (double *) a.value );
+    return std::stod(a.value);
 }
 
 std::string ArgParse::get_string(char c) {
     Arg &a = args_[c];
-    return *( (std::string *) a.value );
+    return a.value;
 }
 
 bool ArgParse::is_set(char c){

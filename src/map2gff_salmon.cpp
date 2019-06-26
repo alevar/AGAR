@@ -55,8 +55,8 @@ Map2GFF_SALMON::Map2GFF_SALMON(const std::string& alFP,const std::string& outFP,
     this->outSAM_header = bam_hdr_init();
 
     // TODO: needs to handle both BAM and SAM input
-    outSAM_header=bam_hdr_dup(genome_al_hdr);
-    int ret = sam_hdr_write(outSAM,outSAM_header);
+    this->outSAM_header=bam_hdr_dup(genome_al_hdr);
+    int ret = sam_hdr_write(outSAM,this->outSAM_header);
     for (int i=0;i<genome_al_hdr->n_targets;++i){
         ref_to_id[genome_al_hdr->target_name[i]]=i;
     }
@@ -68,8 +68,8 @@ Map2GFF_SALMON::~Map2GFF_SALMON() {
     bam_hdr_destroy(this->genome_al_hdr);
     sam_close(this->al);
     sam_close(this->genome_al);
-    bam_hdr_destroy(outSAM_header);
     sam_close(outSAM);
+    bam_hdr_destroy(this->outSAM_header);
 }
 
 void Map2GFF_SALMON::load_info(const std::string& info_fname){
@@ -577,7 +577,7 @@ void Map2GFF_SALMON::process_single(bam1_t *curAl){
     this->finish_read(curAl);
 }
 
-bool Map2GFF_SALMON::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
+void Map2GFF_SALMON::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
                                                 int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate) {
     bool unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci);
     if(unique){ // increment abundance
@@ -646,7 +646,7 @@ bool Map2GFF_SALMON::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate
     }
 }
 
-bool Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){ // TODO: make sure only mapped reads are passed through this function
+void Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){ // TODO: make sure only mapped reads are passed through this function
     bool unique = this->mmap.process_pos(cur_pos,this->loci);
     if(unique){ // increment abundance
         this->loci.add_read(cur_pos.locus);

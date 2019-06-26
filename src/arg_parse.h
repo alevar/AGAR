@@ -13,7 +13,7 @@ class ArgParse {
         typedef struct {
             Type type;
             std::string name, desc;
-            void *value;
+            std::string value;
             bool required;
             bool set;
         } Arg;

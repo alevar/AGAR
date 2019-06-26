@@ -1,10 +1,9 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.10)
 project(trans2genome)
 
 set (CMAKE_STATIC_LINKER_FLAGS "-Wl,--as-needed.-lcurl")
 
 include(ExternalProject)
-
 
 # thanks for the macro: David Grayson
 macro(use_cxx11)
@@ -21,9 +20,13 @@ endmacro(use_cxx11)
 
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++11")
 
-set(CMAKE_CXX_STANDARD 11)
+#set(CMAKE_CXX_STANDARD 11)
 
-include("cmake/zlib.cmake")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined -fno-omit-frame-pointer -g")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fno-omit-frame-pointer -g")
+
+#include("cmake/zlib.cmake")
 include("cmake/htslib.cmake")
 
 include_directories(src)
@@ -73,8 +76,8 @@ add_executable(gtf_to_fasta_salmon
         src/tokenize.cpp
         src/Multimap.hh)
 
-add_dependencies(gtf_to_fasta_salmon htslib zlib)
-target_link_libraries(gtf_to_fasta_salmon ${htslib_LIB} ${zlib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl)
+add_dependencies(gtf_to_fasta_salmon htslib)
+target_link_libraries(gtf_to_fasta_salmon ${htslib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl -lz)
 
 add_executable(trans2genome
         src/arg_parse.cpp
@@ -93,8 +96,8 @@ add_executable(trans2genome
         src/trans2genome.cpp
         src/Multimap.hh)
 
-add_dependencies(trans2genome htslib zlib)
-target_link_libraries(trans2genome ${htslib_LIB} ${zlib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl)
+add_dependencies(trans2genome htslib)
+target_link_libraries(trans2genome ${htslib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl -lz)
 
 add_executable(salmon2genome
         src/arg_parse.cpp
@@ -113,5 +116,5 @@ add_executable(salmon2genome
         src/salmon2genome.cpp
         src/Multimap.hh)
 
-add_dependencies(salmon2genome htslib zlib)
-target_link_libraries(salmon2genome ${htslib_LIB} ${zlib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl)
+add_dependencies(salmon2genome htslib)
+target_link_libraries(salmon2genome ${htslib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl -lz)
