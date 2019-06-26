@@ -581,10 +581,80 @@ void Map2GFF_SALMON::process_single(bam1_t *curAl){
     this->finish_read(curAl);
 }
 
+bool Map2GFF_SALMON::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
+                                                int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate) {
+    bool unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci);
+    if(unique){ // increment abundance
+        this->loci.add_read(cur_pos.locus);
+        this->loci.add_read(cur_pos_mate.locus);
+        curAl->core.pos = cur_pos.start-1;
+        curAl->core.mpos = cur_pos_mate.start-1;
+        curAl_mate->core.pos = cur_pos_mate.start-1;
+        curAl_mate->core.mpos = cur_pos.start-1;
+        // add already computed cigar to the read
+        add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
+        add_cigar(curAl_mate, num_cigars_mate, cigars_mate); // will be performed afterwards
+    }
+    else{
+        // increment total abundances of the locus to which the new cur_pos belongs
+
+        this->loci.add_read_multi(cur_pos.locus);
+        this->loci.add_read_multi(cur_pos_mate.locus);
+
+        // first get the transcript
+        GffTranscript& new_trans = transcriptome[cur_pos.transID];
+        GVec<GSeg>& exon_list=new_trans.exons;
+        GSeg *next_exon=nullptr;
+        int32_t read_start=cur_pos.start;
+        int i=0;
+        for(;i<exon_list.Count();i++){
+            if(read_start>=exon_list[i].start && read_start<=exon_list[i].end){
+                break;
+            }
+        }
+
+        GffTranscript& new_trans_mate = transcriptome[cur_pos_mate.transID];
+        GVec<GSeg>& exon_list_mate=new_trans_mate.exons;
+        GSeg *next_exon_mate=nullptr;
+        int32_t read_start_mate=cur_pos_mate.start;
+        int i_mate=0;
+        for(;i<exon_list_mate.Count();i++){
+            if(read_start_mate>=exon_list_mate[i].start && read_start_mate<=exon_list_mate[i].end){
+                break;
+            }
+        }
+
+        curAl->core.pos = cur_pos.start-1;
+        curAl->core.mpos = cur_pos_mate.start-1;
+        curAl_mate->core.pos = cur_pos_mate.start-1;
+        curAl_mate->core.mpos = cur_pos.start-1;
+
+        // reconvert the cur_pos into a read and output
+        num_cigars = 0,num_cigars_mate = 0;
+        memset(cigars, 0, MAX_CIGARS);
+        memset(cigars_mate, 0, MAX_CIGARS);
+
+        int ret_val = Map2GFF_SALMON::convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,cur_pos);
+        if (!ret_val) {
+            std::cerr << "Can not create a new cigar string for the single read" << std::endl;
+            exit(1);
+        }
+        add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
+
+        int ret_val_mate = Map2GFF_SALMON::convert_cigar(i_mate,next_exon_mate,exon_list_mate,num_cigars_mate,read_start_mate,curAl_mate,cigars_mate,cur_pos_mate);
+        if (!ret_val_mate) {
+            std::cerr << "Can not create a new cigar string for the single read" << std::endl;
+            exit(1);
+        }
+        add_cigar(curAl_mate, num_cigars_mate, cigars_mate); // will be performed afterwards
+    }
+}
+
 bool Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){ // TODO: make sure only mapped reads are passed through this function
     bool unique = this->mmap.process_pos(cur_pos,this->loci);
     if(unique){ // increment abundance
         this->loci.add_read(cur_pos.locus);
+        curAl->core.pos = cur_pos.start-1;
         // add already computed cigar to the read
         add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
     }

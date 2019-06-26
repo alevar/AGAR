@@ -18,6 +18,7 @@
 #include <set>
 #include <random>
 #include <ctime>
+#include <algorithm>
 
 #include "gff.h"
 #include <htslib/sam.h>
@@ -426,6 +427,22 @@ public:
                this->moves==m.moves;
     }
 
+    bool operator>(const Position& m) const{
+        return this->chr>m.chr ||
+               this->strand>m.strand ||
+               this->start>m.start ||
+               this->locus>m.locus ||
+               this->moves>m.moves;
+    }
+
+    bool operator<(const Position& m) const{
+        return this->chr<m.chr ||
+               this->strand<m.strand ||
+               this->start<m.start ||
+               this->locus<m.locus ||
+               this->moves<m.moves;
+    }
+
     void clear(){
         this->moves.clear();
         this->num_elems = 0;
@@ -497,7 +514,7 @@ public:
             utotal = (utotal==0)?1:utotal;
             mtotal = (mtotal==0)?1:mtotal;
             double min = (double)MAX_INT;
-            for(int i=0; i<uniq.size();i++){ // TODO: this is incorrect; need to create an array of abundances normalized to 0-1 and then evaluate, since otherwise minimum is hard to set
+            for(int i=0; i<uniq.size();i++){
                 double expected = (uniq[i]/utotal)*mtotal;
                 double tmp = uniq[i]+loci.get_corrected(this->ii->first.locus,expected+uniq[i],multi[i]+uniq[i]);
                 tmp = (tmp>0.0)?tmp:0.000001;
@@ -514,14 +531,105 @@ public:
             }
 //            std::cerr<<std::endl;
 
-            // TODO: need to understand why r2s are never present at the second locus, seems like a bug
-
             // now need to make the decision which is best
             int pos_idx = this->get_likely(res,0.0,1.0);
             // now follow the iterator to get the actual position object which corresponds to the selected item
 //            std::cerr<<pos_idx<<"\t"<<pos.start<<"\t"<<(this->index.begin()+this->ltf->second+pos_idx)->first.start;
             pos = (this->index.begin()+this->ltf->second+pos_idx)->first;
 //            std::cerr<<"\t"<<pos.start<<std::endl;
+            return false;
+        }
+    }
+
+    bool process_pos_pair(Position& pos,Position& pos_mate,Loci& loci){
+        this->ltf = this->lookup_table.find(pos);
+        if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
+            return true;
+        }
+        this->ltf_mate = this->lookup_table.find(pos_mate);
+        if(this->ltf_mate == this->lookup_table.end()){ // position is not a multimapper
+            return true;
+        }
+
+        else{ // multimappers exist - need to evaluate
+            std::vector<double> uniq,multi,tmp_res,res; // holds pid-corrected abundances
+            double utotal=0,mtotal=0,rtotal=0;
+
+            this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
+            this->ii_mate = this->index.begin()+this->ltf_mate->second; // get iterator to the start of a multimapping block in the array
+            // here we rely on the sorted order of the multimappers in the index, which guarantees that multimappers on the same locus will appear close by
+            int idx=0,idx_mate=0; // indices help us keep track of the positions within multimapper blocks
+            int locus_index = 0; // indicates the position within block of the current locus
+            std::vector<std::pair<int,int>> multi_pairs; // holds offsets of the correct paired positions
+            while(true){
+                this->ii_mate = this->index.begin()+this->ltf_mate->second+locus_index; // reset iterator to the beginning
+                idx_mate = locus_index;
+                bool locus_found = false; // did the inner loop find the locus of the outer loop
+                while(true){
+                    if(this->ii->first.locus == this->ii_mate->first.locus &&
+                      std::abs((int)this->ii->first.start - (int)this->ii_mate->first.start) > 500000){ // valid pair // TODO: need to pass the maximum fragment length as a value - otherwise can be deduced based on the distribution inferred from the unique pairedly-aligned reads
+                        multi_pairs.push_back(std::make_pair(idx,idx_mate));
+                        locus_found = true;
+                    }
+                    if(this->ii->first.locus != this->ii_mate->first.locus){
+                        if(locus_found){ // exceeded current locus - can now terminate
+                            break;
+                        }
+                        else { // can reset locus index to skip iterations in future
+                            locus_index++;
+                        }
+                    }
+                    if(!this->ii_mate->second){
+                        break;
+                    }
+                    idx_mate++;
+                    this->ii_mate++;
+                }
+                if(!this->ii->second){
+                    break;
+                }
+                idx++;
+                this->ii++;
+            }
+            if(multi_pairs.empty()){
+                return true; // means no valid multimapping pairs were detected
+            }
+            // now compute abundances for all these blocks // TODO: both mates should be added to the locus read counts
+            for(auto & mp: multi_pairs){
+                // first need to compute expected values
+                // for this we need the uniq abundances which determine base likelihood
+                // as well as current assignments of multimappers
+                uniq.push_back(loci.get_abund((this->ii+mp.first)->first.locus));
+                utotal+=uniq.back();
+                multi.push_back(loci.get_abund_total((this->ii+mp.first)->first.locus));
+                mtotal+=multi.back();
+            }
+
+            // get expected and compute PID
+            utotal = (utotal==0)?1:utotal;
+            mtotal = (mtotal==0)?1:mtotal;
+            double min = (double)MAX_INT;
+            for(int i=0; i<uniq.size();i++){
+                double expected = (uniq[i]/utotal)*mtotal;
+                double tmp = uniq[i]+loci.get_corrected(this->ii->first.locus,expected+uniq[i],multi[i]+uniq[i]);
+                tmp = (tmp>0.0)?tmp:0.000001;
+                tmp_res.push_back(tmp);
+                min = (tmp<min)?tmp:min;
+                rtotal+=tmp_res.back();
+            }
+
+            for(auto &v : tmp_res){
+                res.push_back(v/rtotal);
+            }
+
+            // now need to make the decision which is best
+            int pos_idx = this->get_likely(res,0.0,1.0);
+            // now follow the iterator to get the actual position object which corresponds to the selected item
+
+            int offset = multi_pairs[pos_idx].first; // get the actual offset
+            int offset_mate = multi_pairs[pos_idx].second;
+            pos = (this->index.begin()+this->ltf->second+offset)->first;
+            pos_mate = (this->index.begin()+this->ltf_mate->second+offset_mate)->first;
             return false;
         }
     }
@@ -591,7 +699,11 @@ public:
         std::string res = "";
         for(auto &kv : this->kmer_coords){
             if(kv.second.size()>1) {
-                for (auto &cv : kv.second) {
+                // pre-sort coordinates here
+                std::vector<Position> tmp;
+                tmp.insert(tmp.end(), kv.second.begin(), kv.second.end());
+                std::sort(tmp.begin(), tmp.end(),std::greater<Position>());
+                for (auto &cv : tmp) {
                     res.append(cv.get_strg());
                     res+='\t';
                 }
@@ -813,9 +925,9 @@ private:
 
     std::unordered_map<Position,uint32_t> lookup_table;
     std::pair<std::unordered_map<Position,uint32_t>::iterator,bool> lte; // entry exists in the lookup table
-    std::unordered_map<Position,uint32_t>::iterator ltf; // iterator to found entry or the end
+    std::unordered_map<Position,uint32_t>::iterator ltf,ltf_mate; // iterator to found entry or the end
     std::vector<std::pair<Position,bool>> index; // the actual position as well as whether the next position is related to the current
-    std::vector<std::pair<Position,bool>>::iterator ii; // iterator within the index
+    std::vector<std::pair<Position,bool>>::iterator ii,ii_mate; // iterator within the index
     // every entry in the lookup table links to the first entry in the block of related multimappers
 
 };
