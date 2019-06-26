@@ -712,6 +712,7 @@ public:
 
     void save_multimappers(std::string& outFP){
         std::cerr<<"writing multimappers"<<std::endl;
+        std::cout<<"nk: "<<this->kmer_coords.size()<<std::endl;
         std::ofstream multi_ss(outFP.c_str());
         std::string res = "";
         for(auto &kv : this->kmer_coords){
@@ -733,6 +734,7 @@ public:
         }
 
         multi_ss.close();
+        std::cout<<"nk: "<<this->kmer_coords.size()<<std::endl;
         std::cerr<<"done writing multimappers"<<std::endl;
 
     }
@@ -778,6 +780,7 @@ public:
                 cur_exon = exon_list[el_pos];
             }
         }
+        std::cout<<"nk: "<<this->kmer_coords.size()<<std::endl;
     }
 
 private:
