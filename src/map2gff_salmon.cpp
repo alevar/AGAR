@@ -553,8 +553,7 @@ void Map2GFF_SALMON::process_pair(bam1_t *curAl) {
     if(!ret_val) {
         return;
     }
-    this->evaluate_multimappers(curAl,cur_pos,cigars,num_cigars);
-    this->evaluate_multimappers(mate,cur_pos_mate,cigars_mate,num_cigars_mate);
+    this->evaluate_multimappers_pair(curAl,mate,cur_pos,cur_pos_mate,cigars,cigars_mate,num_cigars,num_cigars_mate);
 
     finish_read(curAl);
     finish_read(mate);
@@ -577,6 +576,14 @@ void Map2GFF_SALMON::process_single(bam1_t *curAl){
     this->finish_read(curAl);
 }
 
+void Map2GFF_SALMON::add_multi_tag(bam1_t* curAl){
+    uint8_t* ptr_op=bam_aux_get(curAl,"ZZ");
+    if(ptr_op){
+        bam_aux_del(curAl,ptr_op);
+    }
+    bam_aux_append(curAl,"ZZ",'A',1,(const unsigned char*)"+");
+}
+
 void Map2GFF_SALMON::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
                                                 int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate) {
     bool unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci);
@@ -592,6 +599,8 @@ void Map2GFF_SALMON::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate
         add_cigar(curAl_mate, num_cigars_mate, cigars_mate); // will be performed afterwards
     }
     else{
+        add_multi_tag(curAl);
+        add_multi_tag(curAl_mate);
         // increment total abundances of the locus to which the new cur_pos belongs
 
         this->loci.add_read_multi(cur_pos.locus);
@@ -651,10 +660,12 @@ void Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int c
     if(unique){ // increment abundance
         this->loci.add_read(cur_pos.locus);
         curAl->core.pos = cur_pos.start-1;
+        curAl->core.tid = cur_pos.chr;
         // add already computed cigar to the read
         add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
     }
     else{
+        add_multi_tag(curAl);
         // increment total abundances of the locus to which the new cur_pos belongs
 
         this->loci.add_read_multi(cur_pos.locus);
@@ -672,6 +683,7 @@ void Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int c
         }
 
         curAl->core.pos = cur_pos.start-1; // assign new position
+        curAl->core.tid = cur_pos.chr;
 
         // reconvert the cur_pos into a read and output
         num_cigars = 0;
@@ -686,6 +698,8 @@ void Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int c
         add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
     }
 }
+
+// TODO: need to add a tag to the multimapping reads that they are multimappers
 
 size_t Map2GFF_SALMON::process_read(bam1_t *curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars) {
     // let's deal with this case first since there is less stuff
@@ -705,9 +719,16 @@ size_t Map2GFF_SALMON::process_read(bam1_t *curAl,Position& cur_pos,int cigars[M
     }
 
     // now get mate read start
+    int target_name_mate = atoi(al_hdr->target_name[curAl->core.mtid]); // name of the transcript from the input alignment
+    GffTranscript& p_trans_mate = transcriptome[target_name_mate]; // get the transcript
+    GVec<GSeg>& exon_list_mate=p_trans_mate.exons; // get exons
     int i_mate=0;
     int32_t read_start_mate=0;
-    ret_val = Map2GFF_SALMON::get_read_start(exon_list,curAl->core.mpos,read_start_mate,i_mate);
+    std::string name = bam_get_qname(curAl);
+//    if(name=="SRR1071717.305120"){
+//        std::cerr<<"found"<<std::endl;
+//    }
+    ret_val = Map2GFF_SALMON::get_read_start(exon_list_mate,curAl->core.mpos,read_start_mate,i_mate);
     if(!ret_val){
         std::cerr<<"Can not get the genomic read start of the mate"<<std::endl;
         exit(1);
@@ -742,7 +763,7 @@ size_t Map2GFF_SALMON::process_read(bam1_t *curAl,Position& cur_pos,int cigars[M
     // convert the mate information for single reads without a concordantly mapped mate
     // unless the read is not paired, in which case the paired information should stay the same
     if(curAl->core.mpos != -1 || curAl->core.mtid != -1){
-        curAl->core.mtid = p_trans.refID;
+        curAl->core.mtid = p_trans_mate.refID;
         curAl->core.mpos = read_start_mate - 1;
     }
 

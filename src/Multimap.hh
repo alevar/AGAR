@@ -428,11 +428,12 @@ public:
     }
 
     bool operator>(const Position& m) const{
-        return this->chr>m.chr ||
-               this->strand>m.strand ||
-               this->start>m.start ||
-               this->locus>m.locus ||
-               this->moves>m.moves;
+//        return this->chr>m.chr ||
+//               this->strand>m.strand ||
+//               this->start>m.start ||
+//               this->locus>m.locus ||
+//               this->moves>m.moves;
+        return this->locus > m.locus;
     }
 
     bool operator<(const Position& m) const{
@@ -542,9 +543,9 @@ public:
 
             for(auto &v : tmp_res){
                 res.push_back(v/rtotal);
-                std::cerr<<res.back()<<"\t";
+//                std::cerr<<res.back()<<"\t";
             }
-            std::cerr<<std::endl;
+//            std::cerr<<std::endl;
 
             // now need to make the decision which is best
             int pos_idx = this->get_likely(res,0.0,1.0);
@@ -715,16 +716,25 @@ public:
         std::cout<<"nk: "<<this->kmer_coords.size()<<std::endl;
         std::ofstream multi_ss(outFP.c_str());
         std::string res = "";
+        int count = 0;
         for(auto &kv : this->kmer_coords){
             if(kv.second.size()>1) {
                 // pre-sort coordinates here
                 std::vector<Position> tmp;
                 tmp.insert(tmp.end(), kv.second.begin(), kv.second.end());
-                std::sort(tmp.begin(), tmp.end(),std::greater<Position>());
-                for (auto &cv : tmp) {
+                std::sort(tmp.begin(), tmp.end(),[](Position const& lhs, Position const& rhs) { return lhs > rhs; });
+//                for (auto &cv : tmp) {
+//                    res.append(cv.get_strg());
+//                    res+='\t';
+//                }
+                for(auto &cv : tmp){
                     res.append(cv.get_strg());
                     res+='\t';
                 }
+//                if(count==0){
+//                    std::cout<<"tmp: "<<kv.[0].transID<<std::endl;
+//                }
+                count++;
                 res.pop_back();
                 res+='\n';
                 multi_ss << res;
@@ -734,7 +744,7 @@ public:
         }
 
         multi_ss.close();
-        std::cout<<"nk: "<<this->kmer_coords.size()<<std::endl;
+        std::cout<<"nk: "<<this->kmer_coords.size()<<"\t"<<count<<std::endl;
         std::cerr<<"done writing multimappers"<<std::endl;
 
     }
@@ -780,7 +790,7 @@ public:
                 cur_exon = exon_list[el_pos];
             }
         }
-        std::cout<<"nk: "<<this->kmer_coords.size()<<std::endl;
+//        std::cout<<"nk: "<<this->kmer_coords.size()<<std::endl;
     }
 
 private:

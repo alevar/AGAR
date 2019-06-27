@@ -476,6 +476,7 @@ private:
     void process_single(bam1_t* curAl);
     size_t process_read(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
     void finish_read(bam1_t *curAl);
+    void add_multi_tag(bam1_t* curAl);
 
     // Multimapper-related methods
     void evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
