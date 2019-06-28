@@ -14,13 +14,15 @@
 
 // salmon2genome -g ~/JHU/transcriptome/hisatTrans2Genome/errorData/me_mi/data/ann.gff -i ~/JHU/transcriptome/hisatTrans2Genome/errorData/me_mi/al_1/sample.gffread.bam -s ~/JHU/transcriptome/hisatTrans2Genome/errorData/me_mi/data/genomic_header.sam -o ./test.bam
 
-enum Opt {IN_AL     = 'i',
+enum Opt {IN_AL   = 'i',
         OUT_AL    = 'o',
         THREADS   = 'p',
         INDEX     = 'x',
         MULTI     = 'm',
         ABUNDANCE = 'a',
-        UNALIGNED = 'u'};
+        UNALIGNED = 'u',
+        UNIQ      = 'q',
+        FRAGLEN   = 'f'};
 
 int main(int argc, char** argv) {
 
@@ -32,6 +34,9 @@ int main(int argc, char** argv) {
     args.add_flag(Opt::MULTI,"multi","whether to search and evaluate multimappers",false);
     args.add_string(Opt::ABUNDANCE,"abund","","use abundances precomputed",false);
     args.add_flag(Opt::UNALIGNED,"unal","search for unaligned reads, extract from alignment into separate files",false);
+    args.add_flag(Opt::UNIQ,"uniq","input alignment contains only 1 mapping per read (no secondary alignments present such as in bowtie k1 mode)",false);
+    args.add_int(Opt::FRAGLEN,"fraglen",200000,"fragment length of the paired reads",false);
+
 
     if(strcmp(argv[1],"--help")==0){
         std::cerr<<args.get_help()<<std::endl;
@@ -44,7 +49,16 @@ int main(int argc, char** argv) {
     if(args.is_set(Opt::ABUNDANCE)){
         gffMapper.load_abundances(args.get_string(Opt::ABUNDANCE));
     }
+    if(args.get_flag(Opt::UNALIGNED)){
+        gffMapper.set_unaligned();
+    }
+    if(args.get_flag(Opt::UNIQ)){
+        gffMapper.set_k1();
+    }
+    if(args.is_set(Opt::FRAGLEN)){
+        gffMapper.set_fraglen(Opt::FRAGLEN);
+    }
     std::cerr<<"Begin Translating Coordinates"<<std::endl;
-    gffMapper.convert_coords(args.get_flag(Opt::UNALIGNED)); // TODO: need to make sure that multimappers are evaluated if the index is provided
+    gffMapper.convert_coords(); // TODO: need to make sure that multimappers are evaluated if the index is provided
     return 0;
 }

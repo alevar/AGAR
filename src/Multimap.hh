@@ -497,6 +497,10 @@ public:
     Multimap() = default;
     ~Multimap() = default;
 
+    void set_fraglen(int fraglen){
+        this->fraglen = fraglen;
+    }
+
     // given a position generated from an alignment this function searches for multimapper
     // and returns true if the position is not multimapping or false if it is multimapping
     // for multimappers, it also replaces the data in the position with a position selected by likelihood
@@ -583,7 +587,7 @@ public:
                 bool locus_found = false; // did the inner loop find the locus of the outer loop
                 while(true){
                     if(this->ii->first.locus == this->ii_mate->first.locus &&
-                      std::abs((int)this->ii->first.start - (int)this->ii_mate->first.start) > 500000){ // valid pair // TODO: need to pass the maximum fragment length as a value - otherwise can be deduced based on the distribution inferred from the unique pairedly-aligned reads
+                      std::abs((int)this->ii->first.start - (int)this->ii_mate->first.start) > this->fraglen){ // valid pair
                         multi_pairs.push_back(std::make_pair(idx,idx_mate));
                         locus_found = true;
                     }
@@ -611,6 +615,8 @@ public:
                 return true; // means no valid multimapping pairs were detected
             }
             // now compute abundances for all these blocks
+            this->ii = this->index.begin()+this->ltf->second; // return to the start of the multimapping block
+            this->ii_mate = this->index.begin()+this->ltf_mate->second; // same for the mate
             for(auto & mp: multi_pairs){
                 // first need to compute expected values
                 // for this we need the uniq abundances which determine base likelihood
@@ -713,28 +719,20 @@ public:
 
     void save_multimappers(std::string& outFP){
         std::cerr<<"writing multimappers"<<std::endl;
-        std::cout<<"nk: "<<this->kmer_coords.size()<<std::endl;
         std::ofstream multi_ss(outFP.c_str());
         std::string res = "";
-        int count = 0;
         for(auto &kv : this->kmer_coords){
             if(kv.second.size()>1) {
                 // pre-sort coordinates here
                 std::vector<Position> tmp;
                 tmp.insert(tmp.end(), kv.second.begin(), kv.second.end());
                 std::sort(tmp.begin(), tmp.end(),[](Position const& lhs, Position const& rhs) { return lhs > rhs; });
-//                for (auto &cv : tmp) {
-//                    res.append(cv.get_strg());
-//                    res+='\t';
-//                }
+
                 for(auto &cv : tmp){
                     res.append(cv.get_strg());
                     res+='\t';
                 }
-//                if(count==0){
-//                    std::cout<<"tmp: "<<kv.[0].transID<<std::endl;
-//                }
-                count++;
+
                 res.pop_back();
                 res+='\n';
                 multi_ss << res;
@@ -744,7 +742,6 @@ public:
         }
 
         multi_ss.close();
-        std::cout<<"nk: "<<this->kmer_coords.size()<<"\t"<<count<<std::endl;
         std::cerr<<"done writing multimappers"<<std::endl;
 
     }
@@ -947,6 +944,7 @@ private:
     }
 
     int kmerlen;
+    int fraglen = 200000;
 
     typedef std::unordered_set<Position> pcord;
     std::pair<pcord::iterator,bool> pce;

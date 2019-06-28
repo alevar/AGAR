@@ -34,7 +34,6 @@
 #define BAM_CDIFF   8
 #define MAX_CIGARS  1024
 
-#define NDEBUG
 #include <cassert>
 
 // TODO: for the final version it needs to scan through the first n reads to check for constraints
@@ -63,9 +62,11 @@ public:
         this->out_stream_s = new std::ofstream(out_fname_s.c_str());
     }
     ~UMAP(){
-        this->out_stream_r1->close();
-        this->out_stream_r2->close();
-        this->out_stream_s->close();
+        if(!this->outFP.empty()){
+            this->out_stream_r1->close();
+            this->out_stream_r2->close();
+            this->out_stream_s->close();
+        }
         delete this->out_stream_r1;
         delete this->out_stream_r2;
         delete this->out_stream_s;
@@ -161,7 +162,6 @@ private:
         }
     }
 
-    // TODO: cannot output quality scores from SALMON. Need to consider trimming reads prior to passing through SALMON
     void outputFasta(bam1_t *al,std::ofstream& out_stream){
         // reports a fasta record from a given alignment record
         std::string read_name= bam_get_qname(al);
@@ -357,7 +357,6 @@ namespace std {
 // it notifies wheter a given mapping needs to be returned or not
 class Collapser{
 public:
-    // TODO: need a way to automatically cleanup when a new read is provided
     Collapser() = default;
     ~Collapser() = default;
     int add(bam1_t *curAl,size_t cigar_hash){ // add single read to the stack
@@ -422,8 +421,11 @@ public:
 
     void load_abundances(const std::string& abundFP); // add abundances to the transcripts
 
-    void convert_coords(bool unal);
+    void convert_coords();
     void print_multimappers();
+    void set_unaligned();
+    void set_k1();
+    void set_fraglen(int fraglen);
 
 private:
     // INDEX METHODS
@@ -437,9 +439,13 @@ private:
     // INDEX-SPECIFIC DECLARATIONS
     bool multi = false; // set to true if the multimapper index is loaded
     bool abund = false;
+    bool k1_mode = false;
+    bool unaligned_mode = false;
     int numThreads=1;
+    int fraglen = false;
     int numTranscripts=0; // gtf_to_fasta returns a .info file with this information
     int maxLocID = 0; // what is the highest geneID assigned for the GFF by the index-builder
+    int kmerlen; // kmer length used for index construction
 
     // INDEX DATA
     Multimap mmap;
@@ -458,7 +464,6 @@ private:
 
     std::unordered_map<std::string,int> ref_to_id; // built from the genome header file
 
-    // TODO: these three objects should only be enabled when the tool is run in the appropriate mode - this can be verified by quickly scanning through "n" lines of the alignment and deciding whether it needs to be done
     UMAP umap;
     Pairs pairs;
     Collapser collapser;

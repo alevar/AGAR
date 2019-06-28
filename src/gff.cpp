@@ -1042,7 +1042,9 @@ bool GffReader::addExonFeature(GffObj* prevgfo, GffLine* gffline, GHash<CNonExon
     GMessage("Error: duplicate GFF ID '%s' (or exons too far apart)!\n",prevgfo->gffID);
     //validation_errors = true;
     r=false;
-    if (!gff_warns) exit(1);
+    if (!gff_warns){
+        exit(1);
+    }
     }
   int eidx=prevgfo->addExon(this, gffline, !noExonAttr, noExonAttr);
   if (eidx>=0 && gffline->ID!=NULL && gffline->exontype==0)

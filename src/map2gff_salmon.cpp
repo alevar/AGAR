@@ -34,8 +34,8 @@ void print_aux(bam1_t *al) {
 }
 
 Map2GFF_SALMON::Map2GFF_SALMON(const std::string& alFP,const std::string& outFP,const std::string& index_base,const int& threads,bool multi){
-    this->umap.set_outFP(outFP);
     this->numThreads=threads;
+    this->outFP = outFP;
 
     // now load the index
     this->load_index(index_base,multi);
@@ -72,6 +72,23 @@ Map2GFF_SALMON::~Map2GFF_SALMON() {
     bam_hdr_destroy(this->outSAM_header);
 }
 
+void Map2GFF_SALMON::set_unaligned(){
+    this->umap.set_outFP(this->outFP);
+    this->unaligned_mode = true;
+}
+
+void Map2GFF_SALMON::set_k1(){
+    this->k1_mode = true;
+}
+
+void Map2GFF_SALMON::set_fraglen(int fraglen) {
+    this->fraglen = fraglen;
+    if(!this->multi){
+        return; // no need to set the argument if multimappers are not being evaluated
+    }
+    this->mmap.set_fraglen(fraglen);
+}
+
 void Map2GFF_SALMON::load_info(const std::string& info_fname){
     // read file to get important stats
     struct stat buffer{};
@@ -91,11 +108,12 @@ void Map2GFF_SALMON::load_info(const std::string& info_fname){
     this->maxLocID = std::stoi(iline);
     this->loci = Loci(maxLocID+1);
 
+    std::getline(infostream,iline);
+    this->kmerlen = std::stoi(iline);
+
     infostream.close();
     std::cerr<<"Loaded info data"<<std::endl;
 }
-
-// TODO: we need to provide connection/map between transcriptIDs and geneIDs - might already exist, but not sure
 
 // this function parses the .tlst file and inserts entries into the index
 void Map2GFF_SALMON::_load_transcriptome(std::ifstream& tlstfp,char* buffer){
@@ -298,21 +316,25 @@ void Map2GFF_SALMON::load_abundances(const std::string& abundFP){
     std::cerr<<"Loaded transcript abundance data"<<std::endl;
 }
 
-void Map2GFF_SALMON::convert_coords(bool unal){
+void Map2GFF_SALMON::convert_coords(){
     GffTranscript *p_trans=NULL;
     GffTranscript *mate_p_trans=NULL;
 
     bam1_t *curAl = bam_init1(); // initialize the alignment record
 
     while(sam_read1(al,al_hdr,curAl)>0) { // only perfom if unaligned flag is set to true
-        if (unal && curAl->core.flag & 4) { // if read is unmapped
+        if (this->unaligned_mode && curAl->core.flag & 4) { // if read is unmapped
             // output unaligned reads for hisat2 to realign
             this->umap.insert(curAl);
             continue;
         }
 
+        std::string name = std::string(bam_get_qname(curAl)); // "SRR1071717.33364906"
+        if(name=="SRR1071717.33364906"){
+            std::cout<<name<<std::endl;
+        }
+
         // otherwise we proceed to evaluate the reads accordingly
-        std::string newReadName = bam_get_qname(curAl);
 
         // TODO: need to output proper log files so that we can detect when something goes wrong when realigning GTEx
 
@@ -325,16 +347,15 @@ void Map2GFF_SALMON::convert_coords(bool unal){
         }
     }
     bam_destroy1(curAl);
-
-    // let's test the locus abundances here:
-//    this->loci.print();
 }
 
 bool Map2GFF_SALMON::has_valid_mate(bam1_t *curAl){
     return (curAl->core.flag & 0x1) && // belongs to a pair
            (curAl->core.flag & 0x2) && // mapped as a pair
           !(curAl->core.flag & 0x4) && // is mapped
-          !(curAl->core.flag & 0x8);   // mate is mapped
+          !(curAl->core.flag & 0x8); // mate is mapped
+    // TODO: replace check for two mates being on the same transcript with two mates being on the same locus instead to account for valid pairs
+    //       if detected - need to correct the flags
 }
 
 bool Map2GFF_SALMON::get_read_start(GVec<GSeg>& exon_list,int32_t gff_start,int32_t& genome_start, int& exon_idx){
@@ -548,11 +569,13 @@ void Map2GFF_SALMON::process_pair(bam1_t *curAl) {
     cigar_hash = process_read(curAl,cur_pos,cigars,num_cigars);
     mate_cigar_hash = process_read(mate,cur_pos_mate,cigars_mate,num_cigars_mate);
 
-    int ret_val = collapse_genomic(curAl,mate,cigar_hash,mate_cigar_hash);
-
-    if(!ret_val) {
-        return;
+    if(!this->k1_mode){
+        int ret_val = collapse_genomic(curAl,mate,cigar_hash,mate_cigar_hash);
+        if(!ret_val) {
+            return;
+        }
     }
+
     this->evaluate_multimappers_pair(curAl,mate,cur_pos,cur_pos_mate,cigars,cigars_mate,num_cigars,num_cigars_mate);
 
     finish_read(curAl);
@@ -566,9 +589,11 @@ void Map2GFF_SALMON::process_single(bam1_t *curAl){
     int num_cigars=0;
     size_t cigar_hash = this->process_read(curAl,cur_pos,cigars,num_cigars);
 
-    int ret_val = collapse_genomic(curAl,cigar_hash); // TODO: this function should only run if not in "-k=1" mode
-    if(!ret_val) {
-        return;
+    if(!this->k1_mode){
+        int ret_val = collapse_genomic(curAl,cigar_hash);
+        if(!ret_val) {
+            return;
+        }
     }
 
     this->evaluate_multimappers(curAl,cur_pos,cigars,num_cigars);
@@ -623,8 +648,8 @@ void Map2GFF_SALMON::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate
         GSeg *next_exon_mate=nullptr;
         int32_t read_start_mate=cur_pos_mate.start;
         int i_mate=0;
-        for(;i<exon_list_mate.Count();i++){
-            if(read_start_mate>=exon_list_mate[i].start && read_start_mate<=exon_list_mate[i].end){
+        for(;i_mate<exon_list_mate.Count();i_mate++){
+            if(read_start_mate>=exon_list_mate[i_mate].start && read_start_mate<=exon_list_mate[i_mate].end){
                 break;
             }
         }
@@ -641,19 +666,22 @@ void Map2GFF_SALMON::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate
 
         int ret_val = Map2GFF_SALMON::convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,cur_pos);
         if (!ret_val) {
-            std::cerr << "Can not create a new cigar string for the single read" << std::endl;
+            std::cerr << "Can not create a new cigar string for the single read evaluate_multimapper_pair1" << std::endl;
             exit(1);
         }
         add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
 
         int ret_val_mate = Map2GFF_SALMON::convert_cigar(i_mate,next_exon_mate,exon_list_mate,num_cigars_mate,read_start_mate,curAl_mate,cigars_mate,cur_pos_mate);
         if (!ret_val_mate) {
-            std::cerr << "Can not create a new cigar string for the single read" << std::endl;
+            std::string test = cur_pos_mate.get_strg();
+            std::cerr << "Can not create a new cigar string for the single read evaluate_multimapper_pair2" << std::endl;
             exit(1);
         }
         add_cigar(curAl_mate, num_cigars_mate, cigars_mate); // will be performed afterwards
     }
 }
+
+// TODO: need to evaluate pairs only if concordant but to evaluate multimappers separately for discordant
 
 void Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){ // TODO: make sure only mapped reads are passed through this function
     bool unique = this->mmap.process_pos(cur_pos,this->loci);
@@ -691,15 +719,13 @@ void Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int c
 
         int ret_val = Map2GFF_SALMON::convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,cur_pos);
         if (!ret_val) {
-            std::cerr << "Can not create a new cigar string for the single read" << std::endl;
+            std::cerr << "Can not create a new cigar string for the single read evaluate_multimappers" << std::endl;
             exit(1);
         }
 
         add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
     }
 }
-
-// TODO: need to add a tag to the multimapping reads that they are multimappers
 
 size_t Map2GFF_SALMON::process_read(bam1_t *curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars) {
     // let's deal with this case first since there is less stuff
@@ -724,10 +750,7 @@ size_t Map2GFF_SALMON::process_read(bam1_t *curAl,Position& cur_pos,int cigars[M
     GVec<GSeg>& exon_list_mate=p_trans_mate.exons; // get exons
     int i_mate=0;
     int32_t read_start_mate=0;
-    std::string name = bam_get_qname(curAl);
-//    if(name=="SRR1071717.305120"){
-//        std::cerr<<"found"<<std::endl;
-//    }
+
     ret_val = Map2GFF_SALMON::get_read_start(exon_list_mate,curAl->core.mpos,read_start_mate,i_mate);
     if(!ret_val){
         std::cerr<<"Can not get the genomic read start of the mate"<<std::endl;
@@ -745,7 +768,7 @@ size_t Map2GFF_SALMON::process_read(bam1_t *curAl,Position& cur_pos,int cigars[M
 
     ret_val = Map2GFF_SALMON::convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,cur_pos);
     if (!ret_val) {
-        std::cerr << "Can not create a new cigar string for the single read" << std::endl;
+        std::cerr << "Can not create a new cigar string for the single read from process_read" << std::endl;
         exit(1);
     }
 
@@ -768,7 +791,6 @@ size_t Map2GFF_SALMON::process_read(bam1_t *curAl,Position& cur_pos,int cigars[M
     }
 
     // assign new cigar string to the record
-//    add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
 
     return cigar2hash(cigars,num_cigars);
 }

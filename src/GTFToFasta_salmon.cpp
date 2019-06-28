@@ -184,6 +184,7 @@ void GTFToFasta::make_transcriptome(){
     std::ofstream infofp(this->info_fname);
     infofp<<this->topTransID<<std::endl;
     infofp<<max_locid<<std::endl;
+    infofp<<this->kmerlen<<std::endl;
     std::cerr<<"done writing general information"<<std::endl;
 }
 
