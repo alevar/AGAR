@@ -32,11 +32,12 @@ int main(int argc, char** argv) {
     args.add_int(Opt::THREADS,"threads",1,"number of threads (default = 1)",false);
     args.add_string(Opt::INDEX,"index","","path and basename of the index built by gtf_to_fasta",true);
     args.add_flag(Opt::MULTI,"multi","whether to search and evaluate multimappers",false);
-    args.add_string(Opt::ABUNDANCE,"abund","","use abundances precomputed",false);
+    args.add_string(Opt::ABUNDANCE,"abund","","use abundances precomputed",false); // TODO: now need to implement proper loading of external abundance estimates
     args.add_flag(Opt::UNALIGNED,"unal","search for unaligned reads, extract from alignment into separate files",false);
     args.add_flag(Opt::UNIQ,"uniq","input alignment contains only 1 mapping per read (no secondary alignments present such as in bowtie k1 mode)",false);
     args.add_int(Opt::FRAGLEN,"fraglen",200000,"fragment length of the paired reads",false);
 
+    // TODO: need a flag to tell how many multimappers to output (not just one). needs to also handle outputting all multimappers
 
     if(strcmp(argv[1],"--help")==0){
         std::cerr<<args.get_help()<<std::endl;
