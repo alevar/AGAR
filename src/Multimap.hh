@@ -976,6 +976,7 @@ private:
     int fraglen = 200000;
     int num_multi = 1;
     int all_multi = false;
+    bool precomputed_abundances = false;
 
     typedef std::unordered_set<Position> pcord;
     std::pair<pcord::iterator,bool> pce;

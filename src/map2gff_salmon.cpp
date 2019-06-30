@@ -126,7 +126,7 @@ void Map2GFF_SALMON::load_info(const std::string& info_fname){
 // this function parses the .tlst file and inserts entries into the index
 void Map2GFF_SALMON::_load_transcriptome(std::ifstream& tlstfp,char* buffer){
     int k = tlstfp.gcount();
-    uint32_t tid=0,start=0,end=0,chr=0,strand=0,locus=0;
+    uint32_t tid=0,start=0,end=0,chr=0,locus=0;
     enum Opt {TID = 0,
             LOCUS = 1,
             CHR   = 2,
@@ -274,7 +274,6 @@ void Map2GFF_SALMON::load_index(const std::string& index_base,bool multi){
     std::string glst_fname(index_base);
     glst_fname.append(".glst");
     this->loci.load(glst_fname);
-//    this->loci.print();
 
     // load genome header
     std::string genome_header_fname(index_base);
@@ -285,7 +284,6 @@ void Map2GFF_SALMON::load_index(const std::string& index_base,bool multi){
         std::string multi_fname(index_base);
         multi_fname.append(".multi");
         this->load_multi(multi_fname);
-//        this->print_multimappers();
         // now we can also set pointers to the related objects
         this->mmap.set_loci(&(this->loci));
         this->mmap.set_transcriptome(&(this->transcriptome));
@@ -307,7 +305,6 @@ void Map2GFF_SALMON::load_abundances(const std::string& abundFP){
     std::cerr<<"Reading the transcript abundance file: "<<abundFP<<std::endl;
     std::string aline,col;
     std::getline(abundstream,aline);
-    int count=0;
     int tid;
     float abundance;
     while (std::getline(abundstream,aline)) {
@@ -328,9 +325,6 @@ void Map2GFF_SALMON::load_abundances(const std::string& abundFP){
 }
 
 void Map2GFF_SALMON::convert_coords(){
-    GffTranscript *p_trans=NULL;
-    GffTranscript *mate_p_trans=NULL;
-
     bam1_t *curAl = bam_init1(); // initialize the alignment record
 
     while(sam_read1(al,al_hdr,curAl)>0) { // only perfom if unaligned flag is set to true
@@ -340,10 +334,9 @@ void Map2GFF_SALMON::convert_coords(){
             continue;
         }
 
-        // otherwise we proceed to evaluate the reads accordingly
-
         // TODO: need to output proper log files so that we can detect when something goes wrong when realigning GTEx
 
+        // otherwise we proceed to evaluate the reads accordingly
         // first check if belongs to a valid pair
         if(this->has_valid_mate(curAl)){ // belongs to a valid pair
             this->process_pair(curAl);
@@ -360,6 +353,14 @@ bool Map2GFF_SALMON::has_valid_mate(bam1_t *curAl){
            (curAl->core.flag & 0x2) && // mapped as a pair
           !(curAl->core.flag & 0x4) && // is mapped
           !(curAl->core.flag & 0x8); // mate is mapped
+    // TODO: replace check for two mates being on the same transcript with two mates being on the same locus instead to account for valid pairs
+    //       if detected - need to correct the flags
+}
+
+bool Map2GFF_SALMON::has_mate(bam1_t *curAl){ // TODO: needs to be used to properly handle pairs that are mapped discordantly
+    return (curAl->core.flag & 0x1) && // belongs to a pair
+           !(curAl->core.flag & 0x4) && // is mapped
+           !(curAl->core.flag & 0x8); // mate is mapped
     // TODO: replace check for two mates being on the same transcript with two mates being on the same locus instead to account for valid pairs
     //       if detected - need to correct the flags
 }
@@ -686,8 +687,6 @@ void Map2GFF_SALMON::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate
         add_cigar(curAl_mate, num_cigars_mate, cigars_mate); // will be performed afterwards
     }
 }
-
-// TODO: need to evaluate pairs only if concordant but to evaluate multimappers separately for discordant
 
 void Map2GFF_SALMON::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){ // TODO: make sure only mapped reads are passed through this function
     bool unique = this->mmap.process_pos(cur_pos,this->loci);

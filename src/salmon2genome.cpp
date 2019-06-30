@@ -41,7 +41,11 @@ int main(int argc, char** argv) {
     args.add_flag(Opt::ALL_MULTI,"all","whether to output all multimappers and not assign them based on likelihood. This flag negates -k",false); // TODO: needs to be implemented
     args.add_int(Opt::NUM_MULTI,"nmult",1,"The number of most likely multimappers to report",false); // TODO: needs to be implemented
 
-    // TODO: compile the new version of hisat2 which does not miss the requent multimappers
+    // TODO: compile the new version of hisat2 which does not miss the frequent multimappers
+
+    // TODO: critical -  figure out why such low sensitivity and precision
+    //       first implement discordnat pair resolution
+    //       secondly implement the -a mode to output all multimappers as before and compare the results
 
     if(strcmp(argv[1],"--help")==0){
         std::cerr<<args.get_help()<<std::endl;
