@@ -102,6 +102,8 @@ def main(args):
                               "-p",args.threads]
         if (args.k):
             bowtie2_cmd_trans_noA.extend(("-k",str(args.k)))
+        else:
+            bowtie2_cmd_trans_noA.extend(("-k","1"))
 
         if (args.fasta):
             bowtie2_cmd_trans_noA.append("-f")
@@ -125,15 +127,13 @@ def main(args):
 
     #trans2genome
     print("converting coordinates to genomic")
-    trans2genome_cmd=["/home/avaraby1/genomicTools/trans2genome/trans2genome",
-                     "-t",os.path.abspath(args.db)+"/db.fasta.tlst",
-                     "-g",os.path.abspath(args.db)+"/db.fasta.glst",
-                     "-m",os.path.abspath(args.db)+"/db.fasta.multi",
+    trans2genome_cmd=["/ccb/salz4-4/avaraby/tools_under_development/trans2genome/release/salmon2genome",
+                     "-x",os.path.abspath(args.db)+"/db",
                      "-i",os.path.abspath(curTMP)+"/sample.trans_first.bam",
-                     "-s",os.path.abspath(args.db)+"/db.genome.header",
-                     "-o",os.path.abspath(curTMP)+"/sample.trans2genome_first.bam"]
+                     "-o",os.path.abspath(curTMP)+"/sample.trans2genome_first.bam",
+                     "-q","-p","1"]
     if args.mf:
-        trans2genome_cmd.append("-f")
+        trans2genome_cmd.append("-m")
     trans2genome_process = subprocess.Popen(trans2genome_cmd)
 
     # locus-level alignment
