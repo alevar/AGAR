@@ -22,7 +22,9 @@ enum Opt {IN_AL   = 'i',
         ABUNDANCE = 'a',
         UNALIGNED = 'u',
         UNIQ      = 'q',
-        FRAGLEN   = 'f'};
+        FRAGLEN   = 'f',
+        ALL_MULTI = 'l',
+        NUM_MULTI = 'k'};
 
 int main(int argc, char** argv) {
 
@@ -36,8 +38,10 @@ int main(int argc, char** argv) {
     args.add_flag(Opt::UNALIGNED,"unal","search for unaligned reads, extract from alignment into separate files",false);
     args.add_flag(Opt::UNIQ,"uniq","input alignment contains only 1 mapping per read (no secondary alignments present such as in bowtie k1 mode)",false);
     args.add_int(Opt::FRAGLEN,"fraglen",200000,"fragment length of the paired reads",false);
+    args.add_flag(Opt::ALL_MULTI,"all","whether to output all multimappers and not assign them based on likelihood. This flag negates -k",false); // TODO: needs to be implemented
+    args.add_int(Opt::NUM_MULTI,"nmult",1,"The number of most likely multimappers to report",false); // TODO: needs to be implemented
 
-    // TODO: need a flag to tell how many multimappers to output (not just one). needs to also handle outputting all multimappers
+    // TODO: compile the new version of hisat2 which does not miss the requent multimappers
 
     if(strcmp(argv[1],"--help")==0){
         std::cerr<<args.get_help()<<std::endl;
@@ -58,6 +62,12 @@ int main(int argc, char** argv) {
     }
     if(args.is_set(Opt::FRAGLEN)){
         gffMapper.set_fraglen(Opt::FRAGLEN);
+    }
+    if(args.is_set(Opt::NUM_MULTI)){
+        gffMapper.set_num_multi(args.get_int(Opt::NUM_MULTI));
+    }
+    if(args.is_set(Opt::ALL_MULTI)){
+        gffMapper.set_all_multi();
     }
     std::cerr<<"Begin Translating Coordinates"<<std::endl;
     gffMapper.convert_coords(); // TODO: need to make sure that multimappers are evaluated if the index is provided

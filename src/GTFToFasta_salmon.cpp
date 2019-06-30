@@ -243,10 +243,6 @@ void GTFToFasta::save(bool multi, bool uniq){
     }
 }
 
-void gtf2fasta_print_usage(){
-    std::cerr << "Usage: gtf_to_fasta kmer_length transcripts.gtf genome.fa out_file" << std::endl;
-}
-
 enum Opt {GFF_FP   = 'a',
           REF_FA   = 'r',
           OUT_FA   = 'o',

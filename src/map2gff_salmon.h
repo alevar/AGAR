@@ -178,41 +178,6 @@ private:
     bool pair_unmapped(bam1_t *al){return (al->core.flag & 4) && (al->core.flag & 8);}; // test if bth reads in the pair are unmapped
 };
 
-struct GffTranscript: public GSeg {
-    GVec<GSeg> exons;
-    uint32_t gffID;
-    uint32_t refID;
-    uint32_t geneID;
-    uint32_t numID;
-    uint8_t strand;
-    uint32_t abundance; // only used if the salmon or kallisto quantifications are provided
-    bool empty = true;
-    GffTranscript():exons(1), numID(-1), gffID(),
-                    refID(), strand(0), geneID(0),abundance(0) { }
-
-    void set_gffID(uint32_t gffID){this->gffID=gffID;this->empty=false;}
-    void set_refID(uint32_t refID){this->refID=refID;this->empty=false;}
-    void set_geneID(uint32_t geneID){this->geneID=geneID;this->empty=false;}
-    void set_numID(uint32_t numID){this->numID=numID;this->empty=false;}
-    void set_strand(uint8_t strand){this->strand=strand;this->empty=false;}
-    void add_exon(GSeg exon){ this->exons.Add(exon);this->empty=false;}
-
-    uint32_t get_refID() {return refID;}
-    uint32_t get_geneID(){return geneID;}
-
-    void clear(){
-        this->exons.Clear();
-        this->empty = true;
-    }
-    void print(){
-        std::cerr<<this->gffID<<"\t"<<this->geneID<<"@"<<this->refID<<this->strand;
-        for(int i=0;i<this->exons.Count();i++){
-            std::cerr<<this->exons[i].start<<"_"<<this->exons[i].end<<",";
-        }
-        std::cerr<<std::endl;
-    }
-};
-
 // this structure defines all the things related to a genomic position of a transcriptomic alignment
 struct ReadData{
     int read_start;
@@ -426,6 +391,8 @@ public:
     void set_unaligned();
     void set_k1();
     void set_fraglen(int fraglen);
+    void set_num_multi(int num_multi);
+    void set_all_multi();
 
 private:
     // INDEX METHODS

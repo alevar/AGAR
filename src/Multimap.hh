@@ -428,11 +428,6 @@ public:
     }
 
     bool operator>(const Position& m) const{
-//        return this->chr>m.chr ||
-//               this->strand>m.strand ||
-//               this->start>m.start ||
-//               this->locus>m.locus ||
-//               this->moves>m.moves;
         return this->locus > m.locus;
     }
 
@@ -476,19 +471,43 @@ namespace std {
             hash_combine(ret,p.chr,p.strand,p.start,p.locus);
             return ret;
         }
-//        size_t operator()(const Position &p) const {
-//            int hash = 1;
-//            hash ^= p.chr + 0x9e3779b9 + (hash<<6) + (hash>>2);
-//            hash ^= p.strand + 0x9e3779b9 + (hash<<6) + (hash>>2);
-//            hash ^= p.start + 0x9e3779b9 + (hash<<6) + (hash>>2);
-//            hash ^= p.locus + 0x9e3779b9 + (hash<<6) + (hash>>2);
-//            for(auto &v : p.moves){
-//                hash ^= v + 0x9e3779b9 + (hash<<6) + (hash>>2);
-//            }
-//            return hash;
-//        }
     };
 }
+
+struct GffTranscript: public GSeg {
+    GVec<GSeg> exons;
+    uint32_t gffID;
+    uint32_t refID;
+    uint32_t geneID;
+    uint32_t numID;
+    uint8_t strand;
+    uint32_t abundance; // only used if the salmon or kallisto quantifications are provided
+    bool empty = true;
+    GffTranscript():exons(1), numID(-1), gffID(),
+                    refID(), strand(0), geneID(0),abundance(0) { }
+
+    void set_gffID(uint32_t gffID){this->gffID=gffID;this->empty=false;}
+    void set_refID(uint32_t refID){this->refID=refID;this->empty=false;}
+    void set_geneID(uint32_t geneID){this->geneID=geneID;this->empty=false;}
+    void set_numID(uint32_t numID){this->numID=numID;this->empty=false;}
+    void set_strand(uint8_t strand){this->strand=strand;this->empty=false;}
+    void add_exon(GSeg exon){ this->exons.Add(exon);this->empty=false;}
+
+    uint32_t get_refID() {return refID;}
+    uint32_t get_geneID(){return geneID;}
+
+    void clear(){
+        this->exons.Clear();
+        this->empty = true;
+    }
+    void print(){
+        std::cerr<<this->gffID<<"\t"<<this->geneID<<"@"<<this->refID<<this->strand;
+        for(int i=0;i<this->exons.Count();i++){
+            std::cerr<<this->exons[i].start<<"_"<<this->exons[i].end<<",";
+        }
+        std::cerr<<std::endl;
+    }
+};
 
 // this class describes the multimappers in the index transcriptome
 // and facilitates efficient storage and lookup
@@ -500,6 +519,29 @@ public:
     void set_fraglen(int fraglen){
         this->fraglen = fraglen;
     }
+
+    void set_num_multi(int num_multi){
+        this->num_multi = num_multi;
+    }
+
+    void set_all_multi(){
+        this->all_multi = true;
+    }
+
+    void set_loci(Loci* loci){
+        this->loci = loci;
+    }
+
+    void set_transcriptome(std::vector<GffTranscript>* transcriptome){ // used to find loaded abundancs when available
+        this->transcriptome = transcriptome;
+    }
+
+    void set_precomputed_abundances(){
+        this->precomputed_abundances = true;
+    }
+
+    Loci* loci;
+    std::vector<GffTranscript>* transcriptome;
 
     // given a position generated from an alignment this function searches for multimapper
     // and returns true if the position is not multimapping or false if it is multimapping
@@ -541,22 +583,16 @@ public:
                 tmp_res.push_back(tmp);
                 min = (tmp<min)?tmp:min;
                 rtotal+=tmp_res.back();
-//                std::cerr<<tmp_res.back()<<"\t";
             }
-//            std::cerr<<std::endl;
 
             for(auto &v : tmp_res){
                 res.push_back(v/rtotal);
-//                std::cerr<<res.back()<<"\t";
             }
-//            std::cerr<<std::endl;
 
             // now need to make the decision which is best
             int pos_idx = this->get_likely(res,0.0,1.0);
             // now follow the iterator to get the actual position object which corresponds to the selected item
-//            std::cerr<<pos_idx<<"\t"<<pos.start<<"\t"<<(this->index.begin()+this->ltf->second+pos_idx)->first.start;
             pos = (this->index.begin()+this->ltf->second+pos_idx)->first;
-//            std::cerr<<"\t"<<pos.start<<std::endl;
             return false;
         }
     }
@@ -659,11 +695,9 @@ public:
     // thanks to https://medium.com/@dimonasdf/hi-your-code-is-correct-but-in-pseudocode-it-should-be-fc1875cf9de3 for the idea
     int get_likely(std::vector<double>& abunds,double min, double max){
         double rv = (max - min) * ( (double)rand() / (double)RAND_MAX ) + min;
-//        std::cerr<<"likely: "<<rv<<std::endl;
 
         for(int i=0;i<abunds.size();i++){
             rv = rv - abunds[i];
-//            std::cerr<<"rv: "<<rv<<std::endl;
             if(rv<=0){
                 return i;
             }
@@ -787,7 +821,6 @@ public:
                 cur_exon = exon_list[el_pos];
             }
         }
-//        std::cout<<"nk: "<<this->kmer_coords.size()<<std::endl;
     }
 
 private:
@@ -879,28 +912,24 @@ private:
                     break;
                 case ':':
                     //end of current int - write start
-//                    std::cerr<<"start: "<<start<<std::endl;
                     pos.set_start(start);
                     elem = Opt::MOVE;
                     start = 0;
                     break;
                 case '@':
                     // got the geneID
-//                    std::cerr<<"locus: "<<locus<<std::endl;
                     pos.set_locus(locus);
                     elem = Opt::CHR;
                     locus = 0;
                     break;
                 case '>':
                     // got the sample transcript ID
-//                    std::cerr<<"trans: "<<trans<<std::endl;
                     pos.set_trans(trans);
                     elem = Opt::LOCUS;
                     trans = 0;
                     break;
                 case '-': case '+':
                     // negative strand - write chromosome
-//                    std::cerr<<"chr: "<<chr<<std::endl;
                     pos.set_chr(chr);
                     pos.set_strand((uint32_t)buffer[i]);
                     elem = Opt::START;
@@ -945,6 +974,8 @@ private:
 
     int kmerlen;
     int fraglen = 200000;
+    int num_multi = 1;
+    int all_multi = false;
 
     typedef std::unordered_set<Position> pcord;
     std::pair<pcord::iterator,bool> pce;

@@ -89,6 +89,14 @@ void Map2GFF_SALMON::set_fraglen(int fraglen) {
     this->mmap.set_fraglen(fraglen);
 }
 
+void Map2GFF_SALMON::set_num_multi(int num_multi) {
+    this->mmap.set_num_multi(num_multi);
+}
+
+void Map2GFF_SALMON::set_all_multi() {
+    this->mmap.set_all_multi();
+}
+
 void Map2GFF_SALMON::load_info(const std::string& info_fname){
     // read file to get important stats
     struct stat buffer{};
@@ -278,6 +286,9 @@ void Map2GFF_SALMON::load_index(const std::string& index_base,bool multi){
         multi_fname.append(".multi");
         this->load_multi(multi_fname);
 //        this->print_multimappers();
+        // now we can also set pointers to the related objects
+        this->mmap.set_loci(&(this->loci));
+        this->mmap.set_transcriptome(&(this->transcriptome));
     }
 }
 
@@ -327,11 +338,6 @@ void Map2GFF_SALMON::convert_coords(){
             // output unaligned reads for hisat2 to realign
             this->umap.insert(curAl);
             continue;
-        }
-
-        std::string name = std::string(bam_get_qname(curAl)); // "SRR1071717.33364906"
-        if(name=="SRR1071717.33364906"){
-            std::cout<<name<<std::endl;
         }
 
         // otherwise we proceed to evaluate the reads accordingly
