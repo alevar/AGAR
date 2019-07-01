@@ -129,7 +129,7 @@ def main(args):
 
     #trans2genome
     print("converting coordinates to genomic")
-    trans2genome_cmd=["/ccb/salz4-4/avaraby/tools_under_development/trans2genome/release/salmon2genome",
+    trans2genome_cmd=["trans2genome",
                      "-x",os.path.abspath(args.db)+"/db",
                      "-i",os.path.abspath(curTMP)+"/sample.trans_first.bam",
                      "-o",os.path.abspath(curTMP)+"/sample.trans2genome_first.bam",

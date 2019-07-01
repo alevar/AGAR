@@ -1,12 +1,12 @@
 //
-//  gtfToFasta.h
+//  Indexer.h
 //  TopHat
 //
 //  Created by Ales Varabyou on 07/26/19 based on gtf_to_fasta from Tophat written by Harold Pimentel
 //
 
-#ifndef GTFToFasta_H
-#define GTFToFasta_H
+#ifndef INDEXER_H
+#define INDEXER_H
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
@@ -32,10 +32,10 @@
 #include "arg_parse.h"
 #include "Multimap.hh"
 
-class GTFToFasta {
+class Indexer {
 public:
-    GTFToFasta(std::string gtf_fname, std::string genome_fname,const std::string& out_fname, int kmer_length,bool multi);
-    ~GTFToFasta();
+    Indexer(std::string gtf_fname, std::string genome_fname,const std::string& out_fname, int kmer_length,bool multi);
+    ~Indexer();
     void make_transcriptome();
 
     // for debugging
@@ -64,7 +64,7 @@ private:
     void add_to_refMap(GffObj &p_trans,int contig_len);
     void save_header();
 
-    GTFToFasta() = default; // Don't want anyone calling the constructor w/o options
+    Indexer() = default; // Don't want anyone calling the constructor w/o options
 
     // MULTIMAPPERS
     Multimap mmap;

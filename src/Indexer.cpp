@@ -1,14 +1,11 @@
 #include <utility>
+#include "Indexer.h"
 
 //
-//  gtfToFasta.cpp
-//  TopHat
+// Created by Ales Varabyou on 6/16/19.
 //
-//  Created by Harold Pimentel on 10/26/11.
-//
-#include "GTFToFasta_salmon.h"
 
-std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::string& coords,int transID){
+std::string Indexer::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::string& coords,int transID){
     GList<GffExon>& exon_list = p_trans.exons;
 
     std::string exon_seq;
@@ -43,7 +40,7 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
 
 
 
-GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std::string& out_fname, int kmerlen,bool multi){
+Indexer::Indexer(std::string gtf_fname, std::string genome_fname,const std::string& out_fname, int kmerlen,bool multi){
     gtf_fname_ = gtf_fname;
     gtf_fhandle_ = fopen(gtf_fname_.c_str(), "r");
     if (gtf_fhandle_ == nullptr)
@@ -83,14 +80,14 @@ GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std
     transcript_map();
 }
 
-GTFToFasta::~GTFToFasta(){
+Indexer::~Indexer(){
     ContigTransMap::iterator it;
     for (it = contigTransMap_.begin(); it != contigTransMap_.end(); ++it) {
         delete it->second;
     }
 }
 
-void GTFToFasta::add_to_geneMap(GffObj &p_trans){
+void Indexer::add_to_geneMap(GffObj &p_trans){
     // populate the genemap
     int nst=p_trans.start;
     int nen=p_trans.end;
@@ -111,12 +108,12 @@ void GTFToFasta::add_to_geneMap(GffObj &p_trans){
     }
 }
 
-void GTFToFasta::add_to_refMap(GffObj &p_trans,int contig_len){
+void Indexer::add_to_refMap(GffObj &p_trans,int contig_len){
     // populate the refmap
     this->id_to_ref.insert(std::make_pair(p_trans.gseq_id,std::make_pair(p_trans.getRefName(),contig_len)));
 }
 
-void GTFToFasta::make_transcriptome(){
+void Indexer::make_transcriptome(){
     std::vector<int> *p_contig_vec;
 
     FastaReader fastaReader(genome_fname_);
@@ -201,7 +198,7 @@ void GTFToFasta::make_transcriptome(){
     std::cerr<<"done writing general information"<<std::endl;
 }
 
-void GTFToFasta::transcript_map(){
+void Indexer::transcript_map(){
     GffObj *p_gffObj;
     const char *p_contig_name;
     std::vector<int> *p_contig_vec;
@@ -228,7 +225,7 @@ void GTFToFasta::transcript_map(){
     }
 }
 
-void GTFToFasta::print_mapping(){
+void Indexer::print_mapping(){
     std::ofstream out_file("out.names");
     GffObj *p_gffObj;
 
@@ -240,11 +237,11 @@ void GTFToFasta::print_mapping(){
     out_file.close();
 }
 
-void GTFToFasta::print_mmap(){
+void Indexer::print_mmap(){
     this->mmap.print();
 }
 
-void GTFToFasta::save_header() {
+void Indexer::save_header() {
     std::ofstream genome_headerfp(this->genome_headername);
     genome_headerfp<<"@HD\tVN:1.0\tSO:unsorted"<<std::endl;
 
@@ -261,7 +258,7 @@ void GTFToFasta::save_header() {
     genome_headerfp.close();
 }
 
-void GTFToFasta::save(bool multi, bool uniq){
+void Indexer::save(bool multi, bool uniq){
     //first save the header
     save_header();
     if(multi){
@@ -306,9 +303,9 @@ int main(int argc, char *argv[])
     std::string out_fname(args.get_string(Opt::OUT_FA));
     bool multi=args.get_flag(Opt::MULTI);
 
-    GTFToFasta gtfToFasta(gtf_fname, genome_fname,out_fname, kmer_length,multi);
-    gtfToFasta.make_transcriptome();
-    gtfToFasta.save(args.get_flag(Opt::MULTI),args.get_flag(Opt::UNIQ));
+    Indexer indexer(gtf_fname, genome_fname,out_fname, kmer_length,multi);
+    indexer.make_transcriptome();
+    indexer.save(args.get_flag(Opt::MULTI),args.get_flag(Opt::UNIQ));
     return 0;
 }
 

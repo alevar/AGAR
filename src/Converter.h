@@ -2,8 +2,8 @@
 // Created by sparrow on 6/6/19.
 //
 
-#ifndef TRANS2GENOME_MAP2GFF_SALMON_H
-#define TRANS2GENOME_MAP2GFF_SALMON_H
+#ifndef CONVERTER_H
+#define CONVERTER_H
 
 #include <string>
 #include <iostream>
@@ -379,10 +379,10 @@ private:
     }
 };
 
-class Map2GFF_SALMON{
+class Converter{
 public:
-    Map2GFF_SALMON(const std::string& alFP,const std::string& outFP,const std::string& index_base,const int& threads,bool multi);
-    ~Map2GFF_SALMON();
+    Converter(const std::string& alFP,const std::string& outFP,const std::string& index_base,const int& threads,bool multi);
+    ~Converter();
 
     void load_abundances(const std::string& abundFP); // add abundances to the transcripts
 
@@ -461,4 +461,4 @@ private:
 
 };
 
-#endif //TRANS2GENOME_MAP2GFF_SALMON_H
+#endif //CONVERTER_H

@@ -1,5 +1,5 @@
 //
-// Created by sparrow on 6/16/19.
+// Created by Ales Varabyou on 6/16/19.
 //
 
 #ifndef TRANS2GENOME_MULTIMAP_H
