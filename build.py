@@ -32,8 +32,8 @@ def main(args):
     print(" ".join([gtf_to_fasta_path,"-k",str(args.kmerlen),"-a",args.gff,"-r",args.ref,"-o",os.path.abspath(args.output)+"/db","-m"]))
     subprocess.call([gtf_to_fasta_path,"-k",str(args.kmerlen),"-a",args.gff,"-r",args.ref,"-o",os.path.abspath(args.output)+"/db","-m"])
     # buildGenomeHeader.py
-    print("Building genome header file")
-    buildHeader(os.path.abspath(args.ref)+".fai",os.path.abspath(args.output)+"/db.genome_header")
+    # print("Building genome header file")
+    # buildHeader(os.path.abspath(args.ref)+".fai",os.path.abspath(args.output)+"/db.genome_header")
 
     if args.type=="bowtie":
         print("Building additional bowtie transcriptome index")

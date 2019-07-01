@@ -41,6 +41,8 @@ std::string GTFToFasta::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, st
     return exon_seq;
 }
 
+
+
 GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std::string& out_fname, int kmerlen,bool multi){
     gtf_fname_ = gtf_fname;
     gtf_fhandle_ = fopen(gtf_fname_.c_str(), "r");
@@ -66,6 +68,9 @@ GTFToFasta::GTFToFasta(std::string gtf_fname, std::string genome_fname,const std
 
     this->trans_fastaname = out_fname;
     this->trans_fastaname.append(".fasta");
+
+    this->genome_headername = out_fname;
+    this->genome_headername.append(".genome_header");
 
     genome_fname_ = std::move(genome_fname);
 
@@ -106,6 +111,11 @@ void GTFToFasta::add_to_geneMap(GffObj &p_trans){
     }
 }
 
+void GTFToFasta::add_to_refMap(GffObj &p_trans,int contig_len){
+    // populate the refmap
+    this->id_to_ref.insert(std::make_pair(p_trans.gseq_id,std::make_pair(p_trans.getRefName(),contig_len)));
+}
+
 void GTFToFasta::make_transcriptome(){
     std::vector<int> *p_contig_vec;
 
@@ -133,6 +143,7 @@ void GTFToFasta::make_transcriptome(){
         FastaRecord out_rec;
         for (int trans_idx : *p_contig_vec) {
             GffObj *p_trans = gtfReader_.gflst.Get(trans_idx);
+            add_to_refMap(*p_trans,cur_contig.seq_.size());
 
             // add the gene record to the geneMap first
             this->add_to_geneMap(*p_trans);
@@ -177,6 +188,7 @@ void GTFToFasta::make_transcriptome(){
         genefp<<it->second.get_locid()<<":"<<it->second.compute_elen()<<char(it->second.get_strand())<<it->second.get_start()<<" "<<it->second.get_end()<<std::endl;
         it++;
     }
+    genefp.close();
     std::cerr<<"done writing gene information"<<std::endl;
 
     std::cerr<<"writing general information"<<std::endl;
@@ -185,6 +197,7 @@ void GTFToFasta::make_transcriptome(){
     infofp<<this->topTransID<<std::endl;
     infofp<<max_locid<<std::endl;
     infofp<<this->kmerlen<<std::endl;
+    infofp.close();
     std::cerr<<"done writing general information"<<std::endl;
 }
 
@@ -224,13 +237,33 @@ void GTFToFasta::print_mapping(){
         if (p_gffObj->isDiscarded() || p_gffObj->exons.Count()==0) continue;
         out_file << i << "\t" << p_gffObj->getID() << std::endl;
     }
+    out_file.close();
 }
 
 void GTFToFasta::print_mmap(){
     this->mmap.print();
 }
 
+void GTFToFasta::save_header() {
+    std::ofstream genome_headerfp(this->genome_headername);
+    genome_headerfp<<"@HD\tVN:1.0\tSO:unsorted"<<std::endl;
+
+    int prev_id = -1;
+    for(auto &v : this->id_to_ref){
+        if(v.first<=prev_id || (v.first - prev_id) != 1){
+            std::cerr<<"error in reference IDs: "<<prev_id<<"\t"<<v.first<<std::endl;
+            exit(1);
+        }
+        prev_id = v.first;
+        genome_headerfp<<"@SQ\tSN:"<<v.second.first<<"\tLN:"<<v.second.second<<std::endl;
+    }
+    genome_headerfp<<"@PG\tID:transHISAT2\tPN:transHISAT2\tVN:1.0\tCL:\"./transHISAT2.py\""<<std::endl;
+    genome_headerfp.close();
+}
+
 void GTFToFasta::save(bool multi, bool uniq){
+    //first save the header
+    save_header();
     if(multi){
         std::string multimap_fname(this->out_fname);
         multimap_fname.append(".multi");

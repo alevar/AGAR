@@ -56,11 +56,13 @@ private:
     int topTransID = 0; // the highest transcript ID assigned for any transcript in the current transcriptome. This information is written to the info file
 
     std::string trans_fastaname;
-    std::string info_fname,tlst_fname,multimap_fname,unique_fname,gene_fname;
+    std::string info_fname,tlst_fname,multimap_fname,unique_fname,gene_fname,genome_headername;
 
     void transcript_map();
     std::string get_exonic_sequence(GffObj& p_trans, FastaRecord& rec, std::string& coords,int transID);
     void add_to_geneMap(GffObj &p_trans);
+    void add_to_refMap(GffObj &p_trans,int contig_len);
+    void save_header();
 
     GTFToFasta() = default; // Don't want anyone calling the constructor w/o options
 
@@ -85,6 +87,8 @@ private:
             std::string,
             Gene >::iterator,bool> exists_cur_gene;
     std::map<std::string,Gene>::iterator found_gene;
+
+    std::map<int,std::pair<std::string,int>> id_to_ref; // this is used ot build a header for the genomic file. contains the index (line in header), ref name and length
 
     // TODO: needs to handle reverse complement of a kmer for the multimapper index
 };
