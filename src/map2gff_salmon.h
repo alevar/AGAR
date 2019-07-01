@@ -438,6 +438,7 @@ private:
     // ALIGNMENT METHODS
     int convert_cigar(int i,GSeg *next_exon,GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS],Position& pos_obj);
     bool has_valid_mate(bam1_t *curAl);
+    bool has_mate(bam1_t *curAl);
     bool get_read_start(GVec<GSeg>& exon_list,int32_t gff_start,int32_t& genome_start, int& exon_idx);
     void add_cigar(bam1_t *curAl,int num_cigars,int* cigars);
     void add_aux(bam1_t *curAl,char xs);

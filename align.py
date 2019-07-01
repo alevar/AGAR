@@ -42,8 +42,10 @@ def main(args):
         for fp in ["1.bt2","2.bt2","3.bt2","4.bt2","rev.1.bt2","rev.2.bt2"]:
             assert os.path.exists(os.path.abspath(args.db)+"/db.locus."+fp),args.db+"/db."+fp+" file not found"
     # assert (bool(args.type=="hisat") != bool(args.bowtie)), "can not define both type hisat and bowtie2"
-    for fp in ["fasta.tlst","fasta","genome.header"]:
+    for fp in ["tlst","fasta","genome_header","info","glst"]:
         assert os.path.exists(os.path.abspath(args.db)+"/db."+fp),args.db+"/db."+fp+" file not found"
+    if args.mf:
+        assert os.path.exists(os.path.abspath(args.db)+"/db.multi"),args.db+"/db.multi file not found"
     for fp in ["1.ht2","2.ht2","3.ht2","4.ht2","5.ht2","6.ht2","7.ht2","8.ht2"]:
         assert os.path.exists(args.genome_db+"."+fp),args.genome_db+"."+fp+" file not found"
 
