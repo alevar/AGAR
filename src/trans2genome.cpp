@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
     args.add_int(Opt::THREADS,"threads",1,"number of threads (default = 1)",false);
     args.add_string(Opt::INDEX,"index","","path and basename of the index built by gtf_to_fasta",true);
     args.add_flag(Opt::MULTI,"multi","whether to search and evaluate multimappers",false);
-    args.add_string(Opt::ABUNDANCE,"abund","","use abundances precomputed",false); // TODO: now need to implement proper loading of external abundance estimates
+    args.add_string(Opt::ABUNDANCE,"abund","","use abundances precomputed. Only gene-level abundance estimates computed by salmon are supported at the moment",false); // TODO: now need to implement proper loading of external abundance estimates
     args.add_flag(Opt::UNALIGNED,"unal","search for unaligned reads, extract from alignment into separate files",false);
     args.add_flag(Opt::UNIQ,"uniq","input alignment contains only 1 mapping per read (no secondary alignments present such as in bowtie k1 mode)",false);
     args.add_int(Opt::FRAGLEN,"fraglen",200000,"fragment length of the paired reads",false);
@@ -43,9 +43,10 @@ int main(int argc, char** argv) {
 
     // TODO: compile the new version of hisat2 which does not miss the frequent multimappers
 
-    // TODO: critical -  figure out why such low sensitivity and precision
-    //       first implement discordnat pair resolution
-    //       secondly implement the -a mode to output all multimappers as before and compare the results
+    // TODO: current branch work
+    //       1. first implement discordnat pair handling -  namely, currently an alignment can be reported as discordant for two mates that map to different transcripts on the same locus, in which case, we should re-unite them and manage multimappers as a pair
+    //       2. secondly implement the -a mode to output all multimappers as before and compare the results
+    //       3. lastly compare the TPMs between methods: all multimappers, likelihood, precomputed - to salmon and hisat on simulated data
 
     if(strcmp(argv[1],"--help")==0){
         std::cerr<<args.get_help()<<std::endl;

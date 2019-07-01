@@ -291,8 +291,10 @@ void Converter::load_index(const std::string& index_base,bool multi){
 }
 
 // this function takes in the abundance estimation from salmon and augments the transcriptome index with the data
+// TODO: this function needs to be written differently to handle not just the salmon input
 void Converter::load_abundances(const std::string& abundFP){
     this->abund = true;
+    this->loci.set_precomputed_abundances();
     std::ifstream abundstream;
     std::stringstream *linestream;
     abundstream.open(abundFP.c_str(),std::ios::in);
@@ -304,20 +306,22 @@ void Converter::load_abundances(const std::string& abundFP){
 
     std::cerr<<"Reading the transcript abundance file: "<<abundFP<<std::endl;
     std::string aline,col;
-    std::getline(abundstream,aline);
-    int tid;
+    std::getline(abundstream,aline); // skip the header from salmon
+    int locid;
     float abundance;
     while (std::getline(abundstream,aline)) {
         // given a line we need to extract the name and the TPM
         linestream = new std::stringstream(aline);
         std::getline(*linestream,col,'\t');
-        tid = std::atoi(col.c_str());
+        locid = std::atoi(col.c_str());
         // now need to get the abundance
         std::getline(*linestream,col,'\t'); // skip second column
         std::getline(*linestream,col,'\t'); // skip third column
         std::getline(*linestream,col,'\t'); // abundance here
         abundance = std::atof(col.c_str());
-        this->transcriptome[tid].abundance = abundance;
+        this->loci[locid].set_abund(abundance);
+//        this->transcriptome[tid].abundance = abundance; // TODO: replace with locus-level abundance
+//        std::cout<<locid<<"\t"<<abundance<<std::endl;
         delete linestream;
     }
     abundstream.close();
@@ -341,6 +345,9 @@ void Converter::convert_coords(){
         if(this->has_valid_mate(curAl)){ // belongs to a valid pair
             this->process_pair(curAl);
         }
+//        else if(this->has_mate(curAl)){ // TODO: this is the case when mates are aligned to different transcripts on the same locus, or can be re-united
+//            this-
+//        }
         else{ // does not belong to a valid pair
             this->process_single(curAl);
         }
@@ -353,16 +360,12 @@ bool Converter::has_valid_mate(bam1_t *curAl){
            (curAl->core.flag & 0x2) && // mapped as a pair
           !(curAl->core.flag & 0x4) && // is mapped
           !(curAl->core.flag & 0x8); // mate is mapped
-    // TODO: replace check for two mates being on the same transcript with two mates being on the same locus instead to account for valid pairs
-    //       if detected - need to correct the flags
 }
 
 bool Converter::has_mate(bam1_t *curAl){ // TODO: needs to be used to properly handle pairs that are mapped discordantly
     return (curAl->core.flag & 0x1) && // belongs to a pair
            !(curAl->core.flag & 0x4) && // is mapped
            !(curAl->core.flag & 0x8); // mate is mapped
-    // TODO: replace check for two mates being on the same transcript with two mates being on the same locus instead to account for valid pairs
-    //       if detected - need to correct the flags
 }
 
 bool Converter::get_read_start(GVec<GSeg>& exon_list,int32_t gff_start,int32_t& genome_start, int& exon_idx){
@@ -618,10 +621,18 @@ void Converter::add_multi_tag(bam1_t* curAl){
 
 void Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
                                                 int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate) {
-    bool unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci);
+    bool unique;
+    if(!this->abund){ // compute abundance dynamically
+        unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci);
+    }
+    else{ // compute abundance dynamically
+        unique = this->mmap.process_pos_pair_precomp(cur_pos,cur_pos_mate,this->loci);
+    }
     if(unique){ // increment abundance
-        this->loci.add_read(cur_pos.locus);
-        this->loci.add_read(cur_pos_mate.locus);
+        if(!this->abund) {
+            this->loci.add_read(cur_pos.locus);
+            this->loci.add_read(cur_pos_mate.locus);
+        }
         curAl->core.pos = cur_pos.start-1;
         curAl->core.mpos = cur_pos_mate.start-1;
         curAl_mate->core.pos = cur_pos_mate.start-1;
@@ -634,9 +645,10 @@ void Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
         add_multi_tag(curAl);
         add_multi_tag(curAl_mate);
         // increment total abundances of the locus to which the new cur_pos belongs
-
-        this->loci.add_read_multi(cur_pos.locus);
-        this->loci.add_read_multi(cur_pos_mate.locus);
+        if(!this->abund) {
+            this->loci.add_read_multi(cur_pos.locus);
+            this->loci.add_read_multi(cur_pos_mate.locus);
+        }
 
         // first get the transcript
         GffTranscript& new_trans = transcriptome[cur_pos.transID];
@@ -689,9 +701,17 @@ void Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
 }
 
 void Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){ // TODO: make sure only mapped reads are passed through this function
-    bool unique = this->mmap.process_pos(cur_pos,this->loci);
+    bool unique;
+    if(!this->abund){ // compute abundance dynamically
+        unique = this->mmap.process_pos(cur_pos,this->loci);
+    }
+    else{ // compute abundance dynamically
+        unique = this->mmap.process_pos_precomp(cur_pos,this->loci);
+    }
     if(unique){ // increment abundance
-        this->loci.add_read(cur_pos.locus);
+        if(!this->abund){
+            this->loci.add_read(cur_pos.locus);
+        }
         curAl->core.pos = cur_pos.start-1;
         curAl->core.tid = cur_pos.chr;
         // add already computed cigar to the read
@@ -701,7 +721,9 @@ void Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars
         add_multi_tag(curAl);
         // increment total abundances of the locus to which the new cur_pos belongs
 
-        this->loci.add_read_multi(cur_pos.locus);
+        if(!this->abund) {
+            this->loci.add_read_multi(cur_pos.locus);
+        }
 
         // first get the transcript
         GffTranscript& new_trans = transcriptome[cur_pos.transID];

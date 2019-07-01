@@ -81,8 +81,10 @@ public:
     void set_end(uint32_t end){this->end=end;this->empty=false;}
     void set_strand(uint32_t strand){this->strand=strand,this->empty=false;}
     void set_id(uint32_t locid){this->locid=locid;this->empty=false;}
+    void set_abund(float abund){this->abundance = abund;}
 
     uint32_t get_start(){return this->start;}
+    float get_abund(){return this->abundance;}
     uint32_t get_end(){return this->end;}
     uint32_t get_locid(){return this->locid;}
     uint8_t get_strand(){return this->strand;}
@@ -146,6 +148,7 @@ private:
     uint32_t start=MAX_INT,end = 0;
     uint8_t strand;
     uint32_t locid=0;
+    float abundance = 0.0;
     bool empty = true;
 };
 
@@ -241,6 +244,8 @@ public:
         return this->loci[index];
     }
 
+    void set_precomputed_abundances(){this->precomputed_abundances = true;}
+
     void add_locus(uint32_t lid,uint32_t elen){
         this->loci[lid].set_elen(elen);
     }
@@ -257,8 +262,8 @@ public:
     }
 
     // the following method is used to normalize the locus counts
-    double get_abund(uint32_t locid){
-        return this->loci[locid].get_rpk()/this->scaling_factor;
+    double get_abund(uint32_t locid) {
+        return this->loci[locid].get_rpk() / this->scaling_factor;
     }
 
     double get_abund_total(uint32_t locid){
@@ -307,6 +312,7 @@ private:
     std::vector<Locus> loci;
     uint32_t nloc;
     double scaling_factor = 1.0,scaling_factor_total = 1.0;
+    bool precomputed_abundances = false;
 
     void _load(std::ifstream& locfp,char* buffer){
         int k = locfp.gcount();
@@ -543,6 +549,40 @@ public:
     Loci* loci;
     std::vector<GffTranscript>* transcriptome;
 
+    bool process_pos_precomp(Position& pos,Loci& loci){ // using precomputed abundance values only
+        this->ltf = this->lookup_table.find(pos);
+        if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
+            return true;
+        }
+        else{ // multimappers exist - need to evaluate
+            std::vector<double>abunds,res; // holds pid-corrected abundances
+            double total = 0;
+
+            this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
+            while(this->ii->second){ // iterate until the end of the block
+                // first need to compute expected values
+                // for this we need the uniq abundances which determine base likelihood
+                // as well as current assignments of multimappers
+                abunds.push_back(loci[this->ii->first.locus].get_abund());
+                total += abunds.back();
+
+                this->ii++; // step to the next position
+            }
+            abunds.push_back(loci[this->ii->first.locus].get_abund());
+            total += abunds.back();
+
+            for(auto &v : abunds){
+                res.push_back(v/total);
+            }
+
+            // now need to make the decision which is best
+            int pos_idx = this->get_likely(res,0.0,1.0);
+            // now follow the iterator to get the actual position object which corresponds to the selected item
+            pos = (this->index.begin()+this->ltf->second+pos_idx)->first;
+            return false;
+        }
+    }
+
     // given a position generated from an alignment this function searches for multimapper
     // and returns true if the position is not multimapping or false if it is multimapping
     // for multimappers, it also replaces the data in the position with a position selected by likelihood
@@ -593,6 +633,86 @@ public:
             int pos_idx = this->get_likely(res,0.0,1.0);
             // now follow the iterator to get the actual position object which corresponds to the selected item
             pos = (this->index.begin()+this->ltf->second+pos_idx)->first;
+            return false;
+        }
+    }
+
+    bool process_pos_pair_precomp(Position& pos,Position& pos_mate,Loci& loci){ // using precomputed abundance values only
+        this->ltf = this->lookup_table.find(pos);
+        if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
+            return true;
+        }
+        this->ltf_mate = this->lookup_table.find(pos_mate);
+        if(this->ltf_mate == this->lookup_table.end()){ // position is not a multimapper
+            return true;
+        }
+
+        else{ // multimappers exist - need to evaluate
+            std::vector<double> abunds,res; // holds pid-corrected abundances
+            double total=0;
+
+            this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
+            this->ii_mate = this->index.begin()+this->ltf_mate->second; // get iterator to the start of a multimapping block in the array
+            // here we rely on the sorted order of the multimappers in the index, which guarantees that multimappers on the same locus will appear close by
+            int idx=0,idx_mate=0; // indices help us keep track of the positions within multimapper blocks
+            int locus_index = 0; // indicates the position within block of the current locus
+            std::vector<std::pair<int,int>> multi_pairs; // holds offsets of the correct paired positions
+            while(true){
+                this->ii_mate = this->index.begin()+this->ltf_mate->second+locus_index; // reset iterator to the beginning
+                idx_mate = locus_index;
+                bool locus_found = false; // did the inner loop find the locus of the outer loop
+                while(true){
+                    if(this->ii->first.locus == this->ii_mate->first.locus &&
+                       std::abs((int)this->ii->first.start - (int)this->ii_mate->first.start) > this->fraglen){ // valid pair
+                        multi_pairs.push_back(std::make_pair(idx,idx_mate));
+                        locus_found = true;
+                    }
+                    if(this->ii->first.locus != this->ii_mate->first.locus){
+                        if(locus_found){ // exceeded current locus - can now terminate
+                            break;
+                        }
+                        else { // can reset locus index to skip iterations in future
+                            locus_index++;
+                        }
+                    }
+                    if(!this->ii_mate->second){
+                        break;
+                    }
+                    idx_mate++;
+                    this->ii_mate++;
+                }
+                if(!this->ii->second){
+                    break;
+                }
+                idx++;
+                this->ii++;
+            }
+            if(multi_pairs.empty()){
+                return true; // means no valid multimapping pairs were detected
+            }
+            // now compute abundances for all these blocks
+            this->ii = this->index.begin()+this->ltf->second; // return to the start of the multimapping block
+            this->ii_mate = this->index.begin()+this->ltf_mate->second; // same for the mate
+            for(auto & mp: multi_pairs){
+                // first need to compute expected values
+                // for this we need the uniq abundances which determine base likelihood
+                // as well as current assignments of multimappers
+                abunds.push_back(loci[(this->ii+mp.first)->first.locus].get_abund());
+                total += abunds.back();
+            }
+
+            for(auto &v : abunds){
+                res.push_back(v/total);
+            }
+
+            // now need to make the decision which is best
+            int pos_idx = this->get_likely(res,0.0,1.0);
+            // now follow the iterator to get the actual position object which corresponds to the selected item
+
+            int offset = multi_pairs[pos_idx].first; // get the actual offset
+            int offset_mate = multi_pairs[pos_idx].second;
+            pos = (this->index.begin()+this->ltf->second+offset)->first;
+            pos_mate = (this->index.begin()+this->ltf_mate->second+offset_mate)->first;
             return false;
         }
     }
@@ -702,6 +822,7 @@ public:
                 return i;
             }
         }
+        return abunds.size()-1;
     }
 
     void load(const std::string& input_file){

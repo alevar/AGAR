@@ -69,6 +69,9 @@ Indexer::Indexer(std::string gtf_fname, std::string genome_fname,const std::stri
     this->genome_headername = out_fname;
     this->genome_headername.append(".genome_header");
 
+    this->tgmap_fname = out_fname;
+    this->tgmap_fname.append(".tgmap"); // used as a map for salmon estimation
+
     genome_fname_ = std::move(genome_fname);
 
     this->multi =  multi;
@@ -123,6 +126,7 @@ void Indexer::make_transcriptome(){
     std::cerr<<"begin parsing transcriptome"<<std::endl;
 
     std::ofstream tlst(this->tlst_fname);
+    std::ofstream tgmap(this->tgmap_fname);
 
     while (fastaReader.good()) {
         fastaReader.next(cur_contig);
@@ -169,10 +173,12 @@ void Indexer::make_transcriptome(){
             out_rec.desc_.append(coordstr); //list of exon coordinates
             tlst << out_rec.id_ << '\t' << out_rec.desc_ << std::endl;
             tlst.flush();
+            tgmap << trans_idx <<"\t"<<found_gene->second.get_locid()<<std::endl; // TODO: need locus id for the map instead of the geneID
             fastaWriter.write(out_rec);
         }
     }
     tlst.close();
+    tgmap.close();
     std::cerr<<"done parsing transcriptome"<<std::endl;
 
     std::cerr<<"writing gene information"<<std::endl;
