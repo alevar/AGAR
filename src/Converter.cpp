@@ -7,6 +7,8 @@
 #include "Converter.h"
 #include "tokenize.h"
 
+// TODO: report how many multimappers were detected in the run
+
 // TODO: can be made better hash
 size_t cigar2hash(const int cigars[MAX_CIGARS],int n_cigar){
     size_t hash = 0;

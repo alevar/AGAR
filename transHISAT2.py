@@ -98,7 +98,7 @@ def main(args):
     parser_align.add_argument("--type",
                               type=str,
                               required=False,
-                              default="hisat",
+                              default="bowtie",
                               choices=["hisat", "bowtie"],
                               help="which aligner to use")
     parser_align.add_argument("--tmp",
