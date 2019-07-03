@@ -549,16 +549,32 @@ public:
     Loci* loci;
     std::vector<GffTranscript>* transcriptome;
 
-    bool process_pos_precomp(Position& pos,Loci& loci){ // using precomputed abundance values only
+    // copies the multimappers of the block pointed to by the current iterator
+    void copy_current(std::vector<Position>& pos_res){
+        while(this->ii->second){ // iterate until the end of the block
+            pos_res.push_back(this->ii->first);
+            this->ii++; // step to the next position
+        }
+        pos_res.push_back(this->ii->first);
+    }
+
+    // TODO: need to refactor the process_pos fnctions
+    //     mainly would prefer having a singl function that handles all cases and is no longer redundant
+    bool process_pos_precomp(Position& pos,Loci& loci,std::vector<Position>& pos_res){ // using precomputed abundance values only
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
             return true;
         }
         else{ // multimappers exist - need to evaluate
+            // if all mode - need to keep a bool and then just iterate through the entire block and output all values into a vector of positions which can be accessed by the converter and written to the alignment
             std::vector<double>abunds,res; // holds pid-corrected abundances
             double total = 0;
 
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
+            if(this->all_multi){ // just output the entire block
+                copy_current(pos_res);
+                return false; // done
+            }
             while(this->ii->second){ // iterate until the end of the block
                 // first need to compute expected values
                 // for this we need the uniq abundances which determine base likelihood
@@ -578,7 +594,7 @@ public:
             // now need to make the decision which is best
             int pos_idx = this->get_likely(res,0.0,1.0);
             // now follow the iterator to get the actual position object which corresponds to the selected item
-            pos = (this->index.begin()+this->ltf->second+pos_idx)->first;
+            pos_res.push_back((this->index.begin()+this->ltf->second+pos_idx)->first);
             return false;
         }
     }
@@ -586,7 +602,7 @@ public:
     // given a position generated from an alignment this function searches for multimapper
     // and returns true if the position is not multimapping or false if it is multimapping
     // for multimappers, it also replaces the data in the position with a position selected by likelihood
-    bool process_pos(Position& pos,Loci& loci){
+    bool process_pos(Position& pos,Loci& loci,std::vector<Position>& pos_res){
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
             return true;
@@ -596,6 +612,10 @@ public:
             double utotal=0,mtotal=0,rtotal=0;
 
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
+            if(this->all_multi){ // just output the entire block
+                copy_current(pos_res);
+                return false; // done
+            }
             while(this->ii->second){ // iterate until the end of the block
                 // first need to compute expected values
                 // for this we need the uniq abundances which determine base likelihood
@@ -632,12 +652,12 @@ public:
             // now need to make the decision which is best
             int pos_idx = this->get_likely(res,0.0,1.0);
             // now follow the iterator to get the actual position object which corresponds to the selected item
-            pos = (this->index.begin()+this->ltf->second+pos_idx)->first;
+            pos_res.push_back((this->index.begin()+this->ltf->second+pos_idx)->first);
             return false;
         }
     }
 
-    bool process_pos_pair_precomp(Position& pos,Position& pos_mate,Loci& loci){ // using precomputed abundance values only
+    bool process_pos_pair_precomp(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){ // using precomputed abundance values only
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
             return true;
@@ -693,6 +713,13 @@ public:
             // now compute abundances for all these blocks
             this->ii = this->index.begin()+this->ltf->second; // return to the start of the multimapping block
             this->ii_mate = this->index.begin()+this->ltf_mate->second; // same for the mate
+            if(this->all_multi){ // just output the entire block
+                for(auto & mp: multi_pairs) { // iterate over all the detected pairs
+                    pos_res.push_back((this->ii + mp.first)->first);
+                    pos_res_mate.push_back((this->ii + mp.second)->first);
+                }
+                return false; // done
+            }
             for(auto & mp: multi_pairs){
                 // first need to compute expected values
                 // for this we need the uniq abundances which determine base likelihood
@@ -711,13 +738,13 @@ public:
 
             int offset = multi_pairs[pos_idx].first; // get the actual offset
             int offset_mate = multi_pairs[pos_idx].second;
-            pos = (this->index.begin()+this->ltf->second+offset)->first;
-            pos_mate = (this->index.begin()+this->ltf_mate->second+offset_mate)->first;
+            pos_res.push_back((this->index.begin()+this->ltf->second+offset)->first);
+            pos_res_mate.push_back((this->index.begin()+this->ltf_mate->second+offset_mate)->first);
             return false;
         }
     }
 
-    bool process_pos_pair(Position& pos,Position& pos_mate,Loci& loci){
+    bool process_pos_pair(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
             return true;
@@ -773,6 +800,13 @@ public:
             // now compute abundances for all these blocks
             this->ii = this->index.begin()+this->ltf->second; // return to the start of the multimapping block
             this->ii_mate = this->index.begin()+this->ltf_mate->second; // same for the mate
+            if(this->all_multi){ // just output the entire block
+                for(auto & mp: multi_pairs) { // iterate over all the detected pairs
+                    pos_res.push_back((this->ii + mp.first)->first);
+                    pos_res_mate.push_back((this->ii + mp.second)->first);
+                }
+                return false; // done
+            }
             for(auto & mp: multi_pairs){
                 // first need to compute expected values
                 // for this we need the uniq abundances which determine base likelihood
@@ -806,8 +840,8 @@ public:
 
             int offset = multi_pairs[pos_idx].first; // get the actual offset
             int offset_mate = multi_pairs[pos_idx].second;
-            pos = (this->index.begin()+this->ltf->second+offset)->first;
-            pos_mate = (this->index.begin()+this->ltf_mate->second+offset_mate)->first;
+            pos_res.push_back((this->index.begin()+this->ltf->second+offset)->first);
+            pos_res_mate.push_back((this->index.begin()+this->ltf_mate->second+offset_mate)->first);
             return false;
         }
     }

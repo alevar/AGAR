@@ -173,7 +173,7 @@ void Indexer::make_transcriptome(){
             out_rec.desc_.append(coordstr); //list of exon coordinates
             tlst << out_rec.id_ << '\t' << out_rec.desc_ << std::endl;
             tlst.flush();
-            tgmap << trans_idx <<"\t"<<found_gene->second.get_locid()<<std::endl; // TODO: need locus id for the map instead of the geneID
+            tgmap << trans_idx <<"\t"<<found_gene->second.get_locid()<<std::endl;
             fastaWriter.write(out_rec);
         }
     }

@@ -322,8 +322,6 @@ void Converter::load_abundances(const std::string& abundFP){
         std::getline(*linestream,col,'\t'); // abundance here
         abundance = std::atof(col.c_str());
         this->loci[locid].set_abund(abundance);
-//        this->transcriptome[tid].abundance = abundance; // TODO: replace with locus-level abundance
-//        std::cout<<locid<<"\t"<<abundance<<std::endl;
         delete linestream;
     }
     abundstream.close();
@@ -496,6 +494,14 @@ void Converter::add_cigar(bam1_t *curAl,int num_cigars,int* cigars){
     curAl->m_data = m_data;
 }
 
+void Converter::change_nh_flag(bam1_t *curAl,int nh){
+    uint8_t* ptr_nh_1=bam_aux_get(curAl,"NH");
+    if(ptr_nh_1){
+        bam_aux_del(curAl,ptr_nh_1);
+    }
+    bam_aux_append(curAl,"NH",'i',4,(uint8_t*)&nh);
+}
+
 void Converter::add_aux(bam1_t *curAl,char xs){
     uint8_t* ptr=bam_aux_get(curAl,"XS");
     if(ptr){
@@ -514,15 +520,6 @@ void Converter::add_aux(bam1_t *curAl,char xs){
         bam_aux_del(curAl,ptr_op);
     }
     bam_aux_append(curAl,"OP",'i',4,(uint8_t*)&curAl->core.tid);
-
-    // NH tag should always stay at 1 since we only output one mappng even for multimappers
-    // due to the likelihood evaluation
-    int nh=1;
-    uint8_t* ptr_nh_1=bam_aux_get(curAl,"NH");
-    if(ptr_nh_1){
-        bam_aux_del(curAl,ptr_nh_1);
-    }
-    bam_aux_append(curAl,"NH",'i',4,(uint8_t*)&nh);
 }
 
 // this function modifies the flags for the alignment
@@ -588,10 +585,8 @@ void Converter::process_pair(bam1_t *curAl) {
         }
     }
 
-    this->evaluate_multimappers_pair(curAl,mate,cur_pos,cur_pos_mate,cigars,cigars_mate,num_cigars,num_cigars_mate);
+    this->evaluate_multimappers_pair(curAl,mate,cur_pos,cur_pos_mate,cigars,cigars_mate,num_cigars,num_cigars_mate); // also finishes the read
 
-    finish_read(curAl);
-    finish_read(mate);
     bam_destroy1(mate);
 }
 
@@ -608,9 +603,7 @@ void Converter::process_single(bam1_t *curAl){
         }
     }
 
-    this->evaluate_multimappers(curAl,cur_pos,cigars,num_cigars);
-
-    this->finish_read(curAl);
+    this->evaluate_multimappers(curAl,cur_pos,cigars,num_cigars); // also finishes the read
 }
 
 void Converter::add_multi_tag(bam1_t* curAl){
@@ -624,11 +617,12 @@ void Converter::add_multi_tag(bam1_t* curAl){
 void Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
                                                 int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate) {
     bool unique;
+    std::vector<Position> res_pos,res_pos_mate; // holds the results of the multimapper evaluation
     if(!this->abund){ // compute abundance dynamically
-        unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci);
+        unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
     }
     else{ // compute abundance dynamically
-        unique = this->mmap.process_pos_pair_precomp(cur_pos,cur_pos_mate,this->loci);
+        unique = this->mmap.process_pos_pair_precomp(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
     }
     if(unique){ // increment abundance
         if(!this->abund) {
@@ -642,73 +636,81 @@ void Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
         // add already computed cigar to the read
         add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
         add_cigar(curAl_mate, num_cigars_mate, cigars_mate); // will be performed afterwards
+        this->finish_read(curAl);
+        this->finish_read(curAl_mate);
     }
     else{
         add_multi_tag(curAl);
         add_multi_tag(curAl_mate);
-        // increment total abundances of the locus to which the new cur_pos belongs
-        if(!this->abund) {
-            this->loci.add_read_multi(cur_pos.locus);
-            this->loci.add_read_multi(cur_pos_mate.locus);
-        }
-
-        // first get the transcript
-        GffTranscript& new_trans = transcriptome[cur_pos.transID];
-        GVec<GSeg>& exon_list=new_trans.exons;
-        GSeg *next_exon=nullptr;
-        int32_t read_start=cur_pos.start;
-        int i=0;
-        for(;i<exon_list.Count();i++){
-            if(read_start>=exon_list[i].start && read_start<=exon_list[i].end){
-                break;
+        change_nh_flag(curAl,res_pos.size());
+        change_nh_flag(curAl_mate,res_pos.size());
+        for(int pos_idx=0;pos_idx<res_pos.size();pos_idx++){
+            // increment total abundances of the locus to which the new cur_pos belongs
+            if(!this->abund) {
+                this->loci.add_read_multi(res_pos[pos_idx].locus);
+                this->loci.add_read_multi(res_pos_mate[pos_idx].locus);
             }
-        }
 
-        GffTranscript& new_trans_mate = transcriptome[cur_pos_mate.transID];
-        GVec<GSeg>& exon_list_mate=new_trans_mate.exons;
-        GSeg *next_exon_mate=nullptr;
-        int32_t read_start_mate=cur_pos_mate.start;
-        int i_mate=0;
-        for(;i_mate<exon_list_mate.Count();i_mate++){
-            if(read_start_mate>=exon_list_mate[i_mate].start && read_start_mate<=exon_list_mate[i_mate].end){
-                break;
+            // first get the transcript
+            GffTranscript& new_trans = transcriptome[res_pos[pos_idx].transID];
+            GVec<GSeg>& exon_list=new_trans.exons;
+            GSeg *next_exon=nullptr;
+            int32_t read_start=res_pos[pos_idx].start;
+            int i=0;
+            for(;i<exon_list.Count();i++){
+                if(read_start>=exon_list[i].start && read_start<=exon_list[i].end){
+                    break;
+                }
             }
+
+            GffTranscript& new_trans_mate = transcriptome[res_pos_mate[pos_idx].transID];
+            GVec<GSeg>& exon_list_mate=new_trans_mate.exons;
+            GSeg *next_exon_mate=nullptr;
+            int32_t read_start_mate=res_pos_mate[pos_idx].start;
+            int i_mate=0;
+            for(;i_mate<exon_list_mate.Count();i_mate++){
+                if(read_start_mate>=exon_list_mate[i_mate].start && read_start_mate<=exon_list_mate[i_mate].end){
+                    break;
+                }
+            }
+
+            curAl->core.pos = res_pos[pos_idx].start-1;
+            curAl->core.mpos = res_pos_mate[pos_idx].start-1;
+            curAl_mate->core.pos = res_pos[pos_idx].start-1;
+            curAl_mate->core.mpos = res_pos[pos_idx].start-1;
+
+            // reconvert the cur_pos into a read and output
+            num_cigars = 0,num_cigars_mate = 0;
+            memset(cigars, 0, MAX_CIGARS);
+            memset(cigars_mate, 0, MAX_CIGARS);
+
+            int ret_val = Converter::convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,res_pos[pos_idx]);
+            if (!ret_val) {
+                std::cerr << "Can not create a new cigar string for the single read evaluate_multimapper_pair1" << std::endl;
+                exit(1);
+            }
+            add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
+            this->finish_read(curAl);
+
+            int ret_val_mate = Converter::convert_cigar(i_mate,next_exon_mate,exon_list_mate,num_cigars_mate,read_start_mate,curAl_mate,cigars_mate,res_pos_mate[pos_idx]);
+            if (!ret_val_mate) {
+                std::cerr << "Can not create a new cigar string for the single read evaluate_multimapper_pair2" << std::endl;
+                exit(1);
+            }
+            add_cigar(curAl_mate, num_cigars_mate, cigars_mate); // will be performed afterwards
+            this->finish_read(curAl_mate);
         }
-
-        curAl->core.pos = cur_pos.start-1;
-        curAl->core.mpos = cur_pos_mate.start-1;
-        curAl_mate->core.pos = cur_pos_mate.start-1;
-        curAl_mate->core.mpos = cur_pos.start-1;
-
-        // reconvert the cur_pos into a read and output
-        num_cigars = 0,num_cigars_mate = 0;
-        memset(cigars, 0, MAX_CIGARS);
-        memset(cigars_mate, 0, MAX_CIGARS);
-
-        int ret_val = Converter::convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,cur_pos);
-        if (!ret_val) {
-            std::cerr << "Can not create a new cigar string for the single read evaluate_multimapper_pair1" << std::endl;
-            exit(1);
-        }
-        add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
-
-        int ret_val_mate = Converter::convert_cigar(i_mate,next_exon_mate,exon_list_mate,num_cigars_mate,read_start_mate,curAl_mate,cigars_mate,cur_pos_mate);
-        if (!ret_val_mate) {
-            std::string test = cur_pos_mate.get_strg();
-            std::cerr << "Can not create a new cigar string for the single read evaluate_multimapper_pair2" << std::endl;
-            exit(1);
-        }
-        add_cigar(curAl_mate, num_cigars_mate, cigars_mate); // will be performed afterwards
     }
 }
 
 void Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){ // TODO: make sure only mapped reads are passed through this function
     bool unique;
+    std::vector<Position> res_pos; // holds the results of the multimapper evaluation
     if(!this->abund){ // compute abundance dynamically
-        unique = this->mmap.process_pos(cur_pos,this->loci);
+        unique = this->mmap.process_pos(cur_pos,this->loci,res_pos);
     }
     else{ // compute abundance dynamically
-        unique = this->mmap.process_pos_precomp(cur_pos,this->loci);
+        unique = this->mmap.process_pos_precomp(cur_pos,this->loci,res_pos);
     }
     if(unique){ // increment abundance
         if(!this->abund){
@@ -718,41 +720,47 @@ void Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars
         curAl->core.tid = cur_pos.chr;
         // add already computed cigar to the read
         add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
+        this->finish_read(curAl);
     }
     else{
         add_multi_tag(curAl);
-        // increment total abundances of the locus to which the new cur_pos belongs
+        change_nh_flag(curAl,res_pos.size());
+        for(auto &v : res_pos){
+            // modify the NH tag to include however many multimappers were added
 
-        if(!this->abund) {
-            this->loci.add_read_multi(cur_pos.locus);
-        }
-
-        // first get the transcript
-        GffTranscript& new_trans = transcriptome[cur_pos.transID];
-        GVec<GSeg>& exon_list=new_trans.exons;
-        GSeg *next_exon=nullptr;
-        int32_t read_start=cur_pos.start;
-        int i=0;
-        for(;i<exon_list.Count();i++){
-            if(read_start>=exon_list[i].start && read_start<=exon_list[i].end){
-                break;
+            // increment total abundances of the locus to which the new cur_pos belongs - performed for each locus if multiple positions are reported (all or -k)
+            if(!this->abund) {
+                this->loci.add_read_multi(v.locus);
             }
+
+            // first get the transcript
+            GffTranscript& new_trans = transcriptome[v.transID];
+            GVec<GSeg>& exon_list=new_trans.exons;
+            GSeg *next_exon=nullptr;
+            int32_t read_start=v.start;
+            int i=0;
+            for(;i<exon_list.Count();i++){
+                if(read_start>=exon_list[i].start && read_start<=exon_list[i].end){
+                    break;
+                }
+            }
+
+            curAl->core.pos = v.start-1; // assign new position
+            curAl->core.tid = v.chr;
+
+            // reconvert the cur_pos into a read and output
+            num_cigars = 0;
+            memset(cigars, 0, MAX_CIGARS);
+
+            int ret_val = Converter::convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,v);
+            if (!ret_val) {
+                std::cerr << "Can not create a new cigar string for the single read evaluate_multimappers" << std::endl;
+                exit(1);
+            }
+
+            add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
+            this->finish_read(curAl);
         }
-
-        curAl->core.pos = cur_pos.start-1; // assign new position
-        curAl->core.tid = cur_pos.chr;
-
-        // reconvert the cur_pos into a read and output
-        num_cigars = 0;
-        memset(cigars, 0, MAX_CIGARS);
-
-        int ret_val = Converter::convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,cur_pos);
-        if (!ret_val) {
-            std::cerr << "Can not create a new cigar string for the single read evaluate_multimappers" << std::endl;
-            exit(1);
-        }
-
-        add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
     }
 }
 

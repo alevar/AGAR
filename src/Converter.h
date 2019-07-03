@@ -442,6 +442,7 @@ private:
     bool get_read_start(GVec<GSeg>& exon_list,int32_t gff_start,int32_t& genome_start, int& exon_idx);
     void add_cigar(bam1_t *curAl,int num_cigars,int* cigars);
     void add_aux(bam1_t *curAl,char xs);
+    void change_nh_flag(bam1_t *curAl,int nh);
     void fix_flag(bam1_t *curAl);
     int collapse_genomic(bam1_t *curAl,size_t cigar_hash);
     int collapse_genomic(bam1_t *curAl,bam1_t *mateAl,size_t cigar_hash,size_t mate_cigar_hash);

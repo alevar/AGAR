@@ -6,8 +6,7 @@ import subprocess
 def main(args):
     assert os.path.exists(os.path.abspath(args.gff)), "gff annotation not found"
     assert os.path.exists(os.path.abspath(args.ref)), "reference file not found"
-    # TODO: replace the samtools faidx and build_header function with an implementation within gtf_to_fasta
-    # TODO: rename gtf_to_fasta to something else
+    # TODO: replace the samtools faidx with an implementation within gtf_to_fasta
     # TODO: create a new name for the tool
     if not os.path.exists(os.path.abspath(args.ref) + ".fai"):
         print("FASTA index for the reference genome not found. Building now.")

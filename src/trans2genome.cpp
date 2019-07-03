@@ -45,11 +45,8 @@ int main(int argc, char** argv) {
 
     // TODO: current branch work
     //       1. first implement discordnat pair handling -  namely, currently an alignment can be reported as discordant for two mates that map to different transcripts on the same locus, in which case, we should re-unite them and manage multimappers as a pair
-    //       2. secondly implement the -a mode to output all multimappers as before and compare the results
 
     // TODO: implement the -k mode in which only a certain number of most frequent multimappers is reported (2,3,etc depending on the value set)
-
-    // TODO: do any flags need to be fixed along with the auxilary tags?
 
     if(strcmp(argv[1],"--help")==0){
         std::cerr<<args.get_help()<<std::endl;
@@ -78,6 +75,6 @@ int main(int argc, char** argv) {
         converter.set_all_multi();
     }
     std::cerr<<"Begin Translating Coordinates"<<std::endl;
-    converter.convert_coords(); // TODO: need to make sure that multimappers are evaluated if the index is provided
+    converter.convert_coords();
     return 0;
 }
