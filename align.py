@@ -133,7 +133,9 @@ def main(args):
 
     # trans2genome
     print("converting coordinates to genomic")
-    trans2genome_cmd = ["trans2genome",
+    trans2genome_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                     'trans2genome')  # get path to the trans2genome that was compiled with the package
+    trans2genome_cmd = [trans2genome_path,
                         "-x", os.path.abspath(args.db) + "/db",
                         "-i", os.path.abspath(cur_tmp) + "/sample.trans_first.bam",
                         "-o", os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam",
