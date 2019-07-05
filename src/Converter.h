@@ -393,8 +393,13 @@ public:
     void set_fraglen(int fraglen);
     void set_num_multi(int num_multi);
     void set_all_multi();
+    void set_misalign();
 
 private:
+    // MISALIGNMENT METHODS AND DECLARATIONS
+    bool detect_misalign = false;
+    bool evaluate_errors(bam1_t *curAl); // returns true if the read passes the error check
+
     // INDEX METHODS
     void load_index(const std::string& index_base,bool multi);
     void load_info(const std::string& info_fname);

@@ -24,7 +24,8 @@ enum Opt {IN_AL   = 'i',
         UNIQ      = 'q',
         FRAGLEN   = 'f',
         ALL_MULTI = 'l',
-        NUM_MULTI = 'k'};
+        NUM_MULTI = 'k',
+        MISALIGN  = 's'};
 
 int main(int argc, char** argv) {
 
@@ -38,8 +39,9 @@ int main(int argc, char** argv) {
     args.add_flag(Opt::UNALIGNED,"unal","search for unaligned reads, extract from alignment into separate files",false);
     args.add_flag(Opt::UNIQ,"uniq","input alignment contains only 1 mapping per read (no secondary alignments present such as in bowtie k1 mode)",false);
     args.add_int(Opt::FRAGLEN,"fraglen",200000,"fragment length of the paired reads",false);
-    args.add_flag(Opt::ALL_MULTI,"all","whether to output all multimappers and not assign them based on likelihood. This flag negates -k",false); // TODO: needs to be implemented
+    args.add_flag(Opt::ALL_MULTI,"all","whether to output all multimappers and not assign them based on likelihood. This flag negates -k",false);
     args.add_int(Opt::NUM_MULTI,"nmult",1,"The number of most likely multimappers to report",false); // TODO: needs to be implemented
+    args.add_flag(Opt::MISALIGN,"mis","try to eliminate misaligned reads based on the error distribution",false); // TODO: needs to be implemented
 
     // TODO: compile the new version of hisat2 which does not miss the frequent multimappers and test wether it performs faster/better than the bowtie2 mode - does anything need ot be changed?
 
@@ -71,8 +73,11 @@ int main(int argc, char** argv) {
     if(args.is_set(Opt::NUM_MULTI)){
         converter.set_num_multi(args.get_int(Opt::NUM_MULTI));
     }
-    if(args.is_set(Opt::ALL_MULTI)){
+    if(args.is_set(Opt::ALL_MULTI)){ // TODO: does this need to be converted into get_flag isntead of is_set?
         converter.set_all_multi();
+    }
+    if(args.get_flag(Opt::MISALIGN)){
+        converter.set_misalign();
     }
     std::cerr<<"Begin Translating Coordinates"<<std::endl;
     converter.convert_coords();

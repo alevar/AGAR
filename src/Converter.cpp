@@ -99,6 +99,10 @@ void Converter::set_all_multi() {
     this->mmap.set_all_multi();
 }
 
+void Converter::set_misalign() {
+    this->detect_misalign = true;
+}
+
 void Converter::load_info(const std::string& info_fname){
     // read file to get important stats
     struct stat buffer{};
@@ -328,6 +332,12 @@ void Converter::load_abundances(const std::string& abundFP){
     std::cerr<<"Loaded transcript abundance data"<<std::endl;
 }
 
+// this metod performs evaluation of errors detected by the aligner
+// and decides whether the read needs to be processed or not
+bool Converter::evaluate_errors(bam1_t *curAl){ // return true if the read passes the error check
+    return true;
+}
+
 void Converter::convert_coords(){
     bam1_t *curAl = bam_init1(); // initialize the alignment record
 
@@ -339,6 +349,15 @@ void Converter::convert_coords(){
         }
 
         // TODO: need to output proper log files so that we can detect when something goes wrong when realigning GTEx
+
+        // first evaluate the error-rate of the read
+        bool ret = Converter::evaluate_errors(curAl);
+        // if the read is aligned as part of a pair and the current mate does not pass the error check
+        // it then needs to be processed as a singleton (if the other mate passes the error check)
+        if(!ret){
+            continue; // didn't pass the error check - continue to the next read
+            // TODO: needs to remember the info for mated reads (or to be evaluated as part of the pair
+        }
 
         // otherwise we proceed to evaluate the reads accordingly
         // first check if belongs to a valid pair
