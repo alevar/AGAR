@@ -398,24 +398,24 @@ public:
         sum_nm=sum_nm+cur_nm;
         mean_nm = sum_nm/num_reads;
         std2 = std::sqrt(mean_nm);
+        std2_bound = std2*2; // two standard deviations
         this->observed[cur_nm]++;
 
-        // TODO: compute likelihood and return if needs to be written or not
-        return cur_nm<=std2;
+        return cur_nm<=std2_bound;
     }
 private:
     std::vector<uint32_t> observed = std::vector<uint32_t>(MAX_EDITS);
     int num_reads=0,sum_nm=0,cur_nm=0;
-    float mean_nm,std2;
+    float mean_nm,std2,std2_bound;
 
     bool is_likely(int cur_nm){ // TODO: is this function useful?
-        return true; // TODO:
+        return true; // TODO: implementation if needed
     }
 
     uint32_t get_nm(bam1_t *al){
         uint8_t* ptr_nm_1=bam_aux_get(al,"NM");
         if(ptr_nm_1){
-            return bam_aux2i(ptr_nm_1); // TODO
+            return bam_aux2i(ptr_nm_1);
         }
         else{
             return md2nm();
@@ -452,10 +452,13 @@ private:
     ErrorCheck errorCheck;
     bool detect_misalign = false;
     bool evaluate_errors(bam1_t *curAl); // returns true if the read passes the error check
-    void write_unaligned(bam1_t *curAl);
+    void write_unaligned(bam1_t *curAl,std::ofstream &out_ss);
+    void write_unaligned_pair(bam1_t *curAl,bam1_t *mate);
     std::string unal_r1_fname,unal_r2_fname,unal_s_fname;
     std::ofstream unal_r1,unal_r2,unal_s;
     int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
+    int8_t *buf = NULL;
+    size_t max_buf = 0;
 
     // INDEX METHODS
     void load_index(const std::string& index_base,bool multi);

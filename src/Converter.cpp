@@ -77,6 +77,8 @@ Converter::~Converter() {
     this->unal_r1.close();
     this->unal_r2.close();
     this->unal_s.close();
+
+    free(buf);
 }
 
 void Converter::set_unaligned(){
@@ -376,14 +378,15 @@ void Converter::precompute(int perc){
     this->al_hdr=sam_hdr_read(this->al); // read the current alignment header
 }
 
+void Converter::write_unaligned_pair(bam1_t *curAl,bam1_t *mate) {
+    Converter::write_unaligned(curAl,this->unal_r1);
+    Converter::write_unaligned(mate,this->unal_r2);
+}
+
 // this function writes reads as unaligned
 // implementation is mostly from the bam2fq
-void Converter::write_unaligned(bam1_t *curAl){
-    this->unal_s << "@" << bam_get_qname(curAl) << "\n";
-    int8_t *buf;
-    buf = NULL;
-    size_t max_buf;
-    max_buf = 0;
+void Converter::write_unaligned(bam1_t *curAl,std::ofstream &out_ss){ // TODO: need detection of fasta vs fastq - this can be done when pre-loading information
+    out_ss << "@" << bam_get_qname(curAl) << "\n";
     int i;
     int32_t qlen = curAl->core.l_qseq;
     assert(qlen >= 0);
@@ -417,11 +420,11 @@ void Converter::write_unaligned(bam1_t *curAl){
     for (i = 0; i < qlen; ++i) {
         buf[i] = seq_nt16_str[buf[i]];
     }
-    this->unal_s << (char*)buf<<std::endl;
+    out_ss << (char*)buf<<std::endl;
 
     if (has_qual) {
         // Write quality
-        this->unal_s << "+\n";
+        out_ss << "+\n";
         if (oq) memcpy(buf, oq + 1, qlen);
         else {
             for (i = 0; i < qlen; ++i)
@@ -434,7 +437,7 @@ void Converter::write_unaligned(bam1_t *curAl){
                 buf[i] = t;
             }
         }
-        this->unal_s << (char*)buf<<std::endl;
+        out_ss << (char*)buf<<std::endl;
     }
 }
 
@@ -450,25 +453,12 @@ void Converter::convert_coords(){
 
         // TODO: need to output proper log files so that we can detect when something goes wrong when realigning GTEx
 
-        // first evaluate the error-rate of the read
-        bool ret = Converter::evaluate_errors(curAl);
-        // if the read is aligned as part of a pair and the current mate does not pass the error check
-        // it then needs to be processed as a singleton (if the other mate passes the error check)
-        if(!ret){
-            // need to write to the output fasta file the detected poorly aligned reads for realignment
-            Converter::write_unaligned(curAl); // TODO: needs to properly handle pairs
-            continue; // didn't pass the error check - continue to the next read
-            // TODO: needs to remember the info for mated reads (or to be evaluated as part of the pair)
-        }
-
         // otherwise we proceed to evaluate the reads accordingly
         // first check if belongs to a valid pair
         if(this->has_valid_mate(curAl)){ // belongs to a valid pair
             this->process_pair(curAl);
         }
-//        else if(this->has_mate(curAl)){ // TODO: this is the case when mates are aligned to different transcripts on the same locus, or can be re-united
-//            this-
-//        }
+
         else{ // does not belong to a valid pair
             this->process_single(curAl);
         }
@@ -683,6 +673,7 @@ int Converter::collapse_genomic(bam1_t *curAl, bam1_t *mateAl,size_t cigar_hash,
 }
 
 void Converter::process_pair(bam1_t *curAl) {
+
     // need a queue to hold and release pairs
     bam1_t* mate = bam_init1();
     int ret = this->pairs.add(curAl,mate);
@@ -691,28 +682,91 @@ void Converter::process_pair(bam1_t *curAl) {
         bam_destroy1(mate);
         return;
     }
-    Position cur_pos,cur_pos_mate;
-    int cigars[MAX_CIGARS];
-    int num_cigars=0;
-    int cigars_mate[MAX_CIGARS];
-    int num_cigars_mate=0;
-    cigar_hash = process_read(curAl,cur_pos,cigars,num_cigars);
-    mate_cigar_hash = process_read(mate,cur_pos_mate,cigars_mate,num_cigars_mate);
 
-    if(!this->k1_mode){
-        int ret_val = collapse_genomic(curAl,mate,cigar_hash,mate_cigar_hash);
-        if(!ret_val) {
-            bam_destroy1(mate);
-            return;
-        }
+    // Now that both mates of an alignment are found - first evaluate the error-rate of the read
+    bool ret_err1 = Converter::evaluate_errors(curAl);
+    bool ret_err2 = Converter::evaluate_errors(mate);
+    // if the read is aligned as part of a pair and the current mate does not pass the error check
+    // it then needs to be processed as a singleton (if the other mate passes the error check)
+    if(!ret_err1 && !ret_err2){ // entire pair didn't pass the error check - continue to the next read
+        // need to write to the output fasta file the detected poorly aligned reads for realignment
+        Converter::write_unaligned_pair(curAl,mate);
+        return;
     }
+    else if(!ret_err1){
+        Converter::write_unaligned(curAl,this->unal_s);
 
-    this->evaluate_multimappers_pair(curAl,mate,cur_pos,cur_pos_mate,cigars,cigars_mate,num_cigars,num_cigars_mate); // also finishes the read
+        Position cur_pos_mate;
+        int cigars_mate[MAX_CIGARS];
+        int num_cigars_mate=0;
+        size_t cigar_hash_mate = this->process_read(mate,cur_pos_mate,cigars_mate,num_cigars_mate);
 
-    bam_destroy1(mate);
+        if(!this->k1_mode){
+            int ret_val = collapse_genomic(mate,cigar_hash_mate);
+            if(!ret_val) {
+                return;
+            }
+        }
+
+        this->evaluate_multimappers(mate,cur_pos_mate,cigars_mate,num_cigars_mate); // also finishes the read
+
+        bam_destroy1(mate);
+        return;
+    }
+    else if(!ret_err2){
+        Converter::write_unaligned(mate,this->unal_s);
+
+        Position cur_pos;
+        int cigars[MAX_CIGARS];
+        int num_cigars=0;
+        size_t cigar_hash = this->process_read(curAl,cur_pos,cigars,num_cigars);
+
+        if(!this->k1_mode){
+            int ret_val = collapse_genomic(curAl,cigar_hash);
+            if(!ret_val) {
+                return;
+            }
+        }
+
+        this->evaluate_multimappers(curAl,cur_pos,cigars,num_cigars); // also finishes the read
+
+        bam_destroy1(mate);
+        return;
+    }
+    else{
+        Position cur_pos,cur_pos_mate;
+        int cigars[MAX_CIGARS];
+        int num_cigars=0;
+        int cigars_mate[MAX_CIGARS];
+        int num_cigars_mate=0;
+        cigar_hash = process_read(curAl,cur_pos,cigars,num_cigars);
+        mate_cigar_hash = process_read(mate,cur_pos_mate,cigars_mate,num_cigars_mate);
+
+        if(!this->k1_mode){
+            int ret_val = collapse_genomic(curAl,mate,cigar_hash,mate_cigar_hash);
+            if(!ret_val) {
+                bam_destroy1(mate);
+                return;
+            }
+        }
+
+        this->evaluate_multimappers_pair(curAl,mate,cur_pos,cur_pos_mate,cigars,cigars_mate,num_cigars,num_cigars_mate); // also finishes the read
+
+        bam_destroy1(mate);
+    }
 }
 
 void Converter::process_single(bam1_t *curAl){
+    // first evaluate the error-rate of the read
+    bool ret_err = Converter::evaluate_errors(curAl);
+    // if the read is aligned as part of a pair and the current mate does not pass the error check
+    // it then needs to be processed as a singleton (if the other mate passes the error check)
+    if(!ret_err){
+        // need to write to the output fasta file the detected poorly aligned reads for realignment
+        Converter::write_unaligned(curAl,this->unal_s);
+        return; // didn't pass the error check - continue to the next read
+    }
+
     Position cur_pos;
     int cigars[MAX_CIGARS];
     int num_cigars=0;
