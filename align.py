@@ -139,11 +139,14 @@ def main(args):
                         "-x", os.path.abspath(args.db) + "/db",
                         "-i", os.path.abspath(cur_tmp) + "/sample.trans_first.bam",
                         "-o", os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam",
-                        "-q", "-p", "1"]
+                        "-q", "-p", "1", "-s", "-l"]
     if args.mf:
         trans2genome_cmd.append("-m")
     if args.abunds is not None:
         trans2genome_cmd.extend(["-a", args.abunds])
+    unaligned_r1 = unaligned_r1+","+os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r1.fastq"
+    unaligned_r2 = unaligned_r2+","+os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r2.fastq"
+    unaligned_s = unaligned_s+","+os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_s.fastq"
     trans2genome_process = subprocess.Popen(trans2genome_cmd)
 
     # locus-level alignment
@@ -180,6 +183,8 @@ def main(args):
         locus_process.wait()
         locus_process.stdout.close()
 
+    trans2genome_process.wait()
+
     print("aligning with hisat2 against the genome")
     hisat2_cmd_genome = ["hisat2",
                          "--very-sensitive",
@@ -200,8 +205,6 @@ def main(args):
 
     genome_process.wait()  # allows trans2genome to run at the same time as hisat2
     genome_process.stdout.close()
-
-    trans2genome_process.wait()
 
     if not args.keep:
         if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.1.fq"):
