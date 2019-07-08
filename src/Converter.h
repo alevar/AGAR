@@ -34,6 +34,8 @@
 #define BAM_CDIFF   8
 #define MAX_CIGARS  1024
 
+#define MAX_EDITS 100
+
 #include <cassert>
 
 // TODO: for the final version it needs to scan through the first n reads to check for constraints
@@ -376,6 +378,33 @@ private:
             this->genomic_positions.clear();
             this->last_readname = bam_get_qname(al);
         }
+    }
+};
+
+// this clss stores and evaluates information regading edit distances
+class ErrorCheck{
+public:
+    ErrorCheck() = default;
+    ~ErrorCheck() = default;
+
+    bool add_read(bam1_t *al){ // returns true if read passes error-check; otherwise returns false
+
+    }
+private:
+    std::vector<uint32_t> observed = std::vector<uint32_t>(MAX_EDITS);
+
+    uint32_t get_nm(bam1_t *al){
+        uint8_t* ptr_nh_1=bam_aux_get(al,"NM");
+        if(ptr_nh_1){
+            return 0; // TODO
+        }
+        else{
+            return md2nm();
+        }
+    }
+
+    uint32_t md2nm() {
+        return 0; // TODO: add parsing of MD tag if NM is not unavailable
     }
 };
 

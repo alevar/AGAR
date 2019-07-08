@@ -45,8 +45,7 @@ Indexer::Indexer(std::string gtf_fname, std::string genome_fname,const std::stri
     gtf_fhandle_ = fopen(gtf_fname_.c_str(), "r");
     if (gtf_fhandle_ == nullptr)
     {
-        std::cerr << "FATAL: Couldn't open annotation: " << gtf_fname_
-        << std::endl;
+        std::cerr << "FATAL: Couldn't open annotation: " << gtf_fname_<< std::endl;
         exit(1);
     }
     std::cout << "Reading the annotation file: " << gtf_fname_ << std::endl;
@@ -150,7 +149,7 @@ void Indexer::make_transcriptome(){
             this->add_to_geneMap(*p_trans);
 
             std::string coordstr;
-            out_rec.seq_ = get_exonic_sequence(*p_trans, cur_contig, coordstr,trans_idx);
+            out_rec.seq_ = get_exonic_sequence(*p_trans,cur_contig, coordstr,trans_idx);
             if (out_rec.seq_.empty());
             std::stringstream ss;
             ss << trans_idx;

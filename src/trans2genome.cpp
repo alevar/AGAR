@@ -50,6 +50,10 @@ int main(int argc, char** argv) {
 
     // TODO: implement the -k mode in which only a certain number of most frequent multimappers is reported (2,3,etc depending on the value set)
 
+    // TODO: output log - should include:
+    //    1. number discarded due to error checking
+    //    2. number not found in the multimapper lookup dues to smaller or greater length of reads
+
     if(strcmp(argv[1],"--help")==0){
         std::cerr<<args.get_help()<<std::endl;
         exit(1);
