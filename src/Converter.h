@@ -16,6 +16,7 @@
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
+#include <math.h>
 
 //#include <htslib/khash.h> // TODO: consider moving the implementation to a better hashmap (such as khash or something else)
 #include <htslib/sam.h>
@@ -263,7 +264,11 @@ namespace std {
 class Pairs{
 public:
     Pairs() = default;
-    ~Pairs() = default;
+    ~Pairs(){
+        for(auto &v : this->mates){
+            bam_destroy1(v.second);
+        }
+    };
 
     int add(bam1_t *al,bam1_t *mate){ // add read to the stack
         MapID m(al);
@@ -387,16 +392,30 @@ public:
     ErrorCheck() = default;
     ~ErrorCheck() = default;
 
-    bool add_read(bam1_t *al){ // returns true if read passes error-check; otherwise returns false
+    bool add_read(bam1_t *al){ // returns true if read passes error-check; otherwise returns false; also appends reads to the distribution
+        cur_nm = get_nm(al);
+        num_reads++;
+        sum_nm=sum_nm+cur_nm;
+        mean_nm = sum_nm/num_reads;
+        std2 = std::sqrt(mean_nm);
+        this->observed[cur_nm]++;
 
+        // TODO: compute likelihood and return if needs to be written or not
+        return cur_nm<=std2;
     }
 private:
     std::vector<uint32_t> observed = std::vector<uint32_t>(MAX_EDITS);
+    int num_reads=0,sum_nm=0,cur_nm=0;
+    float mean_nm,std2;
+
+    bool is_likely(int cur_nm){ // TODO: is this function useful?
+        return true; // TODO:
+    }
 
     uint32_t get_nm(bam1_t *al){
-        uint8_t* ptr_nh_1=bam_aux_get(al,"NM");
-        if(ptr_nh_1){
-            return 0; // TODO
+        uint8_t* ptr_nm_1=bam_aux_get(al,"NM");
+        if(ptr_nm_1){
+            return bam_aux2i(ptr_nm_1); // TODO
         }
         else{
             return md2nm();
@@ -404,9 +423,12 @@ private:
     }
 
     uint32_t md2nm() {
+        std::cerr<<"Computing from md tag"<<std::endl;
         return 0; // TODO: add parsing of MD tag if NM is not unavailable
     }
 };
+
+#include <fstream>
 
 class Converter{
 public:
@@ -416,6 +438,7 @@ public:
     void load_abundances(const std::string& abundFP); // add abundances to the transcripts
 
     void convert_coords();
+    void precompute(int perc);
     void print_multimappers();
     void set_unaligned();
     void set_k1();
@@ -426,8 +449,13 @@ public:
 
 private:
     // MISALIGNMENT METHODS AND DECLARATIONS
+    ErrorCheck errorCheck;
     bool detect_misalign = false;
     bool evaluate_errors(bam1_t *curAl); // returns true if the read passes the error check
+    void write_unaligned(bam1_t *curAl);
+    std::string unal_r1_fname,unal_r2_fname,unal_s_fname;
+    std::ofstream unal_r1,unal_r2,unal_s;
+    int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
 
     // INDEX METHODS
     void load_index(const std::string& index_base,bool multi);

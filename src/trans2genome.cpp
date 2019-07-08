@@ -25,7 +25,8 @@ enum Opt {IN_AL   = 'i',
         FRAGLEN   = 'f',
         ALL_MULTI = 'l',
         NUM_MULTI = 'k',
-        MISALIGN  = 's'};
+        MISALIGN  = 's',
+        PERCENT   = 'e'};
 
 int main(int argc, char** argv) {
 
@@ -42,6 +43,7 @@ int main(int argc, char** argv) {
     args.add_flag(Opt::ALL_MULTI,"all","whether to output all multimappers and not assign them based on likelihood. This flag negates -k",false);
     args.add_int(Opt::NUM_MULTI,"nmult",1,"The number of most likely multimappers to report",false); // TODO: needs to be implemented
     args.add_flag(Opt::MISALIGN,"mis","try to eliminate misaligned reads based on the error distribution",false); // TODO: needs to be implemented
+    args.add_int(Opt::PERCENT,"perc",10,"percent of the reads to be evaluated when pre-loading data before parsing",false);
 
     // TODO: compile the new version of hisat2 which does not miss the frequent multimappers and test wether it performs faster/better than the bowtie2 mode - does anything need ot be changed?
 
@@ -77,13 +79,20 @@ int main(int argc, char** argv) {
     if(args.is_set(Opt::NUM_MULTI)){
         converter.set_num_multi(args.get_int(Opt::NUM_MULTI));
     }
-    if(args.is_set(Opt::ALL_MULTI)){ // TODO: does this need to be converted into get_flag isntead of is_set?
+    if(args.is_set(Opt::ALL_MULTI)){ // TODO: does this need to be converted into get_flag instead of is_set?
         converter.set_all_multi();
     }
     if(args.get_flag(Opt::MISALIGN)){
         converter.set_misalign();
     }
+
+    std::cerr<<"Begin pre-loading data"<<std::endl;
+    converter.precompute(args.get_int(Opt::PERCENT));
+    std::cerr<<"Done pre-loading data"<<std::endl;
+
     std::cerr<<"Begin Translating Coordinates"<<std::endl;
     converter.convert_coords();
+    std::cerr<<"Done Translating Coordinates"<<std::endl;
+
     return 0;
 }

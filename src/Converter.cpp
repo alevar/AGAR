@@ -38,6 +38,7 @@ void print_aux(bam1_t *al) {
 Converter::Converter(const std::string& alFP,const std::string& outFP,const std::string& index_base,const int& threads,bool multi){
     this->numThreads=threads;
     this->outFP = outFP;
+    this->alFP = alFP;
 
     // now load the index
     this->load_index(index_base,multi);
@@ -72,6 +73,10 @@ Converter::~Converter() {
     sam_close(this->genome_al);
     sam_close(outSAM);
     bam_hdr_destroy(this->outSAM_header);
+
+    this->unal_r1.close();
+    this->unal_r2.close();
+    this->unal_s.close();
 }
 
 void Converter::set_unaligned(){
@@ -101,6 +106,19 @@ void Converter::set_all_multi() {
 
 void Converter::set_misalign() {
     this->detect_misalign = true;
+
+    // init output files
+    this->unal_r1_fname = outFP;
+    this->unal_r1_fname.append(".unal_r1.fastq");
+    this->unal_r1.open(this->unal_r1_fname, std::ofstream::out | std::ofstream::trunc);
+
+    this->unal_r2_fname = outFP;
+    this->unal_r2_fname.append(".unal_r2.fastq");
+    this->unal_r2.open(this->unal_r2_fname, std::ofstream::out | std::ofstream::trunc);
+
+    this->unal_s_fname = outFP;
+    this->unal_s_fname.append(".unal_s.fastq");
+    this->unal_s.open(this->unal_s_fname, std::ofstream::out | std::ofstream::trunc);
 }
 
 void Converter::load_info(const std::string& info_fname){
@@ -335,7 +353,89 @@ void Converter::load_abundances(const std::string& abundFP){
 // this metod performs evaluation of errors detected by the aligner
 // and decides whether the read needs to be processed or not
 bool Converter::evaluate_errors(bam1_t *curAl){ // return true if the read passes the error check
-    return true;
+    return this->errorCheck.add_read(curAl);
+}
+
+// this function cycles through a section of the bam file loads some preliminary data
+// necessary for thecoorect parsing of the errors, multimappers, etc
+void Converter::precompute(int perc){
+    bam1_t *curAl = bam_init1(); // initialize the alignment record
+
+    int counter=0;
+    while(sam_read1(al,al_hdr,curAl)>0) { // only perfom if unaligned flag is set to true
+        if(counter%perc==0){
+            bool ret = Converter::evaluate_errors(curAl); // add to the error checks
+        }
+        counter++;
+    }
+    bam_destroy1(curAl);
+
+    bam_hdr_destroy(this->al_hdr);
+    sam_close(this->al);
+    this->al=hts_open(this->alFP.c_str(),"r");
+    this->al_hdr=sam_hdr_read(this->al); // read the current alignment header
+}
+
+// this function writes reads as unaligned
+// implementation is mostly from the bam2fq
+void Converter::write_unaligned(bam1_t *curAl){
+    this->unal_s << "@" << bam_get_qname(curAl) << "\n";
+    int8_t *buf;
+    buf = NULL;
+    size_t max_buf;
+    max_buf = 0;
+    int i;
+    int32_t qlen = curAl->core.l_qseq;
+    assert(qlen >= 0);
+    uint8_t* seq;
+    uint8_t* qual = bam_get_qual(curAl);
+    const uint8_t *oq = bam_aux_get(curAl, "OQ");
+    bool has_qual = (qual[0] != 0xff || (oq)); // test if there is quality
+
+    if (max_buf < qlen + 1) {
+        max_buf = qlen + 1;
+        kroundup32(max_buf);
+        buf = static_cast<int8_t *>(realloc(buf, max_buf));
+        if (buf == NULL) {
+            fprintf(stderr, "Out of memory");
+            exit(1);
+        }
+    }
+
+    buf[qlen] = '\0';
+    seq = bam_get_seq(curAl);
+    for (i = 0; i < qlen; ++i)
+        buf[i] = bam_seqi(seq, i);
+    if (curAl->core.flag & BAM_FREVERSE) { // reverse complement
+        for (i = 0; i < qlen>>1; ++i) {
+            int8_t t = seq_comp_table[buf[qlen - 1 - i]];
+            buf[qlen - 1 - i] = seq_comp_table[buf[i]];
+            buf[i] = t;
+        }
+        if (qlen&1) buf[i] = seq_comp_table[buf[i]];
+    }
+    for (i = 0; i < qlen; ++i) {
+        buf[i] = seq_nt16_str[buf[i]];
+    }
+    this->unal_s << (char*)buf<<std::endl;
+
+    if (has_qual) {
+        // Write quality
+        this->unal_s << "+\n";
+        if (oq) memcpy(buf, oq + 1, qlen);
+        else {
+            for (i = 0; i < qlen; ++i)
+                buf[i] = 33 + qual[i];
+        }
+        if (curAl->core.flag & BAM_FREVERSE) { // reverse
+            for (i = 0; i < qlen>>1; ++i) {
+                int8_t t = buf[qlen - 1 - i];
+                buf[qlen - 1 - i] = buf[i];
+                buf[i] = t;
+            }
+        }
+        this->unal_s << (char*)buf<<std::endl;
+    }
 }
 
 void Converter::convert_coords(){
@@ -355,8 +455,10 @@ void Converter::convert_coords(){
         // if the read is aligned as part of a pair and the current mate does not pass the error check
         // it then needs to be processed as a singleton (if the other mate passes the error check)
         if(!ret){
+            // need to write to the output fasta file the detected poorly aligned reads for realignment
+            Converter::write_unaligned(curAl); // TODO: needs to properly handle pairs
             continue; // didn't pass the error check - continue to the next read
-            // TODO: needs to remember the info for mated reads (or to be evaluated as part of the pair
+            // TODO: needs to remember the info for mated reads (or to be evaluated as part of the pair)
         }
 
         // otherwise we proceed to evaluate the reads accordingly
@@ -600,6 +702,7 @@ void Converter::process_pair(bam1_t *curAl) {
     if(!this->k1_mode){
         int ret_val = collapse_genomic(curAl,mate,cigar_hash,mate_cigar_hash);
         if(!ret_val) {
+            bam_destroy1(mate);
             return;
         }
     }
