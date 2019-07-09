@@ -133,23 +133,33 @@ def main(args):
 
     # trans2genome
     print("converting coordinates to genomic")
-    trans2genome_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                     'trans2genome')  # get path to the trans2genome that was compiled with the package
+    trans2genome_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),'trans2genome')  # get path to the trans2genome that was compiled with the package
     trans2genome_cmd = [trans2genome_path,
                         "-x", os.path.abspath(args.db) + "/db",
                         "-i", os.path.abspath(cur_tmp) + "/sample.trans_first.bam",
                         "-o", os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam",
-                        "-q", "-p", "1", "-s", "-l"]
+                        "-q", "-p", str(args.threads)]
     if args.mf:
         trans2genome_cmd.append("-m")
     if args.abunds is not None:
         trans2genome_cmd.extend(["-a", args.abunds])
-    unaligned_r1 = unaligned_r1+","+os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r1.fastq"
-    unaligned_r2 = unaligned_r2+","+os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r2.fastq"
-    unaligned_s = unaligned_s+","+os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_s.fastq"
+    if args.all is not None:
+        trans2genome_cmd.extend(["-l"])
+    if args.errcheck:
+        trans2genome_cmd.extend(["-s"])
+    
     trans2genome_process = subprocess.Popen(trans2genome_cmd)
+    trans2genome_process.wait()
 
-    # locus-level alignment
+    if args.errcheck:
+        if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r1.fastq"):
+            unaligned_r1 = unaligned_r1+","+os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r1.fastq"
+        if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r1.fastq"):
+            unaligned_r2 = unaligned_r2+","+os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r2.fastq"
+        if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r1.fastq"):
+            unaligned_s = unaligned_s+","+os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_s.fastq"
+        
+        # locus-level alignment
     bowtie2_cmd_locus = None
     if args.locus and args.type == "bowtie":
         print("performing the locus lookup using bowtie")
@@ -182,8 +192,6 @@ def main(args):
     if args.locus:
         locus_process.wait()
         locus_process.stdout.close()
-
-    trans2genome_process.wait()
 
     print("aligning with hisat2 against the genome")
     hisat2_cmd_genome = ["hisat2",

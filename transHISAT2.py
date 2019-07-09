@@ -143,8 +143,11 @@ def main(args):
                               help="perform second bowtie run to align against loci - parsimonious preMRNA mode")
     parser_align.add_argument("--abunds",
                               type=str,
-                              required=True,
+                              required=False,
                               help="perform transcript-level and gene-level abundance estimation using salmon")
+    parser_align.add_argument("--errcheck",
+                              action="store_true",
+                              help="perform error correction to remove misalignments from the input alignment")
 
     parser_align.set_defaults(func=align.main)
 
