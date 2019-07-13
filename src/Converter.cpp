@@ -86,24 +86,12 @@ void Converter::set_unaligned(){
     this->unaligned_mode = true;
 }
 
-void Converter::set_k1(){
-    this->k1_mode = true;
-}
-
 void Converter::set_fraglen(int fraglen) {
     this->fraglen = fraglen;
     if(!this->multi){
         return; // no need to set the argument if multimappers are not being evaluated
     }
     this->mmap.set_fraglen(fraglen);
-}
-
-void Converter::set_num_multi(int num_multi) {
-    this->mmap.set_num_multi(num_multi);
-}
-
-void Converter::set_all_multi() {
-    this->mmap.set_all_multi();
 }
 
 void Converter::set_misalign() {
@@ -358,17 +346,27 @@ bool Converter::evaluate_errors(bam1_t *curAl){ // return true if the read passe
     return this->errorCheck.add_read(curAl);
 }
 
+bool Converter::evaluate_errors_pair(bam1_t *curAl,bam1_t *mate){ // return true if the read passes the error check
+    return this->errorCheck.add_pair(curAl,mate);
+}
+
 // this function cycles through a section of the bam file loads some preliminary data
 // necessary for thecoorect parsing of the errors, multimappers, etc
 void Converter::precompute(int perc){
+    this->perc_precomp = perc;
     bam1_t *curAl = bam_init1(); // initialize the alignment record
 
     int counter=0;
     while(sam_read1(al,al_hdr,curAl)>0) { // only perfom if unaligned flag is set to true
-        if(counter%perc==0){
-            bool ret = Converter::evaluate_errors(curAl); // add to the error checks
+        if(curAl->core.flag & 4) { // check that it is aligned
+            continue;
         }
-        counter++;
+        else{
+            if(counter%perc==0){
+                bool ret = Converter::evaluate_errors(curAl); // add to the error checks
+            }
+            counter++;
+        }
     }
     bam_destroy1(curAl);
 
@@ -445,9 +443,11 @@ void Converter::convert_coords(){
     bam1_t *curAl = bam_init1(); // initialize the alignment record
 
     while(sam_read1(al,al_hdr,curAl)>0) { // only perfom if unaligned flag is set to true
-        if (this->unaligned_mode && curAl->core.flag & 4) { // if read is unmapped
-            // output unaligned reads for hisat2 to realign
-            this->umap.insert(curAl);
+        if (curAl->core.flag & 4) { // if read is unmapped
+            if (this->unaligned_mode){
+                // output unaligned reads for hisat2 to realign
+                this->umap.insert(curAl);
+            }
             continue;
         }
 
@@ -684,81 +684,49 @@ void Converter::process_pair(bam1_t *curAl) {
     }
 
     // Now that both mates of an alignment are found - first evaluate the error-rate of the read
-    bool ret_err1 = Converter::evaluate_errors(curAl);
-    bool ret_err2 = Converter::evaluate_errors(mate);
+    bool ret_err = true;
+    if((total_num_pair_al+total_num_al)%this->perc_precomp != 0){ // only add if not loaded during the precomputation
+        ret_err = Converter::evaluate_errors_pair(curAl,mate);
+    }
+    total_num_pair_al++;
+
     // if the read is aligned as part of a pair and the current mate does not pass the error check
     // it then needs to be processed as a singleton (if the other mate passes the error check)
-    if(!ret_err1 && !ret_err2){ // entire pair didn't pass the error check - continue to the next read
+    if(!ret_err){ // entire pair didn't pass the error check - continue to the next read
         // need to write to the output fasta file the detected poorly aligned reads for realignment
         Converter::write_unaligned_pair(curAl,mate);
         return;
     }
-    else if(!ret_err1){
-        Converter::write_unaligned(curAl,this->unal_s);
 
-        Position cur_pos_mate;
-        int cigars_mate[MAX_CIGARS];
-        int num_cigars_mate=0;
-        size_t cigar_hash_mate = this->process_read(mate,cur_pos_mate,cigars_mate,num_cigars_mate);
+    Position cur_pos,cur_pos_mate;
+    int cigars[MAX_CIGARS];
+    int num_cigars=0;
+    int cigars_mate[MAX_CIGARS];
+    int num_cigars_mate=0;
+    cigar_hash = process_read(curAl,cur_pos,cigars,num_cigars);
+    mate_cigar_hash = process_read(mate,cur_pos_mate,cigars_mate,num_cigars_mate);
 
-        if(!this->k1_mode){
-            int ret_val = collapse_genomic(mate,cigar_hash_mate);
-            if(!ret_val) {
-                return;
-            }
+    if(!this->k1_mode){
+        int ret_val = collapse_genomic(curAl,mate,cigar_hash,mate_cigar_hash);
+        if(!ret_val) {
+            bam_destroy1(mate);
+            return;
         }
-
-        this->evaluate_multimappers(mate,cur_pos_mate,cigars_mate,num_cigars_mate); // also finishes the read
-
-        bam_destroy1(mate);
-        return;
     }
-    else if(!ret_err2){
-        Converter::write_unaligned(mate,this->unal_s);
 
-        Position cur_pos;
-        int cigars[MAX_CIGARS];
-        int num_cigars=0;
-        size_t cigar_hash = this->process_read(curAl,cur_pos,cigars,num_cigars);
+    this->evaluate_multimappers_pair(curAl,mate,cur_pos,cur_pos_mate,cigars,cigars_mate,num_cigars,num_cigars_mate); // also finishes the read
 
-        if(!this->k1_mode){
-            int ret_val = collapse_genomic(curAl,cigar_hash);
-            if(!ret_val) {
-                return;
-            }
-        }
-
-        this->evaluate_multimappers(curAl,cur_pos,cigars,num_cigars); // also finishes the read
-
-        bam_destroy1(mate);
-        return;
-    }
-    else{
-        Position cur_pos,cur_pos_mate;
-        int cigars[MAX_CIGARS];
-        int num_cigars=0;
-        int cigars_mate[MAX_CIGARS];
-        int num_cigars_mate=0;
-        cigar_hash = process_read(curAl,cur_pos,cigars,num_cigars);
-        mate_cigar_hash = process_read(mate,cur_pos_mate,cigars_mate,num_cigars_mate);
-
-        if(!this->k1_mode){
-            int ret_val = collapse_genomic(curAl,mate,cigar_hash,mate_cigar_hash);
-            if(!ret_val) {
-                bam_destroy1(mate);
-                return;
-            }
-        }
-
-        this->evaluate_multimappers_pair(curAl,mate,cur_pos,cur_pos_mate,cigars,cigars_mate,num_cigars,num_cigars_mate); // also finishes the read
-
-        bam_destroy1(mate);
-    }
+    bam_destroy1(mate);
 }
 
 void Converter::process_single(bam1_t *curAl){
     // first evaluate the error-rate of the read
-    bool ret_err = Converter::evaluate_errors(curAl);
+    bool ret_err = true;
+    if((total_num_pair_al+total_num_al)%this->perc_precomp != 0){ // only add if not loaded during the precomputation
+        ret_err = Converter::evaluate_errors(curAl);
+    }
+    total_num_al++;
+
     // if the read is aligned as part of a pair and the current mate does not pass the error check
     // it then needs to be processed as a singleton (if the other mate passes the error check)
     if(!ret_err){

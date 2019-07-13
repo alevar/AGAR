@@ -26,7 +26,8 @@ enum Opt {IN_AL   = 'i',
         ALL_MULTI = 'l',
         NUM_MULTI = 'k',
         MISALIGN  = 's',
-        PERCENT   = 'e'};
+        PERCENT   = 'e',
+        OUTLIER   = 't'};
 
 int main(int argc, char** argv) {
 
@@ -44,6 +45,7 @@ int main(int argc, char** argv) {
     args.add_int(Opt::NUM_MULTI,"nmult",1,"The number of most likely multimappers to report",false); // TODO: needs to be implemented
     args.add_flag(Opt::MISALIGN,"mis","try to eliminate misaligned reads based on the error distribution",false); // TODO: needs to be implemented
     args.add_int(Opt::PERCENT,"perc",10,"percent of the reads to be evaluated when pre-loading data before parsing",false);
+    args.add_int(Opt::OUTLIER,"outlier",3,"This argument specifies the constant to be used when computing outliers for misalignment detection. Currently this parameter regulates the number of standard deviations from the mean to be considered",false);
 
     // TODO: compile the new version of hisat2 which does not miss the frequent multimappers and test wether it performs faster/better than the bowtie2 mode - does anything need ot be changed?
 
@@ -84,6 +86,9 @@ int main(int argc, char** argv) {
     }
     if(args.get_flag(Opt::MISALIGN)){
         converter.set_misalign();
+    }
+    if(args.is_set(Opt::OUTLIER)){
+        converter.set_stdv(args.get_int(Opt::OUTLIER));
     }
 
     std::cerr<<"Begin pre-loading data"<<std::endl;

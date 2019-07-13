@@ -75,12 +75,17 @@ def main(args):
         print("aligning with hisat2 against transcriptome")
         # perform a two-pass alignment one for less redundant transcripts and one for more redundant alignments
         # with the "-a" option enabled
-        hisat2_cmd_trans_noA = ["hisat2",
+        hisat2_cmd_trans_noA = ["/ccb/salz7-home/avaraby1/soft/hisat2/hisat2",
                                 "--no-spliced-alignment",
+                                "--rna-sensitive",
                                 "--end-to-end",
                                 "--no-unal",
                                 "-x", os.path.abspath(args.db) + "/db",
                                 "-p", args.threads]
+        if args.k:
+            hisat2_cmd_trans_noA.extend(("-k", str(args.k)))
+        else:
+            hisat2_cmd_trans_noA.extend(("-k", "1"))
         if args.fasta:
             hisat2_cmd_trans_noA.append("-f")
         hisat2_cmd_trans_noA.extend(("-1", args.m1,
@@ -194,7 +199,7 @@ def main(args):
         locus_process.stdout.close()
 
     print("aligning with hisat2 against the genome")
-    hisat2_cmd_genome = ["hisat2",
+    hisat2_cmd_genome = ["/ccb/salz7-home/avaraby1/soft/hisat2/hisat2",
                          "--very-sensitive",
                          "--no-unal",
                          "-k", "30",

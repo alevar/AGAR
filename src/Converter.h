@@ -392,25 +392,57 @@ public:
     ErrorCheck() = default;
     ~ErrorCheck() = default;
 
+    void set_stdv(int stdv){
+        this->stdv = stdv;
+    };
+
+    // TODO: values need to be recomputed not every turn
     bool add_read(bam1_t *al){ // returns true if read passes error-check; otherwise returns false; also appends reads to the distribution
         cur_nm = get_nm(al);
         num_reads++;
         sum_nm=sum_nm+cur_nm;
         mean_nm = sum_nm/num_reads;
-        std2 = std::sqrt(mean_nm);
-        std2_bound = std2*2; // two standard deviations
-        this->observed[cur_nm]++;
+        if(!ztest){ // compute based on standard deviation
+            std2 = std::sqrt(mean_nm);
+            lower_bound = this->mean_nm+(std2*this->stdv); // two standard deviations
+            this->observed[cur_nm]++;
+        }
+        else{ // perform z test
+            // TODO: implement z test here
+        }
 
-        return cur_nm<=std2_bound;
+        return cur_nm<=lower_bound;
     }
+    bool add_pair(bam1_t *al,bam1_t *mate){
+        cur_nm_pair = get_nm(al)+get_nm(mate);
+        num_reads_pair++;
+        sum_nm_pair=sum_nm_pair+cur_nm_pair;
+        mean_nm_pair = sum_nm_pair/num_reads_pair;
+        if(!ztest){ // compute based on standard deviation
+            std2_pair = std::sqrt(mean_nm_pair);
+            lower_bound_pair = this->mean_nm_pair+(std2_pair*this->stdv_pair); // two standard deviations
+            this->observed_pair[cur_nm_pair]++;
+        }
+        else{ // perform z test
+            // TODO: implement z test here
+        }
+
+        return cur_nm_pair<=lower_bound_pair;
+    }
+
 private:
+    int stdv = 3; // for standard deviation based outlier detection this parameter sets the number of standard deviations above the mean that the
+    bool ztest = false;
     std::vector<uint32_t> observed = std::vector<uint32_t>(MAX_EDITS);
     int num_reads=0,sum_nm=0,cur_nm=0;
-    float mean_nm,std2,std2_bound;
+    float mean_nm,std2,lower_bound;
 
-    bool is_likely(int cur_nm){ // TODO: is this function useful?
-        return true; // TODO: implementation if needed
-    }
+    int stdv_pair = 3; // for standard deviation based outlier detection this parameter sets the number of standard deviations above the mean that the
+    std::vector<uint32_t> observed_pair = std::vector<uint32_t>(MAX_EDITS);
+    int num_reads_pair=0,sum_nm_pair=0,cur_nm_pair=0;
+    float mean_nm_pair,std2_pair,lower_bound_pair;
+
+    int num_till_recompute = 100; // how many reads are left to be added before we recompute the z statistic
 
     uint32_t get_nm(bam1_t *al){
         uint8_t* ptr_nm_1=bam_aux_get(al,"NM");
@@ -428,8 +460,6 @@ private:
     }
 };
 
-#include <fstream>
-
 class Converter{
 public:
     Converter(const std::string& alFP,const std::string& outFP,const std::string& index_base,const int& threads,bool multi);
@@ -441,17 +471,19 @@ public:
     void precompute(int perc);
     void print_multimappers();
     void set_unaligned();
-    void set_k1();
+    void set_k1(){this->k1_mode = true;};
     void set_fraglen(int fraglen);
-    void set_num_multi(int num_multi);
-    void set_all_multi();
+    void set_num_multi(int num_multi){this->mmap.set_num_multi(num_multi);};
+    void set_all_multi(){this->mmap.set_all_multi();};
     void set_misalign();
+    void set_stdv(int stdv){errorCheck.set_stdv(stdv);}
 
 private:
     // MISALIGNMENT METHODS AND DECLARATIONS
     ErrorCheck errorCheck;
     bool detect_misalign = false;
     bool evaluate_errors(bam1_t *curAl); // returns true if the read passes the error check
+    bool evaluate_errors_pair(bam1_t *curAl,bam1_t *mate);
     void write_unaligned(bam1_t *curAl,std::ofstream &out_ss);
     void write_unaligned_pair(bam1_t *curAl,bam1_t *mate);
     std::string unal_r1_fname,unal_r2_fname,unal_s_fname;
@@ -459,6 +491,8 @@ private:
     int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
     int8_t *buf = NULL;
     size_t max_buf = 0;
+    int perc_precomp = 10;
+    int total_num_pair_al = 0,total_num_al = 0;
 
     // INDEX METHODS
     void load_index(const std::string& index_base,bool multi);
