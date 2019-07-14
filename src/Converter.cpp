@@ -355,20 +355,50 @@ bool Converter::evaluate_errors_pair(bam1_t *curAl,bam1_t *mate){ // return true
 void Converter::precompute(int perc){
     this->perc_precomp = perc;
     bam1_t *curAl = bam_init1(); // initialize the alignment record
+    bam1_t *mate = bam_init1(); // intialize mates
 
-    int counter=0;
+    bool first_mate_found = false;
+
+    int counter=0,counter_pair=0;
+    int loaded=0,loaded_pair=0;
     while(sam_read1(al,al_hdr,curAl)>0) { // only perfom if unaligned flag is set to true
         if(curAl->core.flag & 4) { // check that it is aligned
             continue;
         }
-        else{
-            if(counter%perc==0){
-                bool ret = Converter::evaluate_errors(curAl); // add to the error checks
+        else{ // TODO: preload both single and pair
+            if(!has_valid_mate(curAl)){
+                first_mate_found = false; // reset since next read can not be a valid pair
+                if(counter%perc==0){
+                    bool ret = Converter::evaluate_errors(curAl); // add to the error checks
+                    loaded++;
+                }
+                counter++;
             }
-            counter++;
+            else { // is paired
+                // check if a pair previously seen
+                if (counter_pair % perc == 0) {
+                    if (!first_mate_found) {
+                        mate = curAl;
+                        first_mate_found = true;
+                    } else {
+                        if (std::strcmp(bam_get_qname(curAl), bam_get_qname(mate)) == 0 &&
+                            curAl->core.pos == mate->core.mpos) { // make sure information is consistent
+                            bool ret = Converter::evaluate_errors_pair(curAl, mate); // add to the error checks
+                            loaded_pair++;
+                        }
+                        first_mate_found = false;
+                    }
+                }
+                counter_pair++; // TODO: needs to only be added once
+            }
         }
     }
     bam_destroy1(curAl);
+    bam_destroy1(mate);
+
+    std::cerr<<"preloaded "<<loaded+(loaded_pair*2)<<" reads"<<std::endl;
+    std::cerr<<"\tof which "<<loaded<<"were singles"<<std::endl;
+    std::cerr<<"\tand "<<loaded_pair<<"were paired"<<std::endl;
 
     bam_hdr_destroy(this->al_hdr);
     sam_close(this->al);
@@ -695,6 +725,7 @@ void Converter::process_pair(bam1_t *curAl) {
     if(!ret_err){ // entire pair didn't pass the error check - continue to the next read
         // need to write to the output fasta file the detected poorly aligned reads for realignment
         Converter::write_unaligned_pair(curAl,mate);
+        this->num_err_discarded_pair++;
         return;
     }
 
@@ -732,6 +763,7 @@ void Converter::process_single(bam1_t *curAl){
     if(!ret_err){
         // need to write to the output fasta file the detected poorly aligned reads for realignment
         Converter::write_unaligned(curAl,this->unal_s);
+        this->num_err_discarded++;
         return; // didn't pass the error check - continue to the next read
     }
 

@@ -99,5 +99,7 @@ int main(int argc, char** argv) {
     converter.convert_coords();
     std::cerr<<"Done Translating Coordinates"<<std::endl;
 
+    converter.print_stats();
+
     return 0;
 }

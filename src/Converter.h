@@ -398,6 +398,9 @@ public:
 
     // TODO: values need to be recomputed not every turn
     bool add_read(bam1_t *al){ // returns true if read passes error-check; otherwise returns false; also appends reads to the distribution
+        if(num_reads%500000 == 0){
+            std::cout<<"1\t"<<lower_bound<<std::endl;
+        }
         cur_nm = get_nm(al);
         num_reads++;
         sum_nm=sum_nm+cur_nm;
@@ -414,6 +417,9 @@ public:
         return cur_nm<=lower_bound;
     }
     bool add_pair(bam1_t *al,bam1_t *mate){
+        if(num_reads_pair%500000 == 0){
+            std::cout<<"2\t"<<lower_bound_pair<<std::endl;
+        }
         cur_nm_pair = get_nm(al)+get_nm(mate);
         num_reads_pair++;
         sum_nm_pair=sum_nm_pair+cur_nm_pair;
@@ -441,8 +447,6 @@ private:
     std::vector<uint32_t> observed_pair = std::vector<uint32_t>(MAX_EDITS);
     int num_reads_pair=0,sum_nm_pair=0,cur_nm_pair=0;
     float mean_nm_pair,std2_pair,lower_bound_pair;
-
-    int num_till_recompute = 100; // how many reads are left to be added before we recompute the z statistic
 
     uint32_t get_nm(bam1_t *al){
         uint8_t* ptr_nm_1=bam_aux_get(al,"NM");
@@ -478,7 +482,16 @@ public:
     void set_misalign();
     void set_stdv(int stdv){errorCheck.set_stdv(stdv);}
 
+    void print_stats(){
+        std::cerr<<"reads discarded as misalignments: "<<(this->num_err_discarded_pair*2)+this->num_reads<<std::endl;
+        std::cerr<<"\tof which "<<this->num_err_discarded_pair*2<<" were in paired"<<std::endl;
+        std::cerr<<"\tand "<<this->num_err_discarded<<"were not paired"<<std::endl;
+    }
+
 private:
+    // STATS
+    int num_err_discarded = 0,num_err_discarded_pair = 0;
+
     // MISALIGNMENT METHODS AND DECLARATIONS
     ErrorCheck errorCheck;
     bool detect_misalign = false;
@@ -493,6 +506,7 @@ private:
     size_t max_buf = 0;
     int perc_precomp = 10;
     int total_num_pair_al = 0,total_num_al = 0;
+    int total_multi_detected;
 
     // INDEX METHODS
     void load_index(const std::string& index_base,bool multi);
