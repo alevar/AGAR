@@ -558,22 +558,23 @@ public:
         pos_res.push_back(this->ii->first);
     }
 
-    // TODO: need to refactor the process_pos fnctions
-    //     mainly would prefer having a singl function that handles all cases and is no longer redundant
-    bool process_pos_precomp(Position& pos,Loci& loci,std::vector<Position>& pos_res){ // using precomputed abundance values only
+    // TODO: need to refactor the process_pos functions
+    //     mainly would prefer having a single function that handles all cases and is no longer redundant
+    int process_pos_precomp(Position& pos,Loci& loci,std::vector<Position>& pos_res){ // using precomputed abundance values only
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
-            return true;
+            return 0;
         }
         else{ // multimappers exist - need to evaluate
             // if all mode - need to keep a bool and then just iterate through the entire block and output all values into a vector of positions which can be accessed by the converter and written to the alignment
             std::vector<double>abunds,res; // holds pid-corrected abundances
             double total = 0;
+            int cur_num_multi = pos_res.size();
 
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
             if(this->all_multi){ // just output the entire block
                 copy_current(pos_res);
-                return false; // done
+                return cur_num_multi; // done
             }
             while(this->ii->second){ // iterate until the end of the block
                 // first need to compute expected values
@@ -595,26 +596,29 @@ public:
             int pos_idx = this->get_likely(res,0.0,1.0);
             // now follow the iterator to get the actual position object which corresponds to the selected item
             pos_res.push_back((this->index.begin()+this->ltf->second+pos_idx)->first);
-            return false;
+            return cur_num_multi;
         }
     }
 
     // given a position generated from an alignment this function searches for multimapper
     // and returns true if the position is not multimapping or false if it is multimapping
     // for multimappers, it also replaces the data in the position with a position selected by likelihood
-    bool process_pos(Position& pos,Loci& loci,std::vector<Position>& pos_res){
+    int process_pos(Position& pos,Loci& loci,std::vector<Position>& pos_res){
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
-            return true;
+            return 0;
         }
         else{ // multimappers exist - need to evaluate
+            std::cerr<<"multi exists"<<std::endl;
             std::vector<double> uniq,multi,tmp_res,res; // holds pid-corrected abundances
             double utotal=0,mtotal=0,rtotal=0;
+
+            int cur_num_multi = pos_res.size();
 
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
             if(this->all_multi){ // just output the entire block
                 copy_current(pos_res);
-                return false; // done
+                return cur_num_multi; // done
             }
             while(this->ii->second){ // iterate until the end of the block
                 // first need to compute expected values
@@ -653,18 +657,18 @@ public:
             int pos_idx = this->get_likely(res,0.0,1.0);
             // now follow the iterator to get the actual position object which corresponds to the selected item
             pos_res.push_back((this->index.begin()+this->ltf->second+pos_idx)->first);
-            return false;
+            return cur_num_multi;
         }
     }
 
-    bool process_pos_pair_precomp(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){ // using precomputed abundance values only
+    int process_pos_pair_precomp(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){ // using precomputed abundance values only
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
-            return true;
+            return 0;
         }
         this->ltf_mate = this->lookup_table.find(pos_mate);
         if(this->ltf_mate == this->lookup_table.end()){ // position is not a multimapper
-            return true;
+            return 0;
         }
 
         else{ // multimappers exist - need to evaluate
@@ -708,8 +712,9 @@ public:
                 this->ii++;
             }
             if(multi_pairs.empty()){
-                return true; // means no valid multimapping pairs were detected
+                return 0; // means no valid multimapping pairs were detected
             }
+            int cur_num_multi = multi_pairs.size();
             // now compute abundances for all these blocks
             this->ii = this->index.begin()+this->ltf->second; // return to the start of the multimapping block
             this->ii_mate = this->index.begin()+this->ltf_mate->second; // same for the mate
@@ -718,7 +723,7 @@ public:
                     pos_res.push_back((this->ii + mp.first)->first);
                     pos_res_mate.push_back((this->ii + mp.second)->first);
                 }
-                return false; // done
+                return cur_num_multi; // done
             }
             for(auto & mp: multi_pairs){
                 // first need to compute expected values
@@ -740,18 +745,18 @@ public:
             int offset_mate = multi_pairs[pos_idx].second;
             pos_res.push_back((this->index.begin()+this->ltf->second+offset)->first);
             pos_res_mate.push_back((this->index.begin()+this->ltf_mate->second+offset_mate)->first);
-            return false;
+            return cur_num_multi;
         }
     }
 
-    bool process_pos_pair(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){
+    int process_pos_pair(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
-            return true;
+            return 0;
         }
         this->ltf_mate = this->lookup_table.find(pos_mate);
         if(this->ltf_mate == this->lookup_table.end()){ // position is not a multimapper
-            return true;
+            return 0;
         }
 
         else{ // multimappers exist - need to evaluate
@@ -795,8 +800,9 @@ public:
                 this->ii++;
             }
             if(multi_pairs.empty()){
-                return true; // means no valid multimapping pairs were detected
+                return 0; // means no valid multimapping pairs were detected
             }
+            int cur_num_multi = multi_pairs.size();
             // now compute abundances for all these blocks
             this->ii = this->index.begin()+this->ltf->second; // return to the start of the multimapping block
             this->ii_mate = this->index.begin()+this->ltf_mate->second; // same for the mate
@@ -805,7 +811,7 @@ public:
                     pos_res.push_back((this->ii + mp.first)->first);
                     pos_res_mate.push_back((this->ii + mp.second)->first);
                 }
-                return false; // done
+                return cur_num_multi; // done
             }
             for(auto & mp: multi_pairs){
                 // first need to compute expected values
@@ -842,7 +848,7 @@ public:
             int offset_mate = multi_pairs[pos_idx].second;
             pos_res.push_back((this->index.begin()+this->ltf->second+offset)->first);
             pos_res_mate.push_back((this->index.begin()+this->ltf_mate->second+offset_mate)->first);
-            return false;
+            return cur_num_multi;
         }
     }
 

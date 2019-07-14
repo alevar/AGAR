@@ -254,3 +254,5 @@ def main(args):
 
     if not args.keep:
         shutil.rmtree(os.path.abspath(cur_tmp))
+
+    # TODO: need to remove all output from differentinternal tools and report ony general alignment (and realignment report)

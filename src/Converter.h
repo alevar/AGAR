@@ -272,7 +272,9 @@ public:
 
     int add(bam1_t *al,bam1_t *mate){ // add read to the stack
         MapID m(al);
-        me = mates.insert(std::make_pair(m,bam_dup1(al)));
+        bam1_t *al_dup = bam_init1();
+        bam_copy1(al_dup,al);
+        me = mates.insert(std::make_pair(m,al_dup));
         if(!me.second){ // entry previously existed - can report a pair and remove from the stack
             bam_copy1(mate,me.first->second);
             bam_destroy1(me.first->second);
@@ -394,7 +396,11 @@ public:
 
     void set_stdv(int stdv){
         this->stdv = stdv;
-    };
+    }
+
+    std::pair<double,double> get_thresh(){
+        return std::make_pair(this->lower_bound,lower_bound_pair);
+    }
 
     // TODO: values need to be recomputed not every turn
     bool add_read(bam1_t *al){ // returns true if read passes error-check; otherwise returns false; also appends reads to the distribution
@@ -483,9 +489,13 @@ public:
     void set_stdv(int stdv){errorCheck.set_stdv(stdv);}
 
     void print_stats(){
-        std::cerr<<"reads discarded as misalignments: "<<(this->num_err_discarded_pair*2)+this->num_reads<<std::endl;
-        std::cerr<<"\tof which "<<this->num_err_discarded_pair*2<<" were in paired"<<std::endl;
-        std::cerr<<"\tand "<<this->num_err_discarded<<"were not paired"<<std::endl;
+        std::cerr<<"reads discarded as misalignments: "<<(this->num_err_discarded_pair*2)+this->num_err_discarded<<" at "<<errorCheck.get_thresh().first<<" singleton and "<<errorCheck.get_thresh().second<<" paired thresholds"<<std::endl;
+        std::cerr<<"\tof which "<<this->num_err_discarded<<" were singles"<<std::endl;
+        std::cerr<<"\tand "<<this->num_err_discarded_pair*2<<" were paired"<<std::endl;
+
+        std::cerr<<"multimapped reads: "<<(this->num_multi_pair*2)+this->num_multi<<std::endl;
+        std::cerr<<"\tof which "<<this->num_multi<<" were singles at multimapping rate of "<<double(num_multi_hits)/double(num_multi)<<std::endl;
+        std::cerr<<"\tand "<<this->num_multi_pair*2<<"were paired at multimapping rate of "<<double(num_multi_pair)/double(num_multi_hits_pair)<<std::endl;
     }
 
 private:
@@ -566,9 +576,10 @@ private:
     void add_multi_tag(bam1_t* curAl);
 
     // Multimapper-related methods
-    void evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
-    void evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
+    int evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
+    int evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
                                     int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate);
+    int num_multi = 0,num_multi_pair = 0,num_multi_hits=0,num_multi_hits_pair=0;
 
     // various printers relevant only for debug
     void print_transcriptome();

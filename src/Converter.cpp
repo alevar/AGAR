@@ -7,8 +7,6 @@
 #include "Converter.h"
 #include "tokenize.h"
 
-// TODO: report how many multimappers were detected in the run
-
 // TODO: can be made better hash
 size_t cigar2hash(const int cigars[MAX_CIGARS],int n_cigar){
     size_t hash = 0;
@@ -305,7 +303,6 @@ void Converter::load_index(const std::string& index_base,bool multi){
 }
 
 // this function takes in the abundance estimation from salmon and augments the transcriptome index with the data
-// TODO: this function needs to be written differently to handle not just the salmon input
 void Converter::load_abundances(const std::string& abundFP){
     this->abund = true;
     this->loci.set_precomputed_abundances();
@@ -353,6 +350,8 @@ bool Converter::evaluate_errors_pair(bam1_t *curAl,bam1_t *mate){ // return true
 // this function cycles through a section of the bam file loads some preliminary data
 // necessary for thecoorect parsing of the errors, multimappers, etc
 void Converter::precompute(int perc){
+    // TODO: here check if the paired alignments appear correctly in the SAM file or not. If yes - then switch to the simple detection strategy (mates appear consecutively)
+    // TODO: need detection of fasta vs fastq - this can be done when pre-loading information
     this->perc_precomp = perc;
     bam1_t *curAl = bam_init1(); // initialize the alignment record
     bam1_t *mate = bam_init1(); // intialize mates
@@ -365,7 +364,7 @@ void Converter::precompute(int perc){
         if(curAl->core.flag & 4) { // check that it is aligned
             continue;
         }
-        else{ // TODO: preload both single and pair
+        else{
             if(!has_valid_mate(curAl)){
                 first_mate_found = false; // reset since next read can not be a valid pair
                 if(counter%perc==0){
@@ -376,29 +375,31 @@ void Converter::precompute(int perc){
             }
             else { // is paired
                 // check if a pair previously seen
-                if (counter_pair % perc == 0) {
-                    if (!first_mate_found) {
-                        mate = curAl;
-                        first_mate_found = true;
-                    } else {
-                        if (std::strcmp(bam_get_qname(curAl), bam_get_qname(mate)) == 0 &&
-                            curAl->core.pos == mate->core.mpos) { // make sure information is consistent
+                if (!first_mate_found) {
+                    mate = bam_dup1(curAl);
+                    first_mate_found = true;
+                } else {
+                    if (counter_pair % perc == 0) {
+                        if (std::strcmp(bam_get_qname(curAl), bam_get_qname(mate)) == 0 && curAl->core.pos == mate->core.mpos) { // make sure information is consistent
                             bool ret = Converter::evaluate_errors_pair(curAl, mate); // add to the error checks
                             loaded_pair++;
                         }
-                        first_mate_found = false;
                     }
+                    first_mate_found = false;
+                    counter_pair++;
                 }
-                counter_pair++; // TODO: needs to only be added once
             }
         }
     }
     bam_destroy1(curAl);
     bam_destroy1(mate);
 
+    std::cerr<<"total number of reads in the sample: "<<counter+(2*counter_pair)<<std::endl;
+    std::cerr<<"\tof which "<<counter<<" were singles"<<std::endl;
+    std::cerr<<"\tand "<<counter_pair*2<<" were paired"<<std::endl;
     std::cerr<<"preloaded "<<loaded+(loaded_pair*2)<<" reads"<<std::endl;
-    std::cerr<<"\tof which "<<loaded<<"were singles"<<std::endl;
-    std::cerr<<"\tand "<<loaded_pair<<"were paired"<<std::endl;
+    std::cerr<<"\tof which "<<loaded<<" were singles"<<std::endl;
+    std::cerr<<"\tand "<<loaded_pair*2<<" were paired"<<std::endl;
 
     bam_hdr_destroy(this->al_hdr);
     sam_close(this->al);
@@ -413,7 +414,7 @@ void Converter::write_unaligned_pair(bam1_t *curAl,bam1_t *mate) {
 
 // this function writes reads as unaligned
 // implementation is mostly from the bam2fq
-void Converter::write_unaligned(bam1_t *curAl,std::ofstream &out_ss){ // TODO: need detection of fasta vs fastq - this can be done when pre-loading information
+void Converter::write_unaligned(bam1_t *curAl,std::ofstream &out_ss){
     out_ss << "@" << bam_get_qname(curAl) << "\n";
     int i;
     int32_t qlen = curAl->core.l_qseq;
@@ -745,7 +746,11 @@ void Converter::process_pair(bam1_t *curAl) {
         }
     }
 
-    this->evaluate_multimappers_pair(curAl,mate,cur_pos,cur_pos_mate,cigars,cigars_mate,num_cigars,num_cigars_mate); // also finishes the read
+    int cur_num_multi = this->evaluate_multimappers_pair(curAl,mate,cur_pos,cur_pos_mate,cigars,cigars_mate,num_cigars,num_cigars_mate); // also finishes the read
+    if(cur_num_multi>0){
+        this->num_multi_pair++;
+        this->num_multi_hits_pair=this->num_multi_hits_pair+cur_num_multi;
+    }
 
     bam_destroy1(mate);
 }
@@ -779,7 +784,11 @@ void Converter::process_single(bam1_t *curAl){
         }
     }
 
-    this->evaluate_multimappers(curAl,cur_pos,cigars,num_cigars); // also finishes the read
+    int cur_num_multi = this->evaluate_multimappers(curAl,cur_pos,cigars,num_cigars); // also finishes the read
+    if(cur_num_multi>0){
+        this->num_multi++;
+        this->num_multi_hits=this->num_multi_hits+cur_num_multi;
+    }
 }
 
 void Converter::add_multi_tag(bam1_t* curAl){
@@ -790,9 +799,9 @@ void Converter::add_multi_tag(bam1_t* curAl){
     bam_aux_append(curAl,"ZZ",'A',1,(const unsigned char*)"+");
 }
 
-void Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
+int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
                                                 int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate) {
-    bool unique;
+    int unique;
     std::vector<Position> res_pos,res_pos_mate; // holds the results of the multimapper evaluation
     if(!this->abund){ // compute abundance dynamically
         unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
@@ -800,7 +809,8 @@ void Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
     else{ // compute abundance dynamically
         unique = this->mmap.process_pos_pair_precomp(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
     }
-    if(unique){ // increment abundance
+    std::cerr<<"eval multi_pair: "<<unique<<std::endl;
+    if(unique==0){ // increment abundance
         if(!this->abund) {
             this->loci.add_read(cur_pos.locus);
             this->loci.add_read(cur_pos_mate.locus);
@@ -814,8 +824,10 @@ void Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
         add_cigar(curAl_mate, num_cigars_mate, cigars_mate); // will be performed afterwards
         this->finish_read(curAl);
         this->finish_read(curAl_mate);
+        return unique;
     }
     else{
+        std::cerr<<"not unique pair"<<std::endl;
         add_multi_tag(curAl);
         add_multi_tag(curAl_mate);
         change_nh_flag(curAl,res_pos.size());
@@ -876,11 +888,12 @@ void Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
             add_cigar(curAl_mate, num_cigars_mate, cigars_mate); // will be performed afterwards
             this->finish_read(curAl_mate);
         }
+        return unique;
     }
 }
 
-void Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){ // TODO: make sure only mapped reads are passed through this function
-    bool unique;
+int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){ // TODO: make sure only mapped reads are passed through this function
+    int unique;
     std::vector<Position> res_pos; // holds the results of the multimapper evaluation
     if(!this->abund){ // compute abundance dynamically
         unique = this->mmap.process_pos(cur_pos,this->loci,res_pos);
@@ -888,7 +901,8 @@ void Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars
     else{ // compute abundance dynamically
         unique = this->mmap.process_pos_precomp(cur_pos,this->loci,res_pos);
     }
-    if(unique){ // increment abundance
+    std::cerr<<"eval multi: "<<unique<<std::endl;
+    if(unique==0){ // increment abundance
         if(!this->abund){
             this->loci.add_read(cur_pos.locus);
         }
@@ -897,8 +911,10 @@ void Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars
         // add already computed cigar to the read
         add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
         this->finish_read(curAl);
+        return unique;
     }
     else{
+        std::cerr<<"not unique single"<<std::endl;
         add_multi_tag(curAl);
         change_nh_flag(curAl,res_pos.size());
         for(auto &v : res_pos){
@@ -937,6 +953,7 @@ void Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars
             add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
             this->finish_read(curAl);
         }
+        return unique;
     }
 }
 
