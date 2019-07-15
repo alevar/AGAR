@@ -809,7 +809,7 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
     else{ // compute abundance dynamically
         unique = this->mmap.process_pos_pair_precomp(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
     }
-    std::cerr<<"eval multi_pair: "<<unique<<std::endl;
+//    std::cerr<<"eval multi_pair: "<<unique<<std::endl;
     if(unique==0){ // increment abundance
         if(!this->abund) {
             this->loci.add_read(cur_pos.locus);
@@ -901,7 +901,7 @@ int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[
     else{ // compute abundance dynamically
         unique = this->mmap.process_pos_precomp(cur_pos,this->loci,res_pos);
     }
-    std::cerr<<"eval multi: "<<unique<<std::endl;
+//    std::cerr<<"eval multi: "<<unique<<std::endl;
     if(unique==0){ // increment abundance
         if(!this->abund){
             this->loci.add_read(cur_pos.locus);
@@ -914,7 +914,6 @@ int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[
         return unique;
     }
     else{
-        std::cerr<<"not unique single"<<std::endl;
         add_multi_tag(curAl);
         change_nh_flag(curAl,res_pos.size());
         for(auto &v : res_pos){

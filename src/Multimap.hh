@@ -549,6 +549,15 @@ public:
     Loci* loci;
     std::vector<GffTranscript>* transcriptome;
 
+    int get_block_size(){
+        int count = 0;
+        while(this->ii->second){
+            count++;
+            this->ii++;
+        }
+        return count;
+    }
+
     // copies the multimappers of the block pointed to by the current iterator
     void copy_current(std::vector<Position>& pos_res){
         while(this->ii->second){ // iterate until the end of the block
@@ -569,9 +578,9 @@ public:
             // if all mode - need to keep a bool and then just iterate through the entire block and output all values into a vector of positions which can be accessed by the converter and written to the alignment
             std::vector<double>abunds,res; // holds pid-corrected abundances
             double total = 0;
-            int cur_num_multi = pos_res.size();
 
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
+            int cur_num_multi = get_block_size();
             if(this->all_multi){ // just output the entire block
                 copy_current(pos_res);
                 return cur_num_multi; // done
@@ -609,13 +618,11 @@ public:
             return 0;
         }
         else{ // multimappers exist - need to evaluate
-            std::cerr<<"multi exists"<<std::endl;
             std::vector<double> uniq,multi,tmp_res,res; // holds pid-corrected abundances
             double utotal=0,mtotal=0,rtotal=0;
 
-            int cur_num_multi = pos_res.size();
-
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
+            int cur_num_multi = get_block_size();
             if(this->all_multi){ // just output the entire block
                 copy_current(pos_res);
                 return cur_num_multi; // done
@@ -714,6 +721,7 @@ public:
             if(multi_pairs.empty()){
                 return 0; // means no valid multimapping pairs were detected
             }
+            std::cerr<<"multi exists pair"<<std::endl;
             int cur_num_multi = multi_pairs.size();
             // now compute abundances for all these blocks
             this->ii = this->index.begin()+this->ltf->second; // return to the start of the multimapping block
@@ -802,6 +810,7 @@ public:
             if(multi_pairs.empty()){
                 return 0; // means no valid multimapping pairs were detected
             }
+            std::cerr<<"multi exists pair"<<std::endl;
             int cur_num_multi = multi_pairs.size();
             // now compute abundances for all these blocks
             this->ii = this->index.begin()+this->ltf->second; // return to the start of the multimapping block

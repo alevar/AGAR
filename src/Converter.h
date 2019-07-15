@@ -495,7 +495,7 @@ public:
 
         std::cerr<<"multimapped reads: "<<(this->num_multi_pair*2)+this->num_multi<<std::endl;
         std::cerr<<"\tof which "<<this->num_multi<<" were singles at multimapping rate of "<<double(num_multi_hits)/double(num_multi)<<std::endl;
-        std::cerr<<"\tand "<<this->num_multi_pair*2<<"were paired at multimapping rate of "<<double(num_multi_pair)/double(num_multi_hits_pair)<<std::endl;
+        std::cerr<<"\tand "<<this->num_multi_pair*2<<" were paired at multimapping rate of "<<double(num_multi_hits_pair)/double(num_multi_pair)<<std::endl;
     }
 
 private:
