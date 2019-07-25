@@ -45,8 +45,6 @@
 //    such as whether multimappers are reported, and whatever else
 //    or the number of bases per read
 
-// TODO: needs to be parallelized
-
 // class for the unmapped reads
 // evaluates reads and outputs them accordingly
 // TODO: consider making this into a probabilistic lookup in order to reduce memory
@@ -299,8 +297,8 @@ public:
     int tid;
     int start;
     int mate_start;
-    int cigar; // TODO: if this class is used, need to consider how to pass the cigar information
-    int mate_cigar; // TODO: same here as above
+    int cigar;
+    int mate_cigar;
 
     bool operator==(const ReadGenKey& m) const{
         return this->name==m.name &&
@@ -404,7 +402,6 @@ public:
         return std::make_pair(this->lower_bound,lower_bound_pair);
     }
 
-    // TODO: values need to be recomputed not every turn
     bool add_read(bam1_t *al){ // returns true if read passes error-check; otherwise returns false; also appends reads to the distribution
         if(num_reads%500000 == 0){
             std::cout<<"1\t"<<lower_bound<<std::endl;

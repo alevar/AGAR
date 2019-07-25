@@ -56,7 +56,6 @@ Converter::Converter(const std::string& alFP,const std::string& outFP,const std:
     this->outSAM=sam_open(outFP.c_str(),"wb");
     this->outSAM_header =bam_hdr_dup(genome_al_hdr);
 
-    // TODO: needs to handle both BAM and SAM input
     int ret = sam_hdr_write(outSAM,this->outSAM_header);
     for (int i=0;i<genome_al_hdr->n_targets;++i){
         ref_to_id[genome_al_hdr->target_name[i]]=i;
@@ -543,7 +542,6 @@ void Converter::write_unaligned(bam1_t *curAl,std::ofstream &out_ss){
 // if precomputation was performed from the stream, then the following function
 // can be used in order to process reads which have not been evaluated yet
 void Converter::convert_coords_precomp(){
-    // TODO: read from pipe
     // TODO: parallel
 
     for(auto &v : this->precomp_alns){
@@ -561,8 +559,6 @@ void Converter::convert_coords_precomp(){
 
 void Converter::convert_coords(){
     bam1_t *curAl = bam_init1(); // initialize the alignment record
-
-    // TODO: read from pipe
     // TODO: parallel
 
     while(sam_read1(al,al_hdr,curAl)>=0) { // only perfom if unaligned flag is set to true
@@ -988,7 +984,7 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
     }
 }
 
-int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){ // TODO: make sure only mapped reads are passed through this function
+int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){
     int unique;
     std::vector<Position> res_pos; // holds the results of the multimapper evaluation
     if(!this->abund){ // compute abundance dynamically
