@@ -43,20 +43,20 @@ Converter::Converter(const std::string& alFP,const std::string& outFP,const std:
 
     // now initialize the sam file
     struct stat buffer{};
-    if(stat (alFP.c_str(), &buffer) != 0){ // if file does not exists
+    if(stat (alFP.c_str(), &buffer) != 0 && alFP != "-"){ // if file does not exists
         std::cerr<<"Alignment file: "<<alFP<<" is not found."<<std::endl;
         exit(1);
     }
+
     this->al=hts_open(alFP.c_str(),"r");
     this->al_hdr=sam_hdr_read(this->al); // read the current alignment header
 
     genome_al_hdr=sam_hdr_read(genome_al);
 
     this->outSAM=sam_open(outFP.c_str(),"wb");
-    this->outSAM_header = bam_hdr_init();
+    this->outSAM_header =bam_hdr_dup(genome_al_hdr);
 
     // TODO: needs to handle both BAM and SAM input
-    this->outSAM_header=bam_hdr_dup(genome_al_hdr);
     int ret = sam_hdr_write(outSAM,this->outSAM_header);
     for (int i=0;i<genome_al_hdr->n_targets;++i){
         ref_to_id[genome_al_hdr->target_name[i]]=i;
@@ -347,6 +347,76 @@ bool Converter::evaluate_errors_pair(bam1_t *curAl,bam1_t *mate){ // return true
     return this->errorCheck.add_pair(curAl,mate);
 }
 
+// This function preforms the same operations as the regular prevompute
+// but the reads are being saved for evaluation later
+void Converter::precompute_save(int num_reads){
+    this->num_reads_precomp = num_reads;
+    bam1_t *curAl = bam_init1(); // initialize the alignment record
+    bam1_t *mate = bam_init1(); // intialize mates
+
+    bool first_mate_found = false;
+
+    int loaded=0,loaded_pair=0;
+
+    // precompute first 10 reads first
+    for(int i=0;i<num_reads;i++){
+        int ret;
+        err_recover:
+        if (al->line.l == 0) {
+            ret = hts_getline(al, KS_SEP_LINE, &al->line);
+            if (ret < 0){
+                break;
+            }
+        }
+        ret = sam_parse1(&al->line, al_hdr, curAl);
+        al->line.l = 0;
+        if (ret < 0) {
+            hts_log_warning("Parse error at line %lld", (long long)al->lineno);
+            if (al_hdr->ignore_sam_err){
+                goto err_recover;
+            }
+        }
+        // do the rest of the logic here
+        if(curAl->core.flag & 4) { // check that it is aligned
+            i--; // do not count this read
+            continue;
+        }
+        else{
+            if(!has_valid_mate(curAl)){
+                first_mate_found = false; // reset since next read can not be a valid pair
+                bool ret = Converter::evaluate_errors(curAl); // add to the error checks
+                precomp_alns.push_back(bam_dup1(curAl));
+                loaded++;
+            }
+            else { // is paired
+                // check if a pair previously seen
+                if (!first_mate_found) {
+                    mate = bam_dup1(curAl);
+                    first_mate_found = true;
+                    if(i+1==num_reads){ // if we reach here and we are at the end of the precomputing loop - need to extend the loop by one step in order to load the second mate
+                        i--;
+                    }
+                } else {
+                    if (std::strcmp(bam_get_qname(curAl), bam_get_qname(mate)) == 0 && curAl->core.pos == mate->core.mpos) { // make sure information is consistent
+                        bool ret = Converter::evaluate_errors_pair(curAl, mate); // add to the error checks
+                        precomp_alns_pair.push_back(bam_dup1(curAl));
+                        precomp_alns_pair.push_back(bam_dup1(mate));
+                        loaded_pair++;
+                    }
+                    first_mate_found = false;
+                }
+            }
+        }
+    }
+
+    bam_destroy1(curAl);
+    bam_destroy1(mate);
+
+    std::cerr<<"preloaded "<<loaded+(loaded_pair*2)<<" reads"<<std::endl;
+    std::cerr<<"\tof which "<<loaded<<" were singles"<<std::endl;
+    std::cerr<<"\tand "<<loaded_pair*2<<" were paired"<<std::endl;
+}
+
 // this function cycles through a section of the bam file loads some preliminary data
 // necessary for thecoorect parsing of the errors, multimappers, etc
 void Converter::precompute(int perc){
@@ -360,7 +430,7 @@ void Converter::precompute(int perc){
 
     int counter=0,counter_pair=0;
     int loaded=0,loaded_pair=0;
-    while(sam_read1(al,al_hdr,curAl)>0) { // only perfom if unaligned flag is set to true
+    while(sam_read1(al,al_hdr,curAl)>=0) {
         if(curAl->core.flag & 4) { // check that it is aligned
             continue;
         }
@@ -470,10 +540,32 @@ void Converter::write_unaligned(bam1_t *curAl,std::ofstream &out_ss){
     }
 }
 
+// if precomputation was performed from the stream, then the following function
+// can be used in order to process reads which have not been evaluated yet
+void Converter::convert_coords_precomp(){
+    // TODO: read from pipe
+    // TODO: parallel
+
+    for(auto &v : this->precomp_alns){
+        this->process_single(v);
+        std::cerr<<bam_get_qname(v)<<std::endl;
+        bam_destroy1(v);
+    }
+    for(int i=0;i<this->precomp_alns_pair.size();i+=2){
+        _process_pair(this->precomp_alns_pair[i],this->precomp_alns_pair[i+1]);
+        bam_destroy1(this->precomp_alns_pair[i]);
+        bam_destroy1(this->precomp_alns_pair[i+1]);
+        std::cerr<<bam_get_qname(this->precomp_alns_pair[i])<<"\t"<<bam_get_qname(this->precomp_alns_pair[i])<<std::endl;
+    }
+}
+
 void Converter::convert_coords(){
     bam1_t *curAl = bam_init1(); // initialize the alignment record
 
-    while(sam_read1(al,al_hdr,curAl)>0) { // only perfom if unaligned flag is set to true
+    // TODO: read from pipe
+    // TODO: parallel
+
+    while(sam_read1(al,al_hdr,curAl)>=0) { // only perfom if unaligned flag is set to true
         if (curAl->core.flag & 4) { // if read is unmapped
             if (this->unaligned_mode){
                 // output unaligned reads for hisat2 to realign
@@ -703,17 +795,8 @@ int Converter::collapse_genomic(bam1_t *curAl, bam1_t *mateAl,size_t cigar_hash,
     return collapser.add(curAl,mateAl,cigar_hash,mate_cigar_hash);
 }
 
-void Converter::process_pair(bam1_t *curAl) {
-
-    // need a queue to hold and release pairs
-    bam1_t* mate = bam_init1();
-    int ret = this->pairs.add(curAl,mate);
+void Converter::_process_pair(bam1_t *curAl,bam1_t* mate){
     size_t cigar_hash,mate_cigar_hash;
-    if(!ret){ // mate not found
-        bam_destroy1(mate);
-        return;
-    }
-
     // Now that both mates of an alignment are found - first evaluate the error-rate of the read
     bool ret_err = true;
     if((total_num_pair_al+total_num_al)%this->perc_precomp != 0){ // only add if not loaded during the precomputation
@@ -751,6 +834,19 @@ void Converter::process_pair(bam1_t *curAl) {
         this->num_multi_pair++;
         this->num_multi_hits_pair=this->num_multi_hits_pair+cur_num_multi;
     }
+}
+
+void Converter::process_pair(bam1_t *curAl) {
+
+    // need a queue to hold and release pairs
+    bam1_t* mate = bam_init1();
+    int ret = this->pairs.add(curAl,mate);
+    if(!ret){ // mate not found
+        bam_destroy1(mate);
+        return;
+    }
+
+    _process_pair(curAl,mate);
 
     bam_destroy1(mate);
 }

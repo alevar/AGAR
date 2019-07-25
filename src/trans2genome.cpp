@@ -27,12 +27,13 @@ enum Opt {IN_AL   = 'i',
         NUM_MULTI = 'k',
         MISALIGN  = 's',
         PERCENT   = 'e',
-        OUTLIER   = 't'};
+        OUTLIER   = 't',
+        NUM_READS_PRECOMP = 'n'};
 
 int main(int argc, char** argv) {
 
     ArgParse args("salmon2genome");
-    args.add_string(Opt::IN_AL,"input","","input alignment SAM/BAM",true);
+    args.add_string(Opt::IN_AL,"input","","input alignment SAM/BAM",false);
     args.add_string(Opt::OUT_AL,"output","","output file path (BAM)",true);
     args.add_int(Opt::THREADS,"threads",1,"number of threads (default = 1)",false);
     args.add_string(Opt::INDEX,"index","","path and basename of the index built by gtf_to_fasta",true);
@@ -45,6 +46,7 @@ int main(int argc, char** argv) {
     args.add_int(Opt::NUM_MULTI,"nmult",1,"The number of most likely multimappers to report",false); // TODO: needs to be implemented
     args.add_flag(Opt::MISALIGN,"mis","try to eliminate misaligned reads based on the error distribution",false); // TODO: needs to be implemented
     args.add_int(Opt::PERCENT,"perc",10,"percent of the reads to be evaluated when pre-loading data before parsing",false);
+    args.add_int(Opt::NUM_READS_PRECOMP,"nrp",500000,"number of reads to precompute based on the streaming",false);
     args.add_int(Opt::OUTLIER,"outlier",3,"This argument specifies the constant to be used when computing outliers for misalignment detection. Currently this parameter regulates the number of standard deviations from the mean to be considered",false);
 
     // TODO: compile the new version of hisat2 which does not miss the frequent multimappers and test wether it performs faster/better than the bowtie2 mode - does anything need ot be changed?
@@ -65,7 +67,9 @@ int main(int argc, char** argv) {
 
     args.parse_args(argc,argv);
 
-    Converter converter(args.get_string(Opt::IN_AL),args.get_string(Opt::OUT_AL),args.get_string(Opt::INDEX),args.get_int(Opt::THREADS),args.get_flag(Opt::MULTI));
+    std::string inputAlFP = args.is_set(Opt::IN_AL)?args.get_string(Opt::IN_AL):"-";
+    std::cout<<"input alignment: "<<inputAlFP<<std::endl;
+    Converter converter(inputAlFP,args.get_string(Opt::OUT_AL),args.get_string(Opt::INDEX),args.get_int(Opt::THREADS),args.get_flag(Opt::MULTI));
     if(args.is_set(Opt::ABUNDANCE)){
         converter.load_abundances(args.get_string(Opt::ABUNDANCE));
     }
@@ -91,13 +95,25 @@ int main(int argc, char** argv) {
         converter.set_stdv(args.get_int(Opt::OUTLIER));
     }
 
-    std::cerr<<"Begin pre-loading data"<<std::endl;
-    converter.precompute(args.get_int(Opt::PERCENT));
-    std::cerr<<"Done pre-loading data"<<std::endl;
+    if(inputAlFP=="-"){
+        std::cerr<<"Begin pre-loading data from stream"<<std::endl;
+        converter.precompute_save(Opt::NUM_READS_PRECOMP);
+        std::cerr<<"Done pre-loading data from stream"<<std::endl;
+    }
+    else{
+        std::cerr<<"Begin pre-loading data"<<std::endl;
+        converter.precompute(args.get_int(Opt::PERCENT));
+        std::cerr<<"Done pre-loading data"<<std::endl;
+    }
 
     std::cerr<<"Begin Translating Coordinates"<<std::endl;
     converter.convert_coords();
     std::cerr<<"Done Translating Coordinates"<<std::endl;
+    if(inputAlFP=="-"){
+        std::cerr<<"Begin Translating Coordinates of precomputed reads"<<std::endl;
+        converter.convert_coords_precomp();
+        std::cerr<<"Done Translating Coordinates of precomputed reads"<<std::endl;
+    }
 
     converter.print_stats();
 

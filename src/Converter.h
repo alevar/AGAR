@@ -37,6 +37,8 @@
 
 #define MAX_EDITS 100
 
+#define KS_SEP_LINE  2
+
 #include <cassert>
 
 // TODO: for the final version it needs to scan through the first n reads to check for constraints
@@ -477,7 +479,9 @@ public:
 
     void load_abundances(const std::string& abundFP); // add abundances to the transcripts
 
+    void convert_coords_precomp();
     void convert_coords();
+    void precompute_save(int num_reads);
     void precompute(int perc);
     void print_multimappers();
     void set_unaligned();
@@ -515,6 +519,8 @@ private:
     int8_t *buf = NULL;
     size_t max_buf = 0;
     int perc_precomp = 10;
+    int num_reads_precomp = 500000;
+    std::vector<bam1_t*> precomp_alns,precomp_alns_pair;
     int total_num_pair_al = 0,total_num_al = 0;
     int total_multi_detected;
 
@@ -569,6 +575,7 @@ private:
     void fix_flag(bam1_t *curAl);
     int collapse_genomic(bam1_t *curAl,size_t cigar_hash);
     int collapse_genomic(bam1_t *curAl,bam1_t *mateAl,size_t cigar_hash,size_t mate_cigar_hash);
+    void _process_pair(bam1_t* curAl,bam1_t* mate);
     void process_pair(bam1_t* curAl);
     void process_single(bam1_t* curAl);
     size_t process_read(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
