@@ -197,7 +197,7 @@ def main(args):
                          "--no-unal",
                          "-k", "30",
                          "-x", os.path.abspath(args.genome_db),
-                         "-p", str(int(args.threads) - 1)]
+                         "-p", args.threads]
     if args.fasta:
         hisat2_cmd_genome.append("-f")
     hisat2_cmd_genome.extend(("-1", unaligned_r1,
