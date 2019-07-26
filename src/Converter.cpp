@@ -37,6 +37,9 @@ Converter::Converter(const std::string& alFP,const std::string& outFP,const std:
     this->numThreads=threads;
     this->outFP = outFP;
     this->alFP = alFP;
+    if(alFP == "-"){
+        this->stream = true;
+    }
 
     // now load the index
     this->load_index(index_base,multi);
@@ -338,13 +341,16 @@ void Converter::load_abundances(const std::string& abundFP){
 
 // this metod performs evaluation of errors detected by the aligner
 // and decides whether the read needs to be processed or not
-bool Converter::evaluate_errors(bam1_t *curAl){ // return true if the read passes the error check
-    return this->errorCheck.add_read(curAl);
+bool Converter::evaluate_errors(bam1_t *curAl,bool update){ // return true if the read passes the error check
+    return this->errorCheck.add_read(curAl,update);
 }
 
-bool Converter::evaluate_errors_pair(bam1_t *curAl,bam1_t *mate){ // return true if the read passes the error check
-    return this->errorCheck.add_pair(curAl,mate);
+bool Converter::evaluate_errors_pair(bam1_t *curAl,bam1_t *mate,bool update){ // return true if the read passes the error check
+    return this->errorCheck.add_pair(curAl,mate,update);
 }
+
+// TODO: include fragment length in the precomputation
+// TODO: include fasta/fastq detection in the precomputation
 
 // This function preforms the same operations as the regular prevompute
 // but the reads are being saved for evaluation later
@@ -382,10 +388,13 @@ void Converter::precompute_save(int num_reads){
             continue;
         }
         else{
-            std::cerr<<bam_get_qname(curAl)<<std::endl;
+//            std::cerr<<bam_get_qname(curAl)<<std::endl;
             if(!has_valid_mate(curAl)){
                 first_mate_found = false; // reset since next read can not be a valid pair
-                bool ret = Converter::evaluate_errors(curAl); // add to the error checks
+                // first check the errors
+                if(this->detect_misalign){
+                    bool ret = Converter::evaluate_errors(curAl,true); // add to the error checks
+                }
                 precomp_alns.push_back(bam_dup1(curAl));
                 loaded++;
             }
@@ -395,12 +404,14 @@ void Converter::precompute_save(int num_reads){
                     mate = bam_dup1(curAl);
                     first_mate_found = true;
                     if(i+1==num_reads){ // if we reach here and we are at the end of the precomputing loop - need to extend the loop by one step in order to load the second mate
-                        std::cerr<<"waiting for the second mate"<<std::endl;
+//                        std::cerr<<"waiting for the second mate"<<std::endl;
                         i--;
                     }
                 } else {
                     if (std::strcmp(bam_get_qname(curAl), bam_get_qname(mate)) == 0 && curAl->core.pos == mate->core.mpos) { // make sure information is consistent
-                        bool ret = Converter::evaluate_errors_pair(curAl, mate); // add to the error checks
+                        if(this->detect_misalign){
+                            bool ret = Converter::evaluate_errors_pair(curAl,mate,true); // add to the error checks
+                        }
                         precomp_alns_pair.push_back(bam_dup1(curAl));
                         precomp_alns_pair.push_back(bam_dup1(mate));
                         loaded_pair++;
@@ -423,7 +434,6 @@ void Converter::precompute_save(int num_reads){
 // necessary for thecoorect parsing of the errors, multimappers, etc
 void Converter::precompute(int perc){
     // TODO: here check if the paired alignments appear correctly in the SAM file or not. If yes - then switch to the simple detection strategy (mates appear consecutively)
-    // TODO: need detection of fasta vs fastq - this can be done when pre-loading information
     this->perc_precomp = perc;
     bam1_t *curAl = bam_init1(); // initialize the alignment record
     bam1_t *mate = bam_init1(); // intialize mates
@@ -440,7 +450,9 @@ void Converter::precompute(int perc){
             if(!has_valid_mate(curAl)){
                 first_mate_found = false; // reset since next read can not be a valid pair
                 if(counter%perc==0){
-                    bool ret = Converter::evaluate_errors(curAl); // add to the error checks
+                    if(this->detect_misalign){
+                        bool ret = Converter::evaluate_errors(curAl,true); // add to the error checks
+                    }
                     loaded++;
                 }
                 counter++;
@@ -453,7 +465,9 @@ void Converter::precompute(int perc){
                 } else {
                     if (counter_pair % perc == 0) {
                         if (std::strcmp(bam_get_qname(curAl), bam_get_qname(mate)) == 0 && curAl->core.pos == mate->core.mpos) { // make sure information is consistent
-                            bool ret = Converter::evaluate_errors_pair(curAl, mate); // add to the error checks
+                            if(this->detect_misalign){
+                                bool ret = Converter::evaluate_errors_pair(curAl,mate,true); // add to the error checks
+                            }
                             loaded_pair++;
                         }
                     }
@@ -549,12 +563,12 @@ void Converter::convert_coords_precomp(){
 
     for(auto &v : this->precomp_alns){
         this->process_single(v);
-        std::cerr<<"singles: "<<bam_get_qname(v)<<std::endl;
+//        std::cerr<<"singles: "<<bam_get_qname(v)<<std::endl;
         bam_destroy1(v);
     }
     for(int i=0;i<this->precomp_alns_pair.size();i+=2){
         _process_pair(this->precomp_alns_pair[i],this->precomp_alns_pair[i+1]);
-        std::cerr<<"pair: "<<bam_get_qname(this->precomp_alns_pair[i])<<"\t"<<bam_get_qname(this->precomp_alns_pair[i])<<std::endl;
+//        std::cerr<<"pair: "<<bam_get_qname(this->precomp_alns_pair[i])<<"\t"<<bam_get_qname(this->precomp_alns_pair[i])<<std::endl;
         bam_destroy1(this->precomp_alns_pair[i]);
         bam_destroy1(this->precomp_alns_pair[i+1]);
     }
@@ -797,19 +811,19 @@ int Converter::collapse_genomic(bam1_t *curAl, bam1_t *mateAl,size_t cigar_hash,
 void Converter::_process_pair(bam1_t *curAl,bam1_t* mate){
     size_t cigar_hash,mate_cigar_hash;
     // Now that both mates of an alignment are found - first evaluate the error-rate of the read
-    bool ret_err = true;
-    if((total_num_pair_al+total_num_al)%this->perc_precomp != 0){ // only add if not loaded during the precomputation
-        ret_err = Converter::evaluate_errors_pair(curAl,mate);
-    }
-    total_num_pair_al++;
+    if(this->detect_misalign){
+        bool update = (this->stream)?true:((total_num_pair_al+total_num_al)%this->perc_precomp != 0);
+        bool ret_err = Converter::evaluate_errors_pair(curAl,mate,update);
+        total_num_pair_al++;
 
-    // if the read is aligned as part of a pair and the current mate does not pass the error check
-    // it then needs to be processed as a singleton (if the other mate passes the error check)
-    if(!ret_err){ // entire pair didn't pass the error check - continue to the next read
-        // need to write to the output fasta file the detected poorly aligned reads for realignment
-        Converter::write_unaligned_pair(curAl,mate);
-        this->num_err_discarded_pair++;
-        return;
+        // if the read is aligned as part of a pair and the current mate does not pass the error check
+        // it then needs to be processed as a singleton (if the other mate passes the error check)
+        if(!ret_err){ // entire pair didn't pass the error check - continue to the next read
+            // need to write to the output fasta file the detected poorly aligned reads for realignment
+            Converter::write_unaligned_pair(curAl,mate);
+            this->num_err_discarded_pair++;
+            return;
+        }
     }
 
     Position cur_pos,cur_pos_mate;
@@ -852,19 +866,19 @@ void Converter::process_pair(bam1_t *curAl) {
 
 void Converter::process_single(bam1_t *curAl){
     // first evaluate the error-rate of the read
-    bool ret_err = true;
-    if((total_num_pair_al+total_num_al)%this->perc_precomp != 0){ // only add if not loaded during the precomputation
-        ret_err = Converter::evaluate_errors(curAl);
-    }
-    total_num_al++;
+    if(this->detect_misalign){
+        bool update = (this->stream)?true:((total_num_pair_al+total_num_al)%this->perc_precomp != 0);
+        bool ret_err = Converter::evaluate_errors(curAl,update);
+        total_num_al++;
 
-    // if the read is aligned as part of a pair and the current mate does not pass the error check
-    // it then needs to be processed as a singleton (if the other mate passes the error check)
-    if(!ret_err){
-        // need to write to the output fasta file the detected poorly aligned reads for realignment
-        Converter::write_unaligned(curAl,this->unal_s);
-        this->num_err_discarded++;
-        return; // didn't pass the error check - continue to the next read
+        // if the read is aligned as part of a pair and the current mate does not pass the error check
+        // it then needs to be processed as a singleton (if the other mate passes the error check)
+        if(!ret_err){
+            // need to write to the output fasta file the detected poorly aligned reads for realignment
+            Converter::write_unaligned(curAl,this->unal_s);
+            this->num_err_discarded++;
+            return; // didn't pass the error check - continue to the next read
+        }
     }
 
     Position cur_pos;
@@ -922,7 +936,7 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
         return unique;
     }
     else{
-        std::cerr<<"not unique pair"<<std::endl;
+//        std::cerr<<"not unique pair"<<std::endl;
         add_multi_tag(curAl);
         add_multi_tag(curAl_mate);
         change_nh_flag(curAl,res_pos.size());

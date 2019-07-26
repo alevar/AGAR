@@ -404,40 +404,44 @@ public:
         return std::make_pair(this->lower_bound,lower_bound_pair);
     }
 
-    bool add_read(bam1_t *al){ // returns true if read passes error-check; otherwise returns false; also appends reads to the distribution
-        if(num_reads%500000 == 0){
-            std::cout<<"1\t"<<lower_bound<<std::endl;
-        }
+    bool add_read(bam1_t *al, bool update){ // returns true if read passes error-check; otherwise returns false; also appends reads to the distribution; "update" flag specifies whether the read should be used to update the internals
+//        if(num_reads%500000 == 0){
+//            std::cout<<"1\t"<<lower_bound<<std::endl;
+//        }
         cur_nm = get_nm(al);
-        num_reads++;
-        sum_nm=sum_nm+cur_nm;
-        mean_nm = sum_nm/num_reads;
-        if(!ztest){ // compute based on standard deviation
-            std2 = std::sqrt(mean_nm);
-            lower_bound = this->mean_nm+(std2*this->stdv); // two standard deviations
-            this->observed[cur_nm]++;
-        }
-        else{ // perform z test
-            // TODO: implement z test here
+        if(update){
+            num_reads++;
+            sum_nm=sum_nm+cur_nm;
+            mean_nm = sum_nm/num_reads;
+            if(!ztest){ // compute based on standard deviation
+                std2 = std::sqrt(mean_nm);
+                lower_bound = this->mean_nm+(std2*this->stdv); // two standard deviations
+                this->observed[cur_nm]++;
+            }
+            else{ // perform z test
+                // TODO: implement z test here
+            }
         }
 
         return cur_nm<=lower_bound;
     }
-    bool add_pair(bam1_t *al,bam1_t *mate){
-        if(num_reads_pair%500000 == 0){
-            std::cout<<"2\t"<<lower_bound_pair<<std::endl;
-        }
+    bool add_pair(bam1_t *al,bam1_t *mate, bool update){
+//        if(num_reads_pair%500000 == 0){
+//            std::cout<<"2\t"<<lower_bound_pair<<std::endl;
+//        }
         cur_nm_pair = get_nm(al)+get_nm(mate);
-        num_reads_pair++;
-        sum_nm_pair=sum_nm_pair+cur_nm_pair;
-        mean_nm_pair = sum_nm_pair/num_reads_pair;
-        if(!ztest){ // compute based on standard deviation
-            std2_pair = std::sqrt(mean_nm_pair);
-            lower_bound_pair = this->mean_nm_pair+(std2_pair*this->stdv_pair); // two standard deviations
-            this->observed_pair[cur_nm_pair]++;
-        }
-        else{ // perform z test
-            // TODO: implement z test here
+        if(update){
+            num_reads_pair++;
+            sum_nm_pair=sum_nm_pair+cur_nm_pair;
+            mean_nm_pair = sum_nm_pair/num_reads_pair;
+            if(!ztest){ // compute based on standard deviation
+                std2_pair = std::sqrt(mean_nm_pair);
+                lower_bound_pair = this->mean_nm_pair+(std2_pair*this->stdv_pair); // two standard deviations
+                this->observed_pair[cur_nm_pair]++;
+            }
+            else{ // perform z test
+                // TODO: implement z test here
+            }
         }
 
         return cur_nm_pair<=lower_bound_pair;
@@ -507,9 +511,10 @@ private:
 
     // MISALIGNMENT METHODS AND DECLARATIONS
     ErrorCheck errorCheck;
+    bool stream = false; // is the input being streamed
     bool detect_misalign = false;
-    bool evaluate_errors(bam1_t *curAl); // returns true if the read passes the error check
-    bool evaluate_errors_pair(bam1_t *curAl,bam1_t *mate);
+    bool evaluate_errors(bam1_t *curAl,bool update); // returns true if the read passes the error check
+    bool evaluate_errors_pair(bam1_t *curAl,bam1_t *mate,bool update);
     void write_unaligned(bam1_t *curAl,std::ofstream &out_ss);
     void write_unaligned_pair(bam1_t *curAl,bam1_t *mate);
     std::string unal_r1_fname,unal_r2_fname,unal_s_fname;

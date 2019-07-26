@@ -721,7 +721,7 @@ public:
             if(multi_pairs.empty()){
                 return 0; // means no valid multimapping pairs were detected
             }
-            std::cerr<<"multi exists pair"<<std::endl;
+//            std::cerr<<"multi exists pair"<<std::endl;
             int cur_num_multi = multi_pairs.size();
             // now compute abundances for all these blocks
             this->ii = this->index.begin()+this->ltf->second; // return to the start of the multimapping block
@@ -810,7 +810,7 @@ public:
             if(multi_pairs.empty()){
                 return 0; // means no valid multimapping pairs were detected
             }
-            std::cerr<<"multi exists pair"<<std::endl;
+//            std::cerr<<"multi exists pair"<<std::endl;
             int cur_num_multi = multi_pairs.size();
             // now compute abundances for all these blocks
             this->ii = this->index.begin()+this->ltf->second; // return to the start of the multimapping block

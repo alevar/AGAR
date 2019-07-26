@@ -193,9 +193,8 @@ def main(args):
 
     print("aligning with hisat2 against the genome")
     hisat2_cmd_genome = ["/ccb/salz7-home/avaraby1/soft/hisat2/hisat2",
-                         "--very-sensitive",
+                         "--rna-sensitive",
                          "--no-unal",
-                         "-k", "30",
                          "-x", os.path.abspath(args.genome_db),
                          "-p", args.threads]
     if args.fasta:

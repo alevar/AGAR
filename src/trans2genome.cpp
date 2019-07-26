@@ -62,27 +62,35 @@ int main(int argc, char** argv) {
     std::cout<<"input alignment: "<<inputAlFP<<std::endl;
     Converter converter(inputAlFP,args.get_string(Opt::OUT_AL),args.get_string(Opt::INDEX),args.get_int(Opt::THREADS),args.get_flag(Opt::MULTI));
     if(args.is_set(Opt::ABUNDANCE)){
+        std::cerr<<"will be using abundance from "<<args.get_string(Opt::ABUNDANCE)<<std::endl;
         converter.load_abundances(args.get_string(Opt::ABUNDANCE));
     }
     if(args.get_flag(Opt::UNALIGNED)){
+        std::cerr<<"will report unalgned reads"<<std::endl;
         converter.set_unaligned();
     }
     if(args.get_flag(Opt::UNIQ)){
+        std::cerr<<"trusting the user that input is uniq"<<std::endl;
         converter.set_k1();
     }
     if(args.is_set(Opt::FRAGLEN)){
-        converter.set_fraglen(Opt::FRAGLEN);
+        std::cerr<<"fragment length is set to: "<<args.get_int(Opt::FRAGLEN)<<std::endl;
+        converter.set_fraglen(args.get_int(Opt::FRAGLEN));
     }
     if(args.is_set(Opt::NUM_MULTI)){
+        std::cerr<<"num multi enabled and set to "<<args.get_int(Opt::NUM_MULTI)<<std::endl;
         converter.set_num_multi(args.get_int(Opt::NUM_MULTI));
     }
     if(args.is_set(Opt::ALL_MULTI)){ // TODO: does this need to be converted into get_flag instead of is_set?
+        std::cerr<<"all multi reporting enabled"<<std::endl;
         converter.set_all_multi();
     }
     if(args.get_flag(Opt::MISALIGN)){
+        std::cerr<<"misalignment detection enabled"<<std::endl;
         converter.set_misalign();
     }
     if(args.is_set(Opt::OUTLIER)){
+        std::cerr<<"misalignment is set to be detected at "<<args.get_int(Opt::OUTLIER)<<std::endl;
         converter.set_stdv(args.get_int(Opt::OUTLIER));
     }
 
