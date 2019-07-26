@@ -88,7 +88,7 @@ int main(int argc, char** argv) {
 
     if(inputAlFP=="-"){
         std::cerr<<"Begin pre-loading data from stream"<<std::endl;
-        converter.precompute_save(Opt::NUM_READS_PRECOMP);
+        converter.precompute_save(args.get_int(Opt::NUM_READS_PRECOMP));
         std::cerr<<"Done pre-loading data from stream"<<std::endl;
     }
     else{

@@ -358,6 +358,7 @@ void Converter::precompute_save(int num_reads){
     int loaded=0,loaded_pair=0;
 
     // precompute first 10 reads first
+    std::cerr<<"num reads: "<<num_reads<<std::endl;
     for(int i=0;i<num_reads;i++){
         int ret;
         err_recover:
