@@ -272,11 +272,13 @@ public:
 
     int add(bam1_t *al,bam1_t *mate){ // add read to the stack
         MapID m(al);
-        bam1_t *al_dup = bam_init1();
-        bam_copy1(al_dup,al);
+//        bam1_t *al_dup = bam_init1();
+//        bam_copy1(al_dup,al);
+        bam1_t *al_dup = bam_dup1(al);
         me = mates.insert(std::make_pair(m,al_dup));
         if(!me.second){ // entry previously existed - can report a pair and remove from the stack
             bam_copy1(mate,me.first->second);
+//            mate = bam_dup1(me.first->second);
             bam_destroy1(me.first->second);
             mates.erase(me.first);
             return 1;

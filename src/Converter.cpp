@@ -381,6 +381,7 @@ void Converter::precompute_save(int num_reads){
             continue;
         }
         else{
+            std::cerr<<bam_get_qname(curAl)<<std::endl;
             if(!has_valid_mate(curAl)){
                 first_mate_found = false; // reset since next read can not be a valid pair
                 bool ret = Converter::evaluate_errors(curAl); // add to the error checks
@@ -393,6 +394,7 @@ void Converter::precompute_save(int num_reads){
                     mate = bam_dup1(curAl);
                     first_mate_found = true;
                     if(i+1==num_reads){ // if we reach here and we are at the end of the precomputing loop - need to extend the loop by one step in order to load the second mate
+                        std::cerr<<"waiting for the second mate"<<std::endl;
                         i--;
                     }
                 } else {
@@ -546,14 +548,14 @@ void Converter::convert_coords_precomp(){
 
     for(auto &v : this->precomp_alns){
         this->process_single(v);
-        std::cerr<<bam_get_qname(v)<<std::endl;
+        std::cerr<<"singles: "<<bam_get_qname(v)<<std::endl;
         bam_destroy1(v);
     }
     for(int i=0;i<this->precomp_alns_pair.size();i+=2){
         _process_pair(this->precomp_alns_pair[i],this->precomp_alns_pair[i+1]);
+        std::cerr<<"pair: "<<bam_get_qname(this->precomp_alns_pair[i])<<"\t"<<bam_get_qname(this->precomp_alns_pair[i])<<std::endl;
         bam_destroy1(this->precomp_alns_pair[i]);
         bam_destroy1(this->precomp_alns_pair[i+1]);
-        std::cerr<<bam_get_qname(this->precomp_alns_pair[i])<<"\t"<<bam_get_qname(this->precomp_alns_pair[i])<<std::endl;
     }
 }
 

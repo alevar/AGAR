@@ -77,7 +77,6 @@ def main(args):
         # with the "-a" option enabled
         hisat2_cmd_trans_noA = ["/ccb/salz7-home/avaraby1/soft/hisat2/hisat2",
                                 "--no-spliced-alignment",
-                                "--rna-sensitive",
                                 "--end-to-end",
                                 "--no-unal",
                                 "-x", os.path.abspath(args.db) + "/db",
@@ -130,18 +129,10 @@ def main(args):
         unaligned_r2 = os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.2.fq"
         unaligned_s = os.path.abspath(cur_tmp) + "/sample.trans.un_first.fq"
 
-    subprocess.Popen(["samtools", "view", "-h", "--output-fmt=BAM", "-@", args.threads, "-o",
-                      os.path.abspath(cur_tmp) + "/sample.trans_first.bam"], stdin=transcriptome_process.stdout)
+    trans2genome_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'trans2genome')  # get path to the trans2genome that was compiled with the package
 
-    transcriptome_process.wait()
-    transcriptome_process.stdout.close()
-
-    # trans2genome
-    print("converting coordinates to genomic")
-    trans2genome_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),'trans2genome')  # get path to the trans2genome that was compiled with the package
     trans2genome_cmd = [trans2genome_path,
                         "-x", os.path.abspath(args.db) + "/db",
-                        "-i", os.path.abspath(cur_tmp) + "/sample.trans_first.bam",
                         "-o", os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam",
                         "-q", "-p", str(args.threads)]
     if args.mf:
@@ -152,9 +143,11 @@ def main(args):
         trans2genome_cmd.extend(["-l"])
     if args.errcheck:
         trans2genome_cmd.extend(["-s"])
-    
-    trans2genome_process = subprocess.Popen(trans2genome_cmd)
-    trans2genome_process.wait()
+
+    subprocess.Popen(trans2genome_cmd, stdin=transcriptome_process.stdout)
+
+    transcriptome_process.wait()
+    transcriptome_process.stdout.close()
 
     if args.errcheck:
         if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r1.fastq"):
@@ -227,9 +220,6 @@ def main(args):
         if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans.un_first.fq"):
             os.remove(os.path.abspath(cur_tmp) + "/sample.trans.un_first.fq")
 
-    if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans_first.sam") and not args.keep:
-        os.remove(os.path.abspath(cur_tmp) + "/sample.trans_first.sam")
-
     print("merging all sub-alignments")
     merge_cmd = ["samtools", "merge",
                  "-@", args.threads,
@@ -255,4 +245,4 @@ def main(args):
     if not args.keep:
         shutil.rmtree(os.path.abspath(cur_tmp))
 
-    # TODO: need to remove all output from differentinternal tools and report ony general alignment (and realignment report)
+    # TODO: need to remove all output from different internal tools and report ony general alignment (and realignment report)
