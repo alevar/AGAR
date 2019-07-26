@@ -412,6 +412,7 @@ void Converter::precompute_save(int num_reads){
                         if(this->detect_misalign){
                             bool ret = Converter::evaluate_errors_pair(curAl,mate,true); // add to the error checks
                         }
+                        this->frags.add_pair(curAl,mate); // TODO: use this information afterwards to check the multimapping pairs
                         precomp_alns_pair.push_back(bam_dup1(curAl));
                         precomp_alns_pair.push_back(bam_dup1(mate));
                         loaded_pair++;
@@ -468,6 +469,7 @@ void Converter::precompute(int perc){
                             if(this->detect_misalign){
                                 bool ret = Converter::evaluate_errors_pair(curAl,mate,true); // add to the error checks
                             }
+                            this->frags.add_pair(curAl,mate);
                             loaded_pair++;
                         }
                     }

@@ -144,10 +144,12 @@ def main(args):
     if args.errcheck:
         trans2genome_cmd.extend(["-s"])
 
-    subprocess.Popen(trans2genome_cmd, stdin=transcriptome_process.stdout)
+    translate_process = subprocess.Popen(trans2genome_cmd, stdin=transcriptome_process.stdout)
 
     transcriptome_process.wait()
     transcriptome_process.stdout.close()
+
+    translate_process.wait()
 
     if args.errcheck:
         if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r1.fastq"):
@@ -205,11 +207,13 @@ def main(args):
     if args.hisat:
         hisat2_cmd_genome.extend(args.hisat)
     genome_process = subprocess.Popen(hisat2_cmd_genome, stdout=subprocess.PIPE)
-    subprocess.Popen(["samtools", "view", "-h", "--output-fmt=BAM", "-@", args.threads, "-o",
+    convert_process = subprocess.Popen(["samtools", "view", "-h", "--output-fmt=BAM", "-@", args.threads, "-o",
                       os.path.abspath(cur_tmp) + "/sample.genome.bam"], stdin=genome_process.stdout)
 
     genome_process.wait()  # allows trans2genome to run at the same time as hisat2
     genome_process.stdout.close()
+
+    convert_process.wait()
 
     if not args.keep:
         if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.1.fq"):
