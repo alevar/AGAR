@@ -12,6 +12,8 @@
 #include "tokenize.h"
 #include "Converter.h"
 
+// TODO: log of events to see if anything goes wrong during gtex realignment
+
 // trans2genome -g ~/JHU/transcriptome/hisatTrans2Genome/errorData/me_mi/data/ann.gff -i ~/JHU/transcriptome/hisatTrans2Genome/errorData/me_mi/al_1/sample.gffread.bam -s ~/JHU/transcriptome/hisatTrans2Genome/errorData/me_mi/data/genomic_header.sam -o ./test.bam
 
 enum Opt {IN_AL   = 'i',

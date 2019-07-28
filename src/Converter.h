@@ -247,6 +247,42 @@ namespace std {
     };
 }
 
+class bam_data{
+public:
+    explicit bam_data(bam1_t *al){
+        dst_l_data = al->l_data;
+        this->dst_data = new uint8_t[this->dst_l_data];
+//        this->data = std::string((char*)al->data);
+        memcpy(this->dst_data, al->data, al->l_data);
+        this->dst_core = al->core;
+        this->dst_id = al->id;
+    }
+    ~bam_data(){
+        delete [] this->dst_data;
+        this->dst_data = NULL;
+    }
+    void restore(bam1_t *bdst){
+        int m_data = bdst->m_data;   // backup data and m_data
+        if (m_data < this->dst_l_data) { // double the capacity
+            m_data = this->dst_l_data; kroundup32(m_data);
+            bdst->data = (uint8_t*)realloc(bdst->data, m_data);
+        }
+//        strcpy(reinterpret_cast<char *>(data),this->data.c_str()); // copy var-len data
+        memcpy(bdst->data,this->dst_data,this->dst_l_data);
+        bdst->core = this->dst_core;
+        bdst->id = this->dst_id;
+        // restore the backup
+        bdst->m_data = m_data;
+        bdst->l_data = this->dst_l_data;
+    }
+private:
+    int dst_l_data;
+    uint8_t *dst_data = NULL;
+//    std::string data;
+    bam1_core_t dst_core;
+    uint64_t dst_id;
+};
+
 // this class facilitates efficient identification of mates from the same paired-end read
 // when a read is added to the class, the pair is looked up and if found is reported back
 // pairs are identified by the readname and respective positions (reference id and read start)
@@ -264,30 +300,33 @@ namespace std {
 class Pairs{
 public:
     Pairs() = default;
-    ~Pairs(){
-        for(auto &v : this->mates){
-            bam_destroy1(v.second);
-        }
-    };
+//    ~Pairs(){
+//        for(auto &v : this->mates){
+//            bam_destroy1(v.second);
+//        }
+//    };
+    ~Pairs()=default;
 
+    // TODO: skip this entire step in favor of only checking consecutive lines for pairs - will be both faster and memory safe
     int add(bam1_t *al,bam1_t *mate){ // add read to the stack
         MapID m(al);
-//        bam1_t *al_dup = bam_init1();
-//        bam_copy1(al_dup,al);
-        bam1_t *al_dup = bam_dup1(al);
-        me = mates.insert(std::make_pair(m,al_dup));
+        bam_data bd(al);
+//        me = mates.insert(std::make_pair(m,bd));
+        me = mates.insert(std::pair<MapID,bam_data>(m,bd));
         if(!me.second){ // entry previously existed - can report a pair and remove from the stack
-            bam_copy1(mate,me.first->second);
-//            mate = bam_dup1(me.first->second);
-            bam_destroy1(me.first->second);
+            me.first->second.restore(mate);
             mates.erase(me.first);
+            std::cout<<"s2: "<<bam_get_qname(mate)<<"\t"<<bam_get_qname(al)<<std::endl;
             return 1;
         }
+//        else{
+//            bam_copy1(me.first->second,(al));
+//        }
         return 0;
     }
 private:
-    std::unordered_map<MapID,bam1_t*> mates;
-    std::pair<std::unordered_map<MapID,bam1_t*>::iterator,bool> me;
+    std::unordered_map<MapID,bam_data> mates;
+    std::pair<std::unordered_map<MapID,bam_data>::iterator,bool> me;
 };
 
 // this class describes the unique identifier of a genomic maping of a read
@@ -609,8 +648,10 @@ private:
     void fix_flag(bam1_t *curAl);
     int collapse_genomic(bam1_t *curAl,size_t cigar_hash);
     int collapse_genomic(bam1_t *curAl,bam1_t *mateAl,size_t cigar_hash,size_t mate_cigar_hash);
+    bool compare_mates(bam1_t *curAl,bam1_t* mate);
     void _process_pair(bam1_t* curAl,bam1_t* mate);
-    void process_pair(bam1_t* curAl);
+//    void process_pair(bam1_t* curAl);
+    void process_pair(bam1_t* curAl,bam1_t* mate);
     void process_single(bam1_t* curAl);
     size_t process_read(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
     void finish_read(bam1_t *curAl);

@@ -401,7 +401,7 @@ void Converter::precompute_save(int num_reads){
             else { // is paired
                 // check if a pair previously seen
                 if (!first_mate_found) {
-                    mate = bam_dup1(curAl);
+                    bam_copy1(mate,curAl);
                     first_mate_found = true;
                     if(i+1==num_reads){ // if we reach here and we are at the end of the precomputing loop - need to extend the loop by one step in order to load the second mate
 //                        std::cerr<<"waiting for the second mate"<<std::endl;
@@ -461,7 +461,7 @@ void Converter::precompute(int perc){
             else { // is paired
                 // check if a pair previously seen
                 if (!first_mate_found) {
-                    mate = bam_dup1(curAl);
+                    bam_copy1(mate,curAl);
                     first_mate_found = true;
                 } else {
                     if (counter_pair % perc == 0) {
@@ -561,24 +561,28 @@ void Converter::write_unaligned(bam1_t *curAl,std::ofstream &out_ss){
 // if precomputation was performed from the stream, then the following function
 // can be used in order to process reads which have not been evaluated yet
 void Converter::convert_coords_precomp(){
-    // TODO: parallel
-
     for(auto &v : this->precomp_alns){
         this->process_single(v);
-//        std::cerr<<"singles: "<<bam_get_qname(v)<<std::endl;
         bam_destroy1(v);
     }
     for(int i=0;i<this->precomp_alns_pair.size();i+=2){
         _process_pair(this->precomp_alns_pair[i],this->precomp_alns_pair[i+1]);
-//        std::cerr<<"pair: "<<bam_get_qname(this->precomp_alns_pair[i])<<"\t"<<bam_get_qname(this->precomp_alns_pair[i])<<std::endl;
         bam_destroy1(this->precomp_alns_pair[i]);
         bam_destroy1(this->precomp_alns_pair[i+1]);
     }
 }
 
+bool Converter::compare_mates(bam1_t *curAl,bam1_t* mate){
+    return (std::strcmp(bam_get_qname(curAl),bam_get_qname(mate)) &&
+            curAl->core.mpos == mate->core.pos &&
+            curAl->core.mtid == mate->core.tid);
+}
+
 void Converter::convert_coords(){
     bam1_t *curAl = bam_init1(); // initialize the alignment record
-    // TODO: parallel
+    bam1_t *mate = bam_init1();
+
+    bool mate_available = false;
 
     while(sam_read1(al,al_hdr,curAl)>=0) { // only perfom if unaligned flag is set to true
         if (curAl->core.flag & 4) { // if read is unmapped
@@ -589,19 +593,25 @@ void Converter::convert_coords(){
             continue;
         }
 
-        // TODO: need to output proper log files so that we can detect when something goes wrong when realigning GTEx
-
         // otherwise we proceed to evaluate the reads accordingly
         // first check if belongs to a valid pair
-        if(this->has_valid_mate(curAl)){ // belongs to a valid pair
-            this->process_pair(curAl);
+        if(this->has_valid_mate(curAl)) { // belongs to a valid pair
+            if(mate_available && compare_mates(curAl,mate)){
+                this->process_pair(curAl,mate);
+                mate_available = false;
+            }
+            else{ // copy current read to the mate for later
+                mate_available = true;
+                bam_copy1(mate,curAl);
+            }
         }
-
         else{ // does not belong to a valid pair
             this->process_single(curAl);
+            mate_available = false;
         }
     }
     bam_destroy1(curAl);
+    bam_destroy1(mate);
 }
 
 bool Converter::has_valid_mate(bam1_t *curAl){
@@ -851,19 +861,24 @@ void Converter::_process_pair(bam1_t *curAl,bam1_t* mate){
     }
 }
 
-void Converter::process_pair(bam1_t *curAl) {
+//void Converter::process_pair(bam1_t *curAl) {
+//
+//    // need a queue to hold and release pairs
+//    bam1_t* mate = bam_init1();
+//    int ret = this->pairs.add(curAl,mate);
+//    std::cout<<"s1: "<<bam_get_qname(curAl)<<"\t"<<bam_get_qname(mate)<<std::endl;
+//    if(!ret){ // mate not found
+//        bam_destroy1(mate);
+//        return;
+//    }
+//
+//    _process_pair(curAl,mate);
+//
+//    bam_destroy1(mate);
+//}
 
-    // need a queue to hold and release pairs
-    bam1_t* mate = bam_init1();
-    int ret = this->pairs.add(curAl,mate);
-    if(!ret){ // mate not found
-        bam_destroy1(mate);
-        return;
-    }
-
+void Converter::process_pair(bam1_t *curAl,bam1_t *mate) {
     _process_pair(curAl,mate);
-
-    bam_destroy1(mate);
 }
 
 void Converter::process_single(bam1_t *curAl){
