@@ -41,6 +41,7 @@ public:
     // for debugging
     void print_mapping();
     void print_mmap();
+    void print_mmap_multi();
 
     void save(bool multi, bool uniq);
 private:

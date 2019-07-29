@@ -917,7 +917,7 @@ void Converter::process_single(bam1_t *curAl){
     }
 }
 
-void Converter::add_multi_tag(bam1_t* curAl){
+void Converter::add_multi_tag(bam1_t* curAl){ // TODO: replace with the number of multimappers
     uint8_t* ptr_op=bam_aux_get(curAl,"ZZ");
     if(ptr_op){
         bam_aux_del(curAl,ptr_op);

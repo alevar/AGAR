@@ -555,6 +555,7 @@ public:
             count++;
             this->ii++;
         }
+        this->ii-=count; // reset multimappers to the beginning
         return count;
     }
 
@@ -622,6 +623,7 @@ public:
             double utotal=0,mtotal=0,rtotal=0;
 
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
+            int offset = this->ltf->second;
             int cur_num_multi = get_block_size();
             if(this->all_multi){ // just output the entire block
                 copy_current(pos_res);

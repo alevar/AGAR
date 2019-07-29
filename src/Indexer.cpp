@@ -245,6 +245,9 @@ void Indexer::print_mapping(){
 void Indexer::print_mmap(){
     this->mmap.print();
 }
+void Indexer::print_mmap_multi(){
+    this->mmap.print_multimapers();
+}
 
 void Indexer::save_header() {
     std::ofstream genome_headerfp(this->genome_headername);
