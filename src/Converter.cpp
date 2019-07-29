@@ -1099,17 +1099,23 @@ size_t Converter::process_read(bam1_t *curAl,Position& cur_pos,int cigars[MAX_CI
         exit(1);
     }
 
-    // now get mate read start
-    int target_name_mate = atoi(al_hdr->target_name[curAl->core.mtid]); // name of the transcript from the input alignment
-    GffTranscript& p_trans_mate = transcriptome[target_name_mate]; // get the transcript
-    GVec<GSeg>& exon_list_mate=p_trans_mate.exons; // get exons
-    int i_mate=0;
-    int32_t read_start_mate=0;
+    // convert the mate information for single reads without a concordantly mapped mate
+    // unless the read is not paired, in which case the paired information should stay the same
+    if(curAl->core.mpos != -1 || curAl->core.mtid != -1){
+        int target_name_mate = atoi(al_hdr->target_name[curAl->core.mtid]); // name of the transcript from the input alignment
+        GffTranscript& p_trans_mate = transcriptome[target_name_mate]; // get the transcript
+        GVec<GSeg>& exon_list_mate=p_trans_mate.exons; // get exons
+        int i_mate=0;
+        int32_t read_start_mate=0;
 
-    ret_val = Converter::get_read_start(exon_list_mate,curAl->core.mpos,read_start_mate,i_mate);
-    if(!ret_val){
-        std::cerr<<"Can not get the genomic read start of the mate"<<std::endl;
-        exit(1);
+        ret_val = Converter::get_read_start(exon_list_mate,curAl->core.mpos,read_start_mate,i_mate);
+        if(!ret_val){
+            std::cerr<<"Can not get the genomic read start of the mate"<<std::endl;
+            exit(1);
+        }
+
+        curAl->core.mtid = p_trans_mate.refID;
+        curAl->core.mpos = read_start_mate - 1;
     }
 
     cur_pos.set_chr(p_trans.get_refID());
@@ -1137,13 +1143,6 @@ size_t Converter::process_read(bam1_t *curAl,Position& cur_pos,int cigars[MAX_CI
     // now need to deal with the rest
     curAl->core.tid = p_trans.refID; // assign new reference
     curAl->core.pos = read_start - 1; // assign new position
-
-    // convert the mate information for single reads without a concordantly mapped mate
-    // unless the read is not paired, in which case the paired information should stay the same
-    if(curAl->core.mpos != -1 || curAl->core.mtid != -1){
-        curAl->core.mtid = p_trans_mate.refID;
-        curAl->core.mpos = read_start_mate - 1;
-    }
 
     // assign new cigar string to the record
 

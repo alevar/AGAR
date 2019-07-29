@@ -9,7 +9,7 @@ std::string Indexer::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::
     GList<GffExon>& exon_list = p_trans.exons;
 
     std::string exon_seq;
-    size_t length;
+    size_t length=0;
     coords.clear();
     std::stringstream ss;
 
@@ -22,7 +22,7 @@ std::string Indexer::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::
     }
 
     // get coordinates into the map
-    if (length>this->kmerlen and this->multi){ // sanity check for 0 and 1 base exons
+    if (exon_seq.size()>=this->kmerlen and this->multi){ // sanity check for 0 and 1 base exons
         this->found_gene = this->geneMap.find(std::string(p_trans.getGeneID()));
         if(this->found_gene != this->geneMap.end()){
             this->mmap.add_sequence(exon_seq,p_trans,this->found_gene->second.get_locid(),transID);
