@@ -515,6 +515,35 @@ struct GffTranscript: public GSeg {
     }
 };
 
+// this object holds information regarding the fragment length distribution
+// this is then used to tell if a multimapping pair is valid
+class Fragments{
+public:
+    Fragments() = default;
+    ~Fragments() = default;
+
+    void add_pair(bam1_t *al,bam1_t *mate){
+        // calculate the distance from the first start - the mate start and add to the distribution
+        cur_dist = get_dist(al,mate);
+        min = std::min(this->min,cur_dist);
+        max = std::max(this->max,cur_dist);
+    }
+
+    int get_min(){return this->min;}
+    int get_max(){return this->max;}
+
+    bool is_valid(bam1_t *al, bam1_t *mate){ // checks if the current pair passes the fragment length test // TODO: make better - currently will test if within bounds that have been observed - perhaps compute the possible ends of the distribution and evaluate the likelihood?
+        cur_dist = get_dist(al,mate);
+        return (cur_dist>=min && cur_dist<=max);
+    }
+private:
+    int min = 0, max = MAX_INT;
+    int cur_dist;
+    uint32_t get_dist(bam1_t *al,bam1_t *mate){
+        return std::abs(al->core.mpos - al->core.pos);
+    }
+};
+
 // this class describes the multimappers in the index transcriptome
 // and facilitates efficient storage and lookup
 class Multimap{
@@ -545,6 +574,13 @@ public:
     void set_precomputed_abundances(){
         this->precomputed_abundances = true;
     }
+
+    void add_frag(bam1_t* curAl,bam1_t* mate){
+        this->frags.add_pair(curAl,mate);
+    }
+
+    int get_min_frag(){return this->frags.get_min();}
+    int get_max_frag(){return this->frags.get_max();}
 
     Loci* loci;
     std::vector<GffTranscript>* transcriptome;
@@ -820,7 +856,7 @@ public:
             if(this->all_multi){ // just output the entire block
                 for(auto & mp: multi_pairs) { // iterate over all the detected pairs
                     pos_res.push_back((this->ii + mp.first)->first);
-                    pos_res_mate.push_back((this->ii + mp.second)->first);
+                    pos_res_mate.push_back((this->ii_mate + mp.second)->first);
                 }
                 return cur_num_multi; // done
             }
@@ -996,6 +1032,9 @@ public:
     }
 
 private:
+    // FRAGMENT LENGTH STUFF
+    Fragments frags;
+
     // we know that the kmer spans an intron
     // this function appends the intron/exon information to moves of the position object
     void process_remaining(int& el_pos,int& exon_pos,Position& p,GList<GffExon>& exon_list,GffExon* cur_exon){

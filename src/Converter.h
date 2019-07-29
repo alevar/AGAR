@@ -514,33 +514,6 @@ private:
     }
 };
 
-// this object holds information regarding the fragment length distribution
-// this is then used to tell if a multimapping pair is valid
-class Fragments{
-public:
-    Fragments() = default;
-    ~Fragments() = default;
-
-    void add_pair(bam1_t *al,bam1_t *mate){
-        // calculate the distance from the first start - the mate start and add to the distribution
-        cur_dist = get_dist(al,mate);
-        min = std::min(this->min,cur_dist);
-        max = std::max(this->max,cur_dist);
-    }
-
-    bool is_valid(bam1_t *al, bam1_t *mate){ // checks if the current pair passes the fragment length test // TODO: make better - currently will test if within bounds that have been observed - perhaps compute the possible ends of the distribution and evaluate the likelihood?
-        cur_dist = get_dist(al,mate);
-        return (cur_dist>=min && cur_dist<=max);
-    }
-private:
-    int min = 0, max = MAX_INT;
-    int cur_dist;
-    uint32_t get_dist(bam1_t *al,bam1_t *mate){
-        return std::abs(al->core.mpos - al->core.pos);
-    }
-
-};
-
 class Converter{
 public:
     Converter(const std::string& alFP,const std::string& outFP,const std::string& index_base,const int& threads,bool multi);
@@ -574,9 +547,6 @@ public:
 private:
     // STATS
     int num_err_discarded = 0,num_err_discarded_pair = 0;
-
-    // FRAGMENT LENGTH STUFF
-    Fragments frags;
 
     // MISALIGNMENT METHODS AND DECLARATIONS
     ErrorCheck errorCheck;

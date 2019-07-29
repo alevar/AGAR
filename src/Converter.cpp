@@ -411,7 +411,7 @@ void Converter::precompute_save(int num_reads){
                     if(this->detect_misalign){
                         bool ret = Converter::evaluate_errors_pair(curAl,mate,true); // add to the error checks
                     }
-                    this->frags.add_pair(curAl,mate); // TODO: use this information afterwards to check the multimapping pairs
+                    this->mmap.add_frag(curAl,mate);
                     precomp_alns_pair.push_back(bam_dup1(curAl));
                     precomp_alns_pair.push_back(bam_dup1(mate));
                     loaded_pair++;
@@ -427,6 +427,8 @@ void Converter::precompute_save(int num_reads){
     std::cerr<<"preloaded "<<loaded+(loaded_pair*2)<<" reads"<<std::endl;
     std::cerr<<"\tof which "<<loaded<<" were singles"<<std::endl;
     std::cerr<<"\tand "<<loaded_pair*2<<" were paired"<<std::endl;
+    std::cerr<<"At minimum fragment length of: "<<this->mmap.get_min_frag()<<std::endl; // TODO: The problem with computing fragment lengths this way is that it is computed on the transcriptomic level and not genomic - need conversion or a different approach all together
+    std::cerr<<"\tAnd maximum fragment length of: "<<this->mmap.get_max_frag()<<std::endl;
 }
 
 // this function cycles through a section of the bam file loads some preliminary data
@@ -466,7 +468,8 @@ void Converter::precompute(int perc){
                         if(this->detect_misalign){
                             bool ret = Converter::evaluate_errors_pair(curAl,mate,true); // add to the error checks
                         }
-                        this->frags.add_pair(curAl,mate);
+                        // now add to the fragment length distribution
+                        this->mmap.add_frag(curAl,mate);
                         loaded_pair++;
                     }
                     first_mate_found = false;
@@ -986,8 +989,12 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
 
             curAl->core.pos = res_pos[pos_idx].start-1;
             curAl->core.mpos = res_pos_mate[pos_idx].start-1;
-            curAl_mate->core.pos = res_pos[pos_idx].start-1;
+            curAl->core.tid = res_pos[pos_idx].chr;
+            curAl->core.mtid = res_pos_mate[pos_idx].chr;
+            curAl_mate->core.pos = res_pos_mate[pos_idx].start-1;
             curAl_mate->core.mpos = res_pos[pos_idx].start-1;
+            curAl_mate->core.tid = res_pos_mate[pos_idx].chr;
+            curAl_mate->core.mtid = res_pos[pos_idx].chr;
 
             // reconvert the cur_pos into a read and output
             num_cigars = 0,num_cigars_mate = 0;
