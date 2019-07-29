@@ -696,7 +696,7 @@ public:
                 bool locus_found = false; // did the inner loop find the locus of the outer loop
                 while(true){
                     if(this->ii->first.locus == this->ii_mate->first.locus &&
-                       std::abs((int)this->ii->first.start - (int)this->ii_mate->first.start) > this->fraglen){ // valid pair
+                       std::abs((int)this->ii->first.start - (int)this->ii_mate->first.start) < this->fraglen){ // valid pair
                         multi_pairs.push_back(std::make_pair(idx,idx_mate));
                         locus_found = true;
                     }
@@ -785,7 +785,7 @@ public:
                 bool locus_found = false; // did the inner loop find the locus of the outer loop
                 while(true){
                     if(this->ii->first.locus == this->ii_mate->first.locus &&
-                      std::abs((int)this->ii->first.start - (int)this->ii_mate->first.start) > this->fraglen){ // valid pair
+                      std::abs((int)this->ii->first.start - (int)this->ii_mate->first.start) < this->fraglen){ // valid pair // TODO: set fragment length based on the precomputed distribution
                         multi_pairs.push_back(std::make_pair(idx,idx_mate));
                         locus_found = true;
                     }
@@ -1145,7 +1145,7 @@ private:
     }
 
     int kmerlen;
-    int fraglen = 200000;
+    int fraglen = 200000; // TODO: URGENT!
     int num_multi = 1;
     int all_multi = false;
     bool precomputed_abundances = false;

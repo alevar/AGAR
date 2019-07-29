@@ -408,15 +408,13 @@ void Converter::precompute_save(int num_reads){
                         i--;
                     }
                 } else {
-                    if (std::strcmp(bam_get_qname(curAl), bam_get_qname(mate)) == 0 && curAl->core.pos == mate->core.mpos) { // make sure information is consistent
-                        if(this->detect_misalign){
-                            bool ret = Converter::evaluate_errors_pair(curAl,mate,true); // add to the error checks
-                        }
-                        this->frags.add_pair(curAl,mate); // TODO: use this information afterwards to check the multimapping pairs
-                        precomp_alns_pair.push_back(bam_dup1(curAl));
-                        precomp_alns_pair.push_back(bam_dup1(mate));
-                        loaded_pair++;
+                    if(this->detect_misalign){
+                        bool ret = Converter::evaluate_errors_pair(curAl,mate,true); // add to the error checks
                     }
+                    this->frags.add_pair(curAl,mate); // TODO: use this information afterwards to check the multimapping pairs
+                    precomp_alns_pair.push_back(bam_dup1(curAl));
+                    precomp_alns_pair.push_back(bam_dup1(mate));
+                    loaded_pair++;
                     first_mate_found = false;
                 }
             }
@@ -465,13 +463,11 @@ void Converter::precompute(int perc){
                     first_mate_found = true;
                 } else {
                     if (counter_pair % perc == 0) {
-                        if (std::strcmp(bam_get_qname(curAl), bam_get_qname(mate)) == 0 && curAl->core.pos == mate->core.mpos) { // make sure information is consistent
-                            if(this->detect_misalign){
-                                bool ret = Converter::evaluate_errors_pair(curAl,mate,true); // add to the error checks
-                            }
-                            this->frags.add_pair(curAl,mate);
-                            loaded_pair++;
+                        if(this->detect_misalign){
+                            bool ret = Converter::evaluate_errors_pair(curAl,mate,true); // add to the error checks
                         }
+                        this->frags.add_pair(curAl,mate);
+                        loaded_pair++;
                     }
                     first_mate_found = false;
                     counter_pair++;
@@ -573,7 +569,7 @@ void Converter::convert_coords_precomp(){
 }
 
 bool Converter::compare_mates(bam1_t *curAl,bam1_t* mate){
-    return (std::strcmp(bam_get_qname(curAl),bam_get_qname(mate)) &&
+    return (std::strcmp(bam_get_qname(curAl),bam_get_qname(mate))==0 &&
             curAl->core.mpos == mate->core.pos &&
             curAl->core.mtid == mate->core.tid);
 }

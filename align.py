@@ -224,7 +224,7 @@ def main(args):
             os.remove(os.path.abspath(cur_tmp) + "/sample.trans.un_first.fq")
 
     print("merging all sub-alignments")
-    merge_cmd = ["samtools", "merge",
+    merge_cmd = ["samtools", "merge", "-f",
                  "-@", args.threads,
                  args.output,
                  os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam"]
