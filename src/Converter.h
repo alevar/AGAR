@@ -435,47 +435,111 @@ public:
     ErrorCheck() = default;
     ~ErrorCheck() = default;
 
+    void set_raw(int raw_thresh){
+        if(raw_thresh<=0){
+            std::cerr<<"upper edit distance bound <=0 is not permitted"<<std::endl;
+            exit(-1);
+        }
+        if(raw_test){
+            std::cerr<<"raw test was already set"<<std::endl;
+            exit(-1);
+        }
+        if(stdv_test){
+            std::cerr<<"standard deviation test was already set"<<std::endl;
+            exit(-1);
+        }
+        if(ztest){
+            std::cerr<<"ztest was already set"<<std::endl;
+            exit(-1);
+        }
+        this->raw_thresh = raw_thresh;
+        this->raw_test = true;
+        this->ztest = false;
+        this->stdv_test = false;
+    }
+
+    void set_z(){
+        if(raw_test){
+            std::cerr<<"raw test was already set"<<std::endl;
+            exit(-1);
+        }
+        if(stdv_test){
+            std::cerr<<"standard deviation test was already set"<<std::endl;
+            exit(-1);
+        }
+        if(ztest){
+            std::cerr<<"ztest was already set"<<std::endl;
+            exit(-1);
+        }
+        this->raw_test = false;
+        this->ztest = true;
+        this->stdv_test = false;
+    }
+
     void set_stdv(int stdv){
+        if(stdv<=0){
+            std::cerr<<"upper standard deviation on edit distance bound <=0 is not permitted"<<std::endl;
+            exit(-1);
+        }
+        if(raw_test){
+            std::cerr<<"raw test was already set"<<std::endl;
+            exit(-1);
+        }
+        if(stdv_test){
+            std::cerr<<"standard deviation test was already set"<<std::endl;
+            exit(-1);
+        }
+        if(ztest){
+            std::cerr<<"ztest was already set"<<std::endl;
+            exit(-1);
+        }
         this->stdv = stdv;
+        this->raw_test = false;
+        this->ztest = false;
+        this->stdv_test = true;
     }
 
     std::pair<double,double> get_thresh(){
-        return std::make_pair(this->lower_bound,lower_bound_pair);
+        if(this->raw_test){
+            return std::make_pair((double)this->raw_thresh,(double)this->raw_thresh);
+        }
+        else{
+            return std::make_pair(this->thresh,thresh_pair);
+        }
     }
 
     bool add_read(bam1_t *al, bool update){ // returns true if read passes error-check; otherwise returns false; also appends reads to the distribution; "update" flag specifies whether the read should be used to update the internals
-//        if(num_reads%500000 == 0){
-//            std::cout<<"1\t"<<lower_bound<<std::endl;
-//        }
         cur_nm = get_nm(al);
-        if(update){
+        if(update && !raw_test){
             num_reads++;
             sum_nm=sum_nm+cur_nm;
             mean_nm = sum_nm/num_reads;
             if(!ztest){ // compute based on standard deviation
                 std2 = std::sqrt(mean_nm);
-                lower_bound = this->mean_nm+(std2*this->stdv); // two standard deviations
+                thresh = this->mean_nm+(std2*this->stdv); // two standard deviations
                 this->observed[cur_nm]++;
             }
             else{ // perform z test
                 // TODO: implement z test here
             }
         }
-
-        return cur_nm<=lower_bound;
+        if(this->stdv_test){
+            return cur_nm<=thresh;
+        }
+        else{ // raw test here
+            return cur_nm<=raw_thresh;
+        }
     }
     bool add_pair(bam1_t *al,bam1_t *mate, bool update){
-//        if(num_reads_pair%500000 == 0){
-//            std::cout<<"2\t"<<lower_bound_pair<<std::endl;
-//        }
-        cur_nm_pair = get_nm(al)+get_nm(mate);
-        if(update){
+        cur_nm = get_nm(al);
+        cur_nm_mate = get_nm(mate);
+        if(update && !raw_test){
             num_reads_pair++;
             sum_nm_pair=sum_nm_pair+cur_nm_pair;
             mean_nm_pair = sum_nm_pair/num_reads_pair;
             if(!ztest){ // compute based on standard deviation
                 std2_pair = std::sqrt(mean_nm_pair);
-                lower_bound_pair = this->mean_nm_pair+(std2_pair*this->stdv_pair); // two standard deviations
+                thresh_pair = this->mean_nm_pair+(std2_pair*this->stdv_pair); // two standard deviations
                 this->observed_pair[cur_nm_pair]++;
             }
             else{ // perform z test
@@ -483,20 +547,30 @@ public:
             }
         }
 
-        return cur_nm_pair<=lower_bound_pair;
+        if(this->stdv_test){
+            return cur_nm_pair<=thresh_pair;
+        }
+        else{ // raw test here
+            return (cur_nm<raw_thresh && cur_nm_mate<raw_thresh);
+        }
     }
 
 private:
+    // FOR RAW TEST
+    bool raw_test = false;
+    uint8_t raw_thresh = 1;
+
+    // EVERYTHING ELSE
     int stdv = 3; // for standard deviation based outlier detection this parameter sets the number of standard deviations above the mean that the
-    bool ztest = false;
+    bool ztest = false, stdv_test = false;
     std::vector<uint32_t> observed = std::vector<uint32_t>(MAX_EDITS);
-    int num_reads=0,sum_nm=0,cur_nm=0;
-    float mean_nm,std2,lower_bound;
+    int num_reads=0,sum_nm=0,cur_nm=0,cur_nm_mate=0;
+    float mean_nm,std2,thresh;
 
     int stdv_pair = 3; // for standard deviation based outlier detection this parameter sets the number of standard deviations above the mean that the
     std::vector<uint32_t> observed_pair = std::vector<uint32_t>(MAX_EDITS);
     int num_reads_pair=0,sum_nm_pair=0,cur_nm_pair=0;
-    float mean_nm_pair,std2_pair,lower_bound_pair;
+    float mean_nm_pair,std2_pair,thresh_pair;
 
     uint32_t get_nm(bam1_t *al){
         uint8_t* ptr_nm_1=bam_aux_get(al,"NM");
@@ -533,6 +607,7 @@ public:
     void set_all_multi(){this->mmap.set_all_multi();};
     void set_misalign();
     void set_stdv(int stdv){errorCheck.set_stdv(stdv);}
+    void set_raw(int raw){errorCheck.set_raw(raw);}
 
     void print_stats(){
         std::cerr<<"reads discarded as misalignments: "<<(this->num_err_discarded_pair*2)+this->num_err_discarded<<" at "<<errorCheck.get_thresh().first<<" singleton and "<<errorCheck.get_thresh().second<<" paired thresholds"<<std::endl;

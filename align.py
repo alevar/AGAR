@@ -196,9 +196,10 @@ def main(args):
     print("aligning with hisat2 against the genome")
     hisat2_cmd_genome = ["/ccb/salz7-home/avaraby1/soft/hisat2/hisat2",
                          "--rna-sensitive",
-                         "--no-unal",
                          "-x", os.path.abspath(args.genome_db),
                          "-p", args.threads]
+    if args.nounal:
+        hisat2_cmd_genome.append("--no-unal")
     if args.fasta:
         hisat2_cmd_genome.append("-f")
     hisat2_cmd_genome.extend(("-1", unaligned_r1,
@@ -248,4 +249,5 @@ def main(args):
     if not args.keep:
         shutil.rmtree(os.path.abspath(cur_tmp))
 
-    # TODO: need to remove all output from different internal tools and report ony general alignment (and realignment report)
+    # TODO: need to remove all output from different internal tools and report only general alignment (and realignment report)
+    # TODO: create a unified alignment rate report for the total number of alignments across both transcriptome and genome searches

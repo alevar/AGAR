@@ -29,7 +29,8 @@ enum Opt {IN_AL   = 'i',
         NUM_MULTI = 'k',
         MISALIGN  = 's',
         PERCENT   = 'e',
-        OUTLIER   = 't',
+        OUTLIER_STDV   = 't',
+        OUTLIER_RAW   = 'r',
         NUM_READS_PRECOMP = 'n'};
 
 int main(int argc, char** argv) {
@@ -49,7 +50,8 @@ int main(int argc, char** argv) {
     args.add_flag(Opt::MISALIGN,"mis","try to eliminate misaligned reads based on the error distribution",false);
     args.add_int(Opt::PERCENT,"perc",10,"percent of the reads to be evaluated when pre-loading data before parsing",false);
     args.add_int(Opt::NUM_READS_PRECOMP,"nrp",500000,"number of reads to precompute based on the streaming",false);
-    args.add_int(Opt::OUTLIER,"outlier",3,"This argument specifies the constant to be used when computing outliers for misalignment detection. Currently this parameter regulates the number of standard deviations from the mean to be considered",false);
+    args.add_int(Opt::OUTLIER_STDV,"outlier_stdv",5,"Poisson threshold as the number of standard deviations. Everythin above the threshold will be discarded as a misalignment",false);
+    args.add_int(Opt::OUTLIER_RAW,"outlier_raw",10,"Edit distance threshold for misalignments. For paired alignments the threshold is applied to each read separately",false);
 
     // TODO: implement the -k mode in which only a certain number of most frequent multimappers is reported (2,3,etc depending on the value set)
 
@@ -90,10 +92,15 @@ int main(int argc, char** argv) {
     if(args.get_flag(Opt::MISALIGN)){
         std::cerr<<"misalignment detection enabled"<<std::endl;
         converter.set_misalign();
-    }
-    if(args.is_set(Opt::OUTLIER)){
-        std::cerr<<"misalignment is set to be detected at "<<args.get_int(Opt::OUTLIER)<<std::endl;
-        converter.set_stdv(args.get_int(Opt::OUTLIER));
+
+        if(args.is_set(Opt::OUTLIER_STDV)){
+            std::cerr<<"misalignment is set to be detected at "<<args.get_int(Opt::OUTLIER_STDV)<<std::endl;
+            converter.set_stdv(args.get_int(Opt::OUTLIER_STDV));
+        }
+        if(args.is_set(Opt::OUTLIER_RAW)){
+            std::cerr<<"misalignment is set to be detected at "<<args.get_int(Opt::OUTLIER_RAW)<<std::endl;
+            converter.set_raw(args.get_int(Opt::OUTLIER_RAW));
+        }
     }
 
     if(inputAlFP=="-"){
