@@ -47,7 +47,7 @@ Converter::Converter(const std::string& alFP,const std::string& outFP,const std:
     // now initialize the sam file
     struct stat buffer{};
     if(stat (alFP.c_str(), &buffer) != 0 && alFP != "-"){ // if file does not exists
-        std::cerr<<"Alignment file: "<<alFP<<" is not found."<<std::endl;
+        std::cerr<<"@ERROR::Alignment file is not found: "<<alFP<<std::endl;
         exit(1);
     }
 
@@ -115,11 +115,11 @@ void Converter::load_info(const std::string& info_fname){
     // read file to get important stats
     struct stat buffer{};
     if(stat (info_fname.c_str(), &buffer) != 0){ // if file does not exists
-        std::cerr<<"Info file: "<<info_fname<<" is not found. Check that correct index is provided."<<std::endl;
+        std::cerr<<"@ERROR::Info file is not found: "<<info_fname<<std::endl;
         exit(1);
     }
     // read file and save important info
-    std::cerr<<"Reading the info file: "<<info_fname<<std::endl;
+    std::cerr<<"@LOG::Reading the info file: "<<info_fname<<std::endl;
     std::string iline;
     std::ifstream infostream(info_fname);
 
@@ -134,7 +134,7 @@ void Converter::load_info(const std::string& info_fname){
     this->kmerlen = std::stoi(iline);
 
     infostream.close();
-    std::cerr<<"Loaded info data"<<std::endl;
+    std::cerr<<"@LOG::Loaded info data"<<std::endl;
 }
 
 // this function parses the .tlst file and inserts entries into the index
@@ -209,13 +209,12 @@ void Converter::_load_transcriptome(std::ifstream& tlstfp,char* buffer){
                         end = 10*end + buffer[i] - '0';
                         break;
                     default:
-                        std::cerr<<"should never happen _load_transcriptome"<<std::endl;
+                        std::cerr<<"@ERROR::should never happen _load_transcriptome"<<std::endl;
                         exit(1);
                 }
                 break;
             default:
-                std::cerr<<"unrecognized character"<<std::endl;
-                std::cerr<<buffer[i]<<std::endl;
+                std::cerr<<"@ERROR::unrecognized character: "<<buffer[i]<<std::endl;
                 exit(1);
         }
     }
@@ -226,11 +225,11 @@ void Converter::_load_transcriptome(std::ifstream& tlstfp,char* buffer){
 }
 
 void Converter::print_transcriptome(){
-    std::cerr<<"printing transcriptome"<<std::endl;
+    std::cerr<<"@LOG::printing transcriptome"<<std::endl;
     for(auto &t : this->transcriptome){
         t.print();
     }
-    std::cerr<<"done printing transcriptome"<<std::endl;
+    std::cerr<<"@LOG::done printing transcriptome"<<std::endl;
 }
 
 void Converter::load_transcriptome(const std::string &tlst_fname) {
@@ -239,10 +238,10 @@ void Converter::load_transcriptome(const std::string &tlst_fname) {
 
     struct stat buffer{};
     if(stat (tlst_fname.c_str(), &buffer) != 0){ // if file does not exists
-        std::cerr<<"Locus file: "<<tlst_fname<<" is not found. Check that correct index is provided."<<std::endl;
+        std::cerr<<"@ERROR::Locus file: "<<tlst_fname<<" is not found. Check that correct index is provided."<<std::endl;
         exit(1);
     }
-    std::cerr<<"loading locus data from: "<<tlst_fname<<std::endl;
+    std::cerr<<"@LOG::loading locus data from: "<<tlst_fname<<std::endl;
     std::ifstream tlstfp(tlst_fname,std::ifstream::binary);
     if(tlstfp){
         tlstfp.seekg(0,tlstfp.end);
@@ -253,10 +252,10 @@ void Converter::load_transcriptome(const std::string &tlst_fname) {
             this->_load_transcriptome(tlstfp,buffer);
         }
         delete[] buffer;
-        std::cerr<<"finished loading the locus data"<<std::endl;
+        std::cerr<<"@LOG::finished loading the locus data"<<std::endl;
     }
     else{
-        std::cerr<<"failed to open the locus file"<<std::endl;
+        std::cerr<<"@ERROR::failed to open the locus file"<<std::endl;
     }
     tlstfp.close();
 }
@@ -264,7 +263,7 @@ void Converter::load_transcriptome(const std::string &tlst_fname) {
 void Converter::load_genome_header(const std::string& genome_header_fname){
     struct stat buffer{};
     if(stat (genome_header_fname.c_str(), &buffer) != 0){ // if file does not exists
-        std::cerr<<"Genome Header file: "<<genome_header_fname<<" is not found. Check that correct index is provided."<<std::endl;
+        std::cerr<<"@ERROR::Genome Header file: "<<genome_header_fname<<" is not found. Check that correct index is provided."<<std::endl;
         exit(1);
     }
     this->genome_al=hts_open(genome_header_fname.c_str(),"r");
@@ -312,12 +311,12 @@ void Converter::load_abundances(const std::string& abundFP){
     std::stringstream *linestream;
     abundstream.open(abundFP.c_str(),std::ios::in);
     if (!abundstream.good()){
-        std::cerr<<"FATAL: Couldn't open transcript abundance file: "<<abundFP<<std::endl;
+        std::cerr<<"@ERROR::Couldn't open transcript abundance file: "<<abundFP<<std::endl;
         exit(1);
     }
     std::ios::sync_with_stdio(false);
 
-    std::cerr<<"Reading the transcript abundance file: "<<abundFP<<std::endl;
+    std::cerr<<"@LOG::Reading the transcript abundance file: "<<abundFP<<std::endl;
     std::string aline,col;
     std::getline(abundstream,aline); // skip the header from salmon
     int locid;
@@ -336,7 +335,7 @@ void Converter::load_abundances(const std::string& abundFP){
         delete linestream;
     }
     abundstream.close();
-    std::cerr<<"Loaded transcript abundance data"<<std::endl;
+    std::cerr<<"@LOG::Loaded transcript abundance data"<<std::endl;
 }
 
 // this metod performs evaluation of errors detected by the aligner
@@ -364,7 +363,6 @@ void Converter::precompute_save(int num_reads){
     int loaded=0,loaded_pair=0;
 
     // precompute first 10 reads first
-    std::cerr<<"num reads: "<<num_reads<<std::endl;
     for(int i=0;i<num_reads;i++){
         int ret;
         err_recover:
@@ -424,11 +422,11 @@ void Converter::precompute_save(int num_reads){
     bam_destroy1(curAl);
     bam_destroy1(mate);
 
-    std::cerr<<"preloaded "<<loaded+(loaded_pair*2)<<" reads"<<std::endl;
-    std::cerr<<"\tof which "<<loaded<<" were singles"<<std::endl;
-    std::cerr<<"\tand "<<loaded_pair*2<<" were paired"<<std::endl;
-    std::cerr<<"At minimum fragment length of: "<<this->mmap.get_min_frag()<<std::endl; // TODO: The problem with computing fragment lengths this way is that it is computed on the transcriptomic level and not genomic - need conversion or a different approach all together
-    std::cerr<<"\tAnd maximum fragment length of: "<<this->mmap.get_max_frag()<<std::endl;
+    std::cerr<<"@STATS::precompute::reads preloaded: "<<loaded+(loaded_pair*2)<<std::endl;
+    std::cerr<<"\t!of which singles: "<<loaded<<std::endl;
+    std::cerr<<"\t!and paired: "<<loaded_pair*2<<std::endl;
+    std::cerr<<"\t!at minimum fragment length of: "<<this->mmap.get_min_frag()<<std::endl; // TODO: The problem with computing fragment lengths this way is that it is computed on the transcriptomic level and not genomic - need conversion or a different approach all together
+    std::cerr<<"\t!and maximum fragment length of: "<<this->mmap.get_max_frag()<<std::endl;
 }
 
 // this function cycles through a section of the bam file loads some preliminary data
@@ -481,12 +479,11 @@ void Converter::precompute(int perc){
     bam_destroy1(curAl);
     bam_destroy1(mate);
 
-    std::cerr<<"total number of reads in the sample: "<<counter+(2*counter_pair)<<std::endl;
-    std::cerr<<"\tof which "<<counter<<" were singles"<<std::endl;
-    std::cerr<<"\tand "<<counter_pair*2<<" were paired"<<std::endl;
-    std::cerr<<"preloaded "<<loaded+(loaded_pair*2)<<" reads"<<std::endl;
-    std::cerr<<"\tof which "<<loaded<<" were singles"<<std::endl;
-    std::cerr<<"\tand "<<loaded_pair*2<<" were paired"<<std::endl;
+    std::cerr<<"@STATS::precompute::reads preloaded: "<<loaded+(loaded_pair*2)<<std::endl;
+    std::cerr<<"\t!of which singles: "<<loaded<<std::endl;
+    std::cerr<<"\t!and paired: "<<loaded_pair*2<<std::endl;
+    std::cerr<<"\t!at minimum fragment length of: "<<this->mmap.get_min_frag()<<std::endl; // TODO: The problem with computing fragment lengths this way is that it is computed on the transcriptomic level and not genomic - need conversion or a different approach all together
+    std::cerr<<"\t!and maximum fragment length of: "<<this->mmap.get_max_frag()<<std::endl;
 
     bam_hdr_destroy(this->al_hdr);
     sam_close(this->al);
@@ -1003,7 +1000,7 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
 
             int ret_val = Converter::convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,res_pos[pos_idx]);
             if (!ret_val) {
-                std::cerr << "Can not create a new cigar string for the single read evaluate_multimapper_pair1" << std::endl;
+                std::cerr << "@ERROR::Can not create a new cigar string for the single read evaluate_multimapper_pair1" << std::endl;
                 exit(1);
             }
             add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
@@ -1011,7 +1008,7 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
 
             int ret_val_mate = Converter::convert_cigar(i_mate,next_exon_mate,exon_list_mate,num_cigars_mate,read_start_mate,curAl_mate,cigars_mate,res_pos_mate[pos_idx]);
             if (!ret_val_mate) {
-                std::cerr << "Can not create a new cigar string for the single read evaluate_multimapper_pair2" << std::endl;
+                std::cerr << "@ERROR::Can not create a new cigar string for the single read evaluate_multimapper_pair2" << std::endl;
                 exit(1);
             }
             add_cigar(curAl_mate, num_cigars_mate, cigars_mate); // will be performed afterwards
@@ -1074,7 +1071,7 @@ int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[
 
             int ret_val = Converter::convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,v);
             if (!ret_val) {
-                std::cerr << "Can not create a new cigar string for the single read evaluate_multimappers" << std::endl;
+                std::cerr << "@ERROR::Can not create a new cigar string for the single read evaluate_multimappers" << std::endl;
                 exit(1);
             }
 
@@ -1098,7 +1095,7 @@ size_t Converter::process_read(bam1_t *curAl,Position& cur_pos,int cigars[MAX_CI
     // first find the genomic read start
     bool ret_val = Converter::get_read_start(exon_list,curAl->core.pos,read_start,i);
     if(!ret_val){
-        std::cerr<<"Can not get the genomic read start"<<std::endl;
+        std::cerr<<"@ERROR::Can not get the genomic read start"<<std::endl;
         exit(1);
     }
 
@@ -1113,7 +1110,7 @@ size_t Converter::process_read(bam1_t *curAl,Position& cur_pos,int cigars[MAX_CI
 
         ret_val = Converter::get_read_start(exon_list_mate,curAl->core.mpos,read_start_mate,i_mate);
         if(!ret_val){
-            std::cerr<<"Can not get the genomic read start of the mate"<<std::endl;
+            std::cerr<<"@ERROR::Can not get the genomic read start of the mate"<<std::endl;
             exit(1);
         }
 
@@ -1132,7 +1129,7 @@ size_t Converter::process_read(bam1_t *curAl,Position& cur_pos,int cigars[MAX_CI
 
     ret_val = Converter::convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,cur_pos);
     if (!ret_val) {
-        std::cerr << "Can not create a new cigar string for the single read from process_read" << std::endl;
+        std::cerr << "@ERROR::Can not create a new cigar string for the single read from process_read" << std::endl;
         exit(1);
     }
 

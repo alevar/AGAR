@@ -28,8 +28,8 @@ std::string Indexer::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::
             this->mmap.add_sequence(exon_seq,p_trans,this->found_gene->second.get_locid(),transID);
         }
         else{
-            std::cerr<<"something went wrong with gene ID assignment"<<std::endl;
-            std::cerr<<"looking up: "<<p_trans.getGeneID()<<"\t"<<std::string(p_trans.getGeneID())<<std::endl;
+            std::cerr<<"@ERROR::something went wrong with gene ID assignment"<<std::endl;
+            std::cerr<<"@ERROR::looking up: "<<p_trans.getGeneID()<<"\t"<<std::string(p_trans.getGeneID())<<std::endl;
             exit(1);
         }
     }
@@ -45,13 +45,13 @@ Indexer::Indexer(std::string gtf_fname, std::string genome_fname,const std::stri
     gtf_fhandle_ = fopen(gtf_fname_.c_str(), "r");
     if (gtf_fhandle_ == nullptr)
     {
-        std::cerr << "FATAL: Couldn't open annotation: " << gtf_fname_<< std::endl;
+        std::cerr << "@ERROR::Couldn't open annotation: " << gtf_fname_<< std::endl;
         exit(1);
     }
-    std::cout << "Reading the annotation file: " << gtf_fname_ << std::endl;
+    std::cerr << "@LOG::Reading the annotation file: " << gtf_fname_ << std::endl;
     gtfReader_.init(gtf_fhandle_, true); // load recognizable transcript features only
     gtfReader_.readAll();
-    std::cout << "loaded the annotation"<<std::endl;
+    std::cerr << "@LOG::loaded the annotation"<<std::endl;
 
     this->tlst_fname = out_fname;
     this->tlst_fname.append(".tlst");
@@ -97,7 +97,7 @@ void Indexer::add_to_geneMap(GffObj &p_trans){
     if(geneID==nullptr){
         geneID=p_trans.getGeneName();
         if(geneID==nullptr){
-            std::cout<<"wrong geneID"<<std::endl;
+            std::cerr<<"@ERROR::wrong geneID"<<std::endl;
             exit(1);
         }
     }
@@ -122,7 +122,7 @@ void Indexer::make_transcriptome(){
     FastaWriter fastaWriter(this->trans_fastaname);
     FastaRecord cur_contig;
 
-    std::cerr<<"begin parsing transcriptome"<<std::endl;
+    std::cerr<<"@LOG::begin parsing transcriptome"<<std::endl;
 
     std::ofstream tlst(this->tlst_fname);
     std::ofstream tgmap(this->tgmap_fname);
@@ -138,7 +138,7 @@ void Indexer::make_transcriptome(){
 
         p_contig_vec = contigTransMap_[cur_contig.id_];
 
-        std::cerr<<cur_contig.id_<<std::endl;
+//        std::cerr<<cur_contig.id_<<std::endl;
 
         FastaRecord out_rec;
         for (int trans_idx : *p_contig_vec) {
@@ -162,7 +162,7 @@ void Indexer::make_transcriptome(){
 //            out_rec.desc_.push_back(':');
             this->found_gene = this->geneMap.find(p_trans->getGeneID());
             if(this->found_gene == this->geneMap.end()) { // gene not found
-                std::cout << "an error in GeneID ocurred" << std::endl;
+                std::cerr << "@ERROR::an error in GeneID ocurred" << std::endl;
                 exit(-1);
             }
             out_rec.desc_.append(std::to_string(this->found_gene->second.get_locid()));
@@ -178,9 +178,9 @@ void Indexer::make_transcriptome(){
     }
     tlst.close();
     tgmap.close();
-    std::cerr<<"done parsing transcriptome"<<std::endl;
+    std::cerr<<"@LOG::done parsing transcriptome"<<std::endl;
 
-    std::cerr<<"writing gene information"<<std::endl;
+    std::cerr<<"@LOG::writing gene information"<<std::endl;
     std::ofstream genefp(this->gene_fname);
     // write genes to file
     int max_locid = 0; // find what the maximum locus ID is in the current data to be saved into the info file
@@ -191,16 +191,16 @@ void Indexer::make_transcriptome(){
         it++;
     }
     genefp.close();
-    std::cerr<<"done writing gene information"<<std::endl;
+    std::cerr<<"@LOG::done writing gene information"<<std::endl;
 
-    std::cerr<<"writing general information"<<std::endl;
+    std::cerr<<"@LOG::writing general information"<<std::endl;
     // write the information about the index now
     std::ofstream infofp(this->info_fname);
     infofp<<this->topTransID<<std::endl;
     infofp<<max_locid<<std::endl;
     infofp<<this->kmerlen<<std::endl;
     infofp.close();
-    std::cerr<<"done writing general information"<<std::endl;
+    std::cerr<<"@LOG::done writing general information"<<std::endl;
 }
 
 void Indexer::transcript_map(){
@@ -256,7 +256,7 @@ void Indexer::save_header() {
     int prev_id = -1;
     for(auto &v : this->id_to_ref){
         if(v.first<=prev_id || (v.first - prev_id) != 1){
-            std::cerr<<"error in reference IDs: "<<prev_id<<"\t"<<v.first<<std::endl;
+            std::cerr<<"@ERROR::error in reference IDs: "<<prev_id<<"\t"<<v.first<<std::endl;
             exit(1);
         }
         prev_id = v.first;

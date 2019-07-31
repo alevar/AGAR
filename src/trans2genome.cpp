@@ -63,64 +63,64 @@ int main(int argc, char** argv) {
     args.parse_args(argc,argv);
 
     std::string inputAlFP = args.is_set(Opt::IN_AL)?args.get_string(Opt::IN_AL):"-";
-    std::cout<<"input alignment: "<<inputAlFP<<std::endl;
+    std::cerr<<"@LOG::input alignment: "<<inputAlFP<<std::endl;
     Converter converter(inputAlFP,args.get_string(Opt::OUT_AL),args.get_string(Opt::INDEX),args.get_int(Opt::THREADS),args.get_flag(Opt::MULTI));
     if(args.is_set(Opt::ABUNDANCE)){
-        std::cerr<<"will be using abundance from "<<args.get_string(Opt::ABUNDANCE)<<std::endl;
+        std::cerr<<"@LOG::will be using abundance from "<<args.get_string(Opt::ABUNDANCE)<<std::endl;
         converter.load_abundances(args.get_string(Opt::ABUNDANCE));
     }
     if(args.get_flag(Opt::UNALIGNED)){
-        std::cerr<<"will report unalgned reads"<<std::endl;
+        std::cerr<<"@LOG::will report unalgned reads"<<std::endl;
         converter.set_unaligned();
     }
     if(args.get_flag(Opt::UNIQ)){
-        std::cerr<<"trusting the user that input is uniq"<<std::endl;
+        std::cerr<<"@LOG::trusting the user that input is uniq"<<std::endl;
         converter.set_k1();
     }
     if(args.is_set(Opt::FRAGLEN)){
-        std::cerr<<"fragment length is set to: "<<args.get_int(Opt::FRAGLEN)<<std::endl;
+        std::cerr<<"@LOG::fragment length is set to: "<<args.get_int(Opt::FRAGLEN)<<std::endl;
         converter.set_fraglen(args.get_int(Opt::FRAGLEN));
     }
     if(args.is_set(Opt::NUM_MULTI)){
-        std::cerr<<"num multi enabled and set to "<<args.get_int(Opt::NUM_MULTI)<<std::endl;
+        std::cerr<<"@LOG::num multi enabled and set to "<<args.get_int(Opt::NUM_MULTI)<<std::endl;
         converter.set_num_multi(args.get_int(Opt::NUM_MULTI));
     }
     if(args.is_set(Opt::ALL_MULTI)){ // TODO: does this need to be converted into get_flag instead of is_set?
-        std::cerr<<"all multi reporting enabled"<<std::endl;
+        std::cerr<<"@LOG::all multi reporting enabled"<<std::endl;
         converter.set_all_multi();
     }
     if(args.get_flag(Opt::MISALIGN)){
-        std::cerr<<"misalignment detection enabled"<<std::endl;
+        std::cerr<<"@LOG::misalignment detection enabled"<<std::endl;
         converter.set_misalign();
 
         if(args.is_set(Opt::OUTLIER_STDV)){
-            std::cerr<<"misalignment is set to be detected at "<<args.get_int(Opt::OUTLIER_STDV)<<std::endl;
+            std::cerr<<"@LOG::misalignment is set to be detected at "<<args.get_int(Opt::OUTLIER_STDV)<<std::endl;
             converter.set_stdv(args.get_int(Opt::OUTLIER_STDV));
         }
         if(args.is_set(Opt::OUTLIER_RAW)){
-            std::cerr<<"misalignment is set to be detected at "<<args.get_int(Opt::OUTLIER_RAW)<<std::endl;
+            std::cerr<<"@LOG::misalignment is set to be detected at "<<args.get_int(Opt::OUTLIER_RAW)<<std::endl;
             converter.set_raw(args.get_int(Opt::OUTLIER_RAW));
         }
     }
 
     if(inputAlFP=="-"){
-        std::cerr<<"Begin pre-loading data from stream"<<std::endl;
+        std::cerr<<"@LOG::Begin pre-loading data from stream"<<std::endl;
         converter.precompute_save(args.get_int(Opt::NUM_READS_PRECOMP));
-        std::cerr<<"Done pre-loading data from stream"<<std::endl;
+        std::cerr<<"@LOG::Done pre-loading data from stream"<<std::endl;
     }
     else{
-        std::cerr<<"Begin pre-loading data"<<std::endl;
+        std::cerr<<"@LOG::Begin pre-loading data"<<std::endl;
         converter.precompute(args.get_int(Opt::PERCENT));
-        std::cerr<<"Done pre-loading data"<<std::endl;
+        std::cerr<<"@LOG::Done pre-loading data"<<std::endl;
     }
 
-    std::cerr<<"Begin Translating Coordinates"<<std::endl;
+    std::cerr<<"@LOG::Begin Translating Coordinates"<<std::endl;
     converter.convert_coords();
-    std::cerr<<"Done Translating Coordinates"<<std::endl;
+    std::cerr<<"@LOG::Done Translating Coordinates"<<std::endl;
     if(inputAlFP=="-"){
-        std::cerr<<"Begin Translating Coordinates of precomputed reads"<<std::endl;
+        std::cerr<<"@LOG::Begin Translating Coordinates of precomputed reads"<<std::endl;
         converter.convert_coords_precomp();
-        std::cerr<<"Done Translating Coordinates of precomputed reads"<<std::endl;
+        std::cerr<<"@LOG::Done Translating Coordinates of precomputed reads"<<std::endl;
     }
 
     converter.print_stats();

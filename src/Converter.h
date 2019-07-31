@@ -437,19 +437,19 @@ public:
 
     void set_raw(int raw_thresh){
         if(raw_thresh<=0){
-            std::cerr<<"upper edit distance bound <=0 is not permitted"<<std::endl;
+            std::cerr<<"@ERROR::upper edit distance bound is not permitted: <=0"<<std::endl;
             exit(-1);
         }
         if(raw_test){
-            std::cerr<<"raw test was already set"<<std::endl;
+            std::cerr<<"@ERROR::raw test was already set"<<std::endl;
             exit(-1);
         }
         if(stdv_test){
-            std::cerr<<"standard deviation test was already set"<<std::endl;
+            std::cerr<<"@ERROR::standard deviation test was already set"<<std::endl;
             exit(-1);
         }
         if(ztest){
-            std::cerr<<"ztest was already set"<<std::endl;
+            std::cerr<<"@ERROR::ztest was already set"<<std::endl;
             exit(-1);
         }
         this->raw_thresh = raw_thresh;
@@ -460,15 +460,15 @@ public:
 
     void set_z(){
         if(raw_test){
-            std::cerr<<"raw test was already set"<<std::endl;
+            std::cerr<<"@ERROR::raw test was already set"<<std::endl;
             exit(-1);
         }
         if(stdv_test){
-            std::cerr<<"standard deviation test was already set"<<std::endl;
+            std::cerr<<"@ERROR::standard deviation test was already set"<<std::endl;
             exit(-1);
         }
         if(ztest){
-            std::cerr<<"ztest was already set"<<std::endl;
+            std::cerr<<"@ERROR::ztest was already set"<<std::endl;
             exit(-1);
         }
         this->raw_test = false;
@@ -478,19 +478,19 @@ public:
 
     void set_stdv(int stdv){
         if(stdv<=0){
-            std::cerr<<"upper standard deviation on edit distance bound <=0 is not permitted"<<std::endl;
+            std::cerr<<"@ERROR::upper standard deviation on edit distance bound is not permitted: <=0"<<std::endl;
             exit(-1);
         }
         if(raw_test){
-            std::cerr<<"raw test was already set"<<std::endl;
+            std::cerr<<"@ERROR::raw test was already set"<<std::endl;
             exit(-1);
         }
         if(stdv_test){
-            std::cerr<<"standard deviation test was already set"<<std::endl;
+            std::cerr<<"@ERROR::standard deviation test was already set"<<std::endl;
             exit(-1);
         }
         if(ztest){
-            std::cerr<<"ztest was already set"<<std::endl;
+            std::cerr<<"@ERROR::ztest was already set"<<std::endl;
             exit(-1);
         }
         this->stdv = stdv;
@@ -583,7 +583,6 @@ private:
     }
 
     uint32_t md2nm() {
-        std::cerr<<"Computing from md tag"<<std::endl;
         return 0; // TODO: add parsing of MD tag if NM is not unavailable
     }
 };
@@ -610,13 +609,17 @@ public:
     void set_raw(int raw){errorCheck.set_raw(raw);}
 
     void print_stats(){
-        std::cerr<<"reads discarded as misalignments: "<<(this->num_err_discarded_pair*2)+this->num_err_discarded<<" at "<<errorCheck.get_thresh().first<<" singleton and "<<errorCheck.get_thresh().second<<" paired thresholds"<<std::endl;
-        std::cerr<<"\tof which "<<this->num_err_discarded<<" were singles"<<std::endl;
-        std::cerr<<"\tand "<<this->num_err_discarded_pair*2<<" were paired"<<std::endl;
+        std::cerr<<"@STATS::error_check"<<std::endl;
+        std::cerr<<"\t!thresh_single:"<<errorCheck.get_thresh().first<<std::endl;
+        std::cerr<<"\t!thresh_paired:"<<errorCheck.get_thresh().second<<std::endl;
+        std::cerr<<"\t!num_single:"<<this->num_err_discarded<<std::endl;
+        std::cerr<<"\t!num_pair:"<<this->num_err_discarded_pair*2<<std::endl;
 
-        std::cerr<<"multimapped reads: "<<(this->num_multi_pair*2)+this->num_multi<<std::endl;
-        std::cerr<<"\tof which "<<this->num_multi<<" were singles at multimapping rate of "<<double(num_multi_hits)/double(num_multi)<<std::endl;
-        std::cerr<<"\tand "<<this->num_multi_pair*2<<" were paired at multimapping rate of "<<double(num_multi_hits_pair)/double(num_multi_pair)<<std::endl;
+        std::cerr<<"@STATS::multimapper"<<std::endl;
+        std::cerr<<"\t!num_single:"<<this->num_multi<<std::endl;
+        std::cerr<<"\t!num_pair:"<<this->num_multi_pair*2<<std::endl;
+        std::cerr<<"\t!rate_single:"<<double(num_multi_hits)/double(num_multi)<<std::endl;
+        std::cerr<<"\t!rate_pair:"<<double(num_multi_hits_pair)/double(num_multi_pair)<<std::endl;
     }
 
 private:

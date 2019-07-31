@@ -29,7 +29,7 @@ public:
     PID(double kp, double ki){
         // set tunings here
         if (kp<0 || ki<0){
-            std::cerr<<"wrong PID tunings specified"<<std::endl;
+            std::cerr<<"@ERROR::wrong PID tunings specified"<<std::endl;
             exit(1);
         };
 
@@ -279,10 +279,10 @@ public:
     void load(std::string& locus_file){
         struct stat buffer{};
         if(stat (locus_file.c_str(), &buffer) != 0){ // if file does not exists
-            std::cerr<<"Locus file: "<<locus_file<<" is not found. Check that correct index is provided."<<std::endl;
+            std::cerr<<"@ERROR::Locus file not found: "<<locus_file<<std::endl;
             exit(1);
         }
-        std::cerr<<"loading locus data from: "<<locus_file<<std::endl;
+        std::cerr<<"@LOG::loading locus data from: "<<locus_file<<std::endl;
         std::ifstream locfp(locus_file,std::ifstream::binary);
         if(locfp){
             locfp.seekg(0,locfp.end);
@@ -293,10 +293,10 @@ public:
                 this->_load(locfp,buffer);
             }
             delete[] buffer;
-            std::cerr<<"finished loading the locus data"<<std::endl;
+            std::cerr<<"@LOG::finished loading the locus data"<<std::endl;
         }
         else{
-            std::cerr<<"failed to open the locus file"<<std::endl;
+            std::cerr<<"@ERROR::failed to open the locus file"<<std::endl;
         }
         locfp.close();
     }
@@ -366,13 +366,12 @@ private:
                             end = 10*end + buffer[i] - '0';
                             break;
                         default:
-                            std::cerr<<"should never happen"<<std::endl;
+                            std::cerr<<"@ERROR::should never happen"<<std::endl;
                             exit(1);
                     }
                     break;
                 default:
-                    std::cerr<<"unrecognized character"<<std::endl;
-                    std::cerr<<buffer[i]<<std::endl;
+                    std::cerr<<"@ERROR::unrecognized character"<<buffer[i]<<std::endl;
                     exit(1);
             }
         }
@@ -507,11 +506,11 @@ struct GffTranscript: public GSeg {
         this->empty = true;
     }
     void print(){
-        std::cerr<<this->gffID<<"\t"<<this->geneID<<"@"<<this->refID<<this->strand;
+        std::cout<<this->gffID<<"\t"<<this->geneID<<"@"<<this->refID<<this->strand;
         for(int i=0;i<this->exons.Count();i++){
-            std::cerr<<this->exons[i].start<<"_"<<this->exons[i].end<<",";
+            std::cout<<this->exons[i].start<<"_"<<this->exons[i].end<<",";
         }
-        std::cerr<<std::endl;
+        std::cout<<std::endl;
     }
 };
 
@@ -914,7 +913,7 @@ public:
 
     void load(const std::string& input_file){
         srand(time(0));
-        std::cerr<<"loading multimapper data from: "<<input_file<<std::endl;
+        std::cerr<<"@LOG::loading multimapper data from: "<<input_file<<std::endl;
         std::ifstream infp(input_file,std::ifstream::binary);
         if(infp){
             infp.seekg(0,infp.end);
@@ -925,10 +924,10 @@ public:
                 this->_load(infp,buffer);
             }
             delete[] buffer;
-            std::cerr<<"finished loading the multimapper data"<<std::endl;
+            std::cerr<<"@LOG::finished loading the multimapper data"<<std::endl;
         }
         else{
-            std::cerr<<"failed to open the multimapping file"<<std::endl;
+            std::cerr<<"@LOG::failed to open the multimapping file"<<std::endl;
         }
         infp.close();
     }
@@ -946,13 +945,12 @@ public:
 
     // print from the loaded index
     void print_multimapers(){
-        std::cerr<<"NUMBER OF MULTIMAPPING POSITIONS: "<<this->index.size()<<std::endl;
         for(auto &mm : this->index){
             if(mm.second){
-                std::cerr<<mm.first.get_strg()<<"\t";
+                std::cout<<mm.first.get_strg()<<"\t";
             }
             else{
-                std::cerr<<mm.first.get_strg()<<std::endl;
+                std::cout<<mm.first.get_strg()<<std::endl;
             }
         }
     }
@@ -960,7 +958,7 @@ public:
     void set_kmerlen(int kmerlen){this->kmerlen = kmerlen;}
 
     void save_multimappers(std::string& outFP){
-        std::cerr<<"writing multimappers"<<std::endl;
+        std::cerr<<"@LOG::writing multimappers"<<std::endl;
         std::ofstream multi_ss(outFP.c_str());
         std::string res = "";
         for(auto &kv : this->kmer_coords){
@@ -984,7 +982,7 @@ public:
         }
 
         multi_ss.close();
-        std::cerr<<"done writing multimappers"<<std::endl;
+        std::cerr<<"@LOG::done writing multimappers"<<std::endl;
 
     }
 
@@ -1067,7 +1065,7 @@ private:
                     p.add_move(nel);
                 }
             }
-            std::cerr<<"exon boundaries exceeded"<<std::endl;
+            std::cerr<<"@ERROR::exon boundaries exceeded"<<std::endl;
             exit(1);
         }
     }
@@ -1167,13 +1165,12 @@ private:
                             trans = 10*trans + buffer[i] - '0';
                             break;
                         default:
-                            std::cerr<<"should never happen _load from Multimap with value: "<<elem<<std::endl;
+                            std::cerr<<"@ERROR::should never happen _load from Multimap with value: "<<elem<<std::endl;
                             exit(1);
                     }
                     break;
                 default:
-                    std::cerr<<"unrecognized character"<<std::endl;
-                    std::cerr<<buffer[i]<<std::endl;
+                    std::cerr<<"@ERROR:unrecognized character: "<<buffer[i]<<std::endl;
                     exit(1);
             }
         }

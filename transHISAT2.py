@@ -148,6 +148,9 @@ def main(args):
     parser_align.add_argument("--errcheck",
                               action="store_true",
                               help="perform error correction to remove misalignments from the input alignment")
+    parser_align.add_argument("--nounal",
+                              action="store_true",
+                              help="do not include unaligned reads in the output BAM")
 
     parser_align.set_defaults(func=align.main)
 
