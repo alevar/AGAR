@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 import shutil
@@ -26,12 +27,342 @@ import subprocess
 
 # stringtie ./SRR1071717_salmon_hisat.sorted.bam -p 24 -m 150 -G ../data/hg38_p8.biotype_flt.cls.gff3 -o SRR1071717_stringtie.gt
 
+def parse_hisat(stage_fname, log_fname, log_fh):
+    hisat_container = {"total_reads": 0,
+                       "total_pair": 0,
+                       "conc0": 0,
+                       "conc1": 0,
+                       "concN": 0,
+                       "disc": 0,
+                       "conc_disc0": 0,
+                       "al0": 0,
+                       "al1": 0,
+                       "alN": 0,
+                       "total_unpair": 0,
+                       "unpaired0": 0,
+                       "unpaired1": 0,
+                       "unpairedN": 0}
 
-def parse_logs():
-    res = "======================\n\n===== T2G REPORT =====\n======================\n\n"
+    if not os.path.exists(stage_fname):
+        return hisat_container
 
-    return res
+    reg1 = re.compile(' *\d+ [A-z]+')
+    reg2 = re.compile(' *\d+ \(\d+\.\d+\%\) [A-z]+')
 
+    num_tab_stack = []
+
+    # Stages - Level 0
+    reads = False
+    # Stages - Level 1
+    paired = False
+    unpaired = False
+    # Stages - Level 2
+    concord = False
+    concord0 = False
+    concord_disc_0 = False
+    # Stages - Level 3
+    mates = False
+
+    with open(stage_fname, "r") as inFP:
+        for line in inFP.readlines():
+            if re.match(reg1, line) is not None or re.match(reg2, line) is not None:
+                line = line.rstrip()
+                lineCols = line.split(" ")
+                num_tab = lineCols.count("")
+                if num_tab == 0: # total number of reads in the sample
+                    hisat_container["total_reads"] = int(lineCols[num_tab])
+                    reads = True
+                    num_tab_stack.append(num_tab)
+                elif num_tab == 2:
+                    if "were paired; of these:" in line:
+                        hisat_container["total_pair"] = int(lineCols[num_tab])
+                        paired = True
+                        unpaired = False
+                    elif "were unpaired; of these:" in line:
+                        hisat_container["total_unpair"] = int(lineCols[num_tab])
+                        unpaired = True
+                        paired = False
+                elif num_tab == 4 and paired and not unpaired:
+                    if "aligned concordantly 0 times" in line and not concord:
+                        concord = True
+                        hisat_container["conc0"] = int(lineCols[num_tab])
+                    elif "aligned concordantly exactly 1 time" in line:
+                        hisat_container["conc1"] = int(lineCols[num_tab])
+                    elif "aligned concordantly >1 times" in line:
+                        hisat_container["concN"] = int(lineCols[num_tab])
+                    elif "pairs aligned concordantly 0 times; of these:" in line and concord:
+                        concord0 = True
+                        concord_disc_0 = False
+                    elif "pairs aligned 0 times concordantly or discordantly; of these:" in line:
+                        hisat_container["conc_disc0"] = int(lineCols[num_tab])
+                        concord_disc_0 = True
+                        concord0 = False
+                    else:
+                        print("ERROR parsing hisat2 summary", line)
+                elif num_tab == 4 and unpaired and not paired:
+                    if "aligned 0 times" in line:
+                        hisat_container["unpaired0"] = int(lineCols[num_tab])
+                    elif "aligned exactly 1 time" in line:
+                        hisat_container["unpaired1"] = int(lineCols[num_tab])
+                    elif "aligned >1 times" in line:
+                        hisat_container["unpairedN"] = int(lineCols[num_tab])
+                elif num_tab == 6 and paired and concord0:
+                    if "aligned discordantly 1 time" in line:
+                        hisat_container["disc"] = int(lineCols[num_tab])
+                elif num_tab == 6 and paired and concord_disc_0:
+                    if "mates make up the pairs; of these:" in line:
+                        mates = True
+                elif num_tab == 8 and paired and concord_disc_0 and mates:
+                    if "aligned 0 times" in line:
+                        hisat_container["al0"] = int(lineCols[num_tab])
+                    elif "aligned exactly 1 time" in line:
+                        hisat_container["al1"] = int(lineCols[num_tab])
+                    elif "aligned >1 times" in line:
+                        hisat_container["alN"] = int(lineCols[num_tab])
+                    else:
+                        print("ERROR parsing hisat2 summary #5", num_tab, line)
+                else:
+                    print("ERROR parsing hisat2 summary #6", num_tab, line)
+
+    return hisat_container
+
+def parse_hisat_new(stage_fname, log_fname, log_fh):
+    hisat_container = {"total_pair": 0,
+                       "conc_disc0": 0,
+                       "conc1": 0,
+                       "concN": 0,
+                       "disc": 0,
+                       "total_unpair": 0,
+                       "al0": 0,
+                       "al1": 0,
+                       "alN": 0}
+
+    if not os.path.exists(stage_fname):
+        return hisat_container
+
+    with open(stage_fname, "r") as stage_fh:
+        for line in stage_fh.readlines():
+            line = line.strip()
+            reg = re.compile('Total pairs: \d+')
+            if re.match(reg, line) is not None:
+                hisat_container["total_pair"] = int(line.split(": ")[1])
+
+            reg = re.compile('Aligned concordantly or discordantly 0 time: \d+ .*')
+            if re.match(reg, line) is not None:
+                hisat_container["conc_disc0"] = int(line.split(": ")[1].split(" ")[0])
+
+            reg = re.compile('Aligned concordantly 1 time: \d+ .*')
+            if re.match(reg, line) is not None:
+                hisat_container["conc1"] = int(line.split(": ")[1].split(" ")[0])
+
+            reg = re.compile('Aligned concordantly >1 times: \d+ .*')
+            if re.match(reg, line) is not None:
+                hisat_container["concN"] = int(line.split(": ")[1].split(" ")[0])
+
+            reg = re.compile('Aligned discordantly 1 time: \d+ .*')
+            if re.match(reg, line) is not None:
+                hisat_container["disc"] = int(line.split(": ")[1].split(" ")[0])
+
+            reg = re.compile('Total unpaired reads: \d+')
+            if re.match(reg, line) is not None:
+                hisat_container["total_unpair"] = int(line.split(": ")[1])
+
+            reg = re.compile('Aligned 0 time: \d+ .*')
+            if re.match(reg, line) is not None:
+                hisat_container["al0"] = int(line.split(": ")[1].split(" ")[0])
+
+            reg = re.compile('Aligned 1 time: \d+ .*')
+            if re.match(reg, line) is not None:
+                hisat_container["al1"] = int(line.split(": ")[1].split(" ")[0])
+
+            reg = re.compile('Aligned >1 times: \d+ .*')
+            if re.match(reg, line) is not None:
+                hisat_container["alN"] = int(line.split(": ")[1].split(" ")[0])
+
+            if log_fname is not None:
+                log_fh.write(line)
+
+    return hisat_container
+
+
+def parse_t2g(stage_fname, log_fname, log_fh):
+    assert os.path.exists(stage_fname), "stage2: translation log is not found"
+    t2g_container = dict()
+    with open(stage_fname, "r") as stage_fh:
+        for line in stage_fh.readlines():
+            if "single reads were precomputed" in line and line[:6] == "@STATS":
+                t2g_container["single_precomp"] = int(line.split(":")[1].split(" ")[1])
+            elif "discordant paired reads were precomputed" in line and line[:6] == "@STATS":
+                t2g_container["disc_precomp"] = int(line.split(":")[1].split(" ")[1])
+            elif "concordant paired reads were precomputed" in line and line[:6] == "@STATS":
+                t2g_container["paired_precomp"] = int(line.split(":")[1].split(" ")[1])
+            elif "minimum fragment length threshold" in line and line[:6] == "@STATS":
+                t2g_container["min_fraglen_thresh"] = int(line.split(":")[1].split(" ")[1])
+            elif "maximum fragment length threshold" in line and line[:6] == "@STATS":
+                t2g_container["max_fraglen_thresh"] = int(line.split(":")[1].split(" ")[1])
+            elif "singleton reads were evaluated" in line and line[:6] == "@STATS":
+                t2g_container["single_al"] = int(line.split(":")[1].split(" ")[1])
+            elif "discordant reads were evaluated" in line and line[:6] == "@STATS":
+                t2g_container["disc_al"] = int(line.split(":")[1].split(" ")[1])
+            elif "paired reads were evaluated" in line and line[:6] == "@STATS":
+                t2g_container["pair_al"] = int(line.split(":")[1].split(" ")[1])
+            elif "singletons discarded due to high edit distance" in line and line[:6] == "@STATS":
+                t2g_container["single_un_err"] = int(line.split(":")[1].split(" ")[1])
+            elif "discordant pairs discarded due to high edit distance" in line and line[:6] == "@STATS":
+                t2g_container["disc_un_err"] = int(line.split(":")[1].split(" ")[1])
+            elif "concordant pairs discarded due to high edit distance" in line and line[:6] == "@STATS":
+                t2g_container["paired_un_err"] = int(line.split(":")[1].split(" ")[1])
+            elif "paired reads were unaligned" in line and line[:6] == "@STATS":
+                t2g_container["paired_un"] = int(line.split(":")[1].split(" ")[1])
+            elif "singletons were unaligned" in line and line[:6] == "@STATS":
+                t2g_container["single_un"] = int(line.split(":")[1].split(" ")[1])
+            elif "singleton edit distance threshold used" in line and line[:6] == "@STATS":
+                try:
+                    t2g_container["single_edit_thresh"] = int(line.split(":")[1].split(" ")[1])
+                except ValueError:
+                    t2g_container["single_edit_thresh"] = None
+            elif "concordant paired edit distance threshold used" in line and line[:6] == "@STATS":
+                try:
+                    t2g_container["pair_edit_thresh"] = int(line.split(":")[1].split(" ")[1])
+                except ValueError:
+                    t2g_container["pair_edit_thresh"] = None
+            elif "multimapping singleton reads detected" in line and line[:6] == "@STATS":
+                t2g_container["single_multi"] = int(line.split(":")[1].split(" ")[1])
+            elif "multimapping concordantly paired reads detected" in line and line[:6] == "@STATS":
+                t2g_container["paired_multi"] = int(line.split(":")[1].split(" ")[1])
+            elif "mean singleton multimapping rate" in line and line[:6] == "@STATS":
+                try:
+                    t2g_container["single_rate"] = float(line.split(":")[1].split(" ")[1])
+                except ValueError:
+                    t2g_container["single_rate"] = None
+            elif "concordant pair multimapping rate" in line and line[:6] == "@STATS":
+                try:
+                    t2g_container["paired_rate"] = float(line.split(":")[1].split(" ")[1])
+                except ValueError:
+                    t2g_container["paired_rate"] = None
+            else:
+                continue
+
+            if log_fname is not None:
+                log_fh.write(line)
+
+    return t2g_container
+
+
+def parse_logs(tmpDir_tmp, log_fname=None):
+    log_fh = None
+    if log_fname is not None:
+        log_fh = open(log_fname, "w+")
+
+    # begin by analyzing the alignment stats from transcriptomic alignment
+    tmpDir = os.path.abspath(tmpDir_tmp)
+
+    stage1_fname = tmpDir + "/stage1_transcriptome.tmp"
+    assert os.path.exists(stage1_fname), "stage1: transcriptome alignment log is not found"
+    stage1_res = parse_hisat(stage1_fname, log_fname, log_fh)
+
+    stage2_fname = tmpDir + "/stage2_translate.tmp"
+    assert os.path.exists(stage2_fname), "stage2: alignment translation log is not found"
+    stage2_res = parse_t2g(stage2_fname, log_fname, log_fh)
+
+    # STAGE3 - LOCUS ALIGNMENT - IF AVAILABLE
+    stage3_fname = tmpDir + "/stage3_locus.tmp"
+    stage3_res = dict()
+    stage3_res = parse_hisat(stage3_fname, log_fname, log_fh)
+
+    # STAGE4 - GENOME ALIGNMENT
+    stage4_fname = tmpDir + "/stage4_genome.tmp"
+    assert os.path.exists(stage4_fname), "stage4: genome alignment log is not found"
+    stage4_res = parse_hisat(stage4_fname, log_fname, log_fh)
+
+    # STAGE5 - MERGING OF THE ALIGNMENT FILES
+    if log_fname is not None:
+        stage5_fname = tmpDir + "/stage5_merge.tmp"
+        assert os.path.exists(stage5_fname), "stage5: merge alignment log is not found"
+        with open(stage5_fname, "r") as stage5_fh:
+            for line in stage5_fh.readlines():
+                log_fh.write(line)
+
+    # COMPUTE FINAL STATS
+
+    # TODO: singletons which aligned in stage4 should be added to discordant since they correspond to the singletons in stage1
+    print("======================\n===== T2G REPORT =====\n======================\n", file=sys.stderr)
+    total_paired = stage1_res["total_pair"]
+    print("Total pairs: %d" % total_paired, file=sys.stderr)
+
+    trans_conc_N = stage2_res["paired_multi"]
+    trans_conc_1 = stage2_res["pair_al"] - trans_conc_N
+    total_conc_1 = trans_conc_1 + stage4_res["conc1"]
+    total_conc_N = trans_conc_N + stage4_res["concN"]
+    total_conc = total_conc_1 + total_conc_N
+
+    total_conc_0 = total_paired - total_conc
+    perc_conc_0 = (total_conc_0 / total_paired) * 100
+    print("\tAligned concordantly 0 time: %d (%.2f%%)" % (total_conc_0, perc_conc_0), file=sys.stderr)
+
+    trans_disc = stage2_res["disc_al"]
+    genome_disc = stage4_res["disc"]
+    total_disc = trans_disc + genome_disc
+    perc_disc = (total_disc / total_conc_0) * 100
+    print("\t\tAligned discordantly: %d (%.2f%%)" % (total_disc, perc_disc), file=sys.stderr)
+
+    perc_disc_trans = (trans_disc / total_disc) * 100
+    print("\t\t\tAligned to the transcriptome: %d (%.2f%%)" % (trans_disc, perc_disc_trans), file=sys.stderr)
+
+    perc_disc_genome = (genome_disc / total_disc) * 100
+    print("\t\t\tAligned to the genome: %d (%.2f%%)" % (genome_disc, perc_disc_genome), file=sys.stderr)
+
+    total_conc_disc_0 = total_conc_0 - total_disc
+    perc_conc_disc_0 = (total_conc_disc_0 / total_conc_0) * 100
+    print("\t\tAligned concordantly or discordantly 0 times: %d (%.2f%%)" % (total_conc_disc_0, perc_conc_disc_0), file=sys.stderr)
+
+    total_conc_disc_0_mates = total_conc_disc_0 * 2
+    print("\t\t\tNumber of mates that make up these pairs: %d" % total_conc_disc_0_mates, file=sys.stderr)
+
+    trans_single = stage2_res["single_al"]
+    genome_single = stage4_res["al1"] + stage4_res["alN"] + stage4_res["unpaired1"] + stage4_res["unpairedN"]
+    total_single_genome = trans_single + genome_single
+    perc_single = (total_single_genome / total_conc_disc_0_mates) * 100
+    print("\t\t\t\tAligned: %d (%.2f%%)" % (total_single_genome, perc_single), file=sys.stderr)
+
+    perc_trans_single = (trans_single / total_single_genome) * 100
+    print("\t\t\t\t\tAligned to the transcriptome: %d (%.2f%%)" % (trans_single, perc_trans_single), file=sys.stderr)
+
+    perc_genome_single = (genome_single / total_single_genome) * 100
+    print("\t\t\t\t\tAligned to the genome: %d (%.2f%%)" % (genome_single, perc_genome_single), file=sys.stderr)
+
+    total_unal = stage4_res["al0"] + stage4_res["unpaired0"]
+    perc_unal = (total_unal / total_conc_disc_0_mates) * 100
+    print("\t\t\t\tAligned 0 times: %d (%.2f%%)" % (total_unal, perc_unal), file=sys.stderr)
+
+    perc_conc_1 = (total_conc_1 / total_paired) * 100
+    print("\tAligned concordantly 1 time: %d (%.2f%%)" % (total_conc_1, perc_conc_1), file=sys.stderr)
+
+    perc_conc_1_trans = (trans_conc_1 / total_conc_1) * 100
+    print("\t\tAligned to the transcriptome: %d (%.2f%%)" % (trans_conc_1, perc_conc_1_trans), file=sys.stderr)
+
+    perc_conc_1_genome = (stage4_res["conc1"] / total_conc_1) * 100
+    print("\t\tAligned to the genome: %d (%.2f%%)" % (stage4_res["conc1"], perc_conc_1_genome), file=sys.stderr)
+
+    perc_conc_N = (total_conc_N / total_paired) * 100
+    print("\tAligned concordantly >1 times: %d (%.2f%%)" % (total_conc_N, perc_conc_N), file=sys.stderr)
+
+    perc_conc_N_trans = (trans_conc_N / total_conc_N) * 100
+    print("\t\tAligned to the transcriptome: %d (%.2f%%)" % (trans_conc_N, perc_conc_N_trans), file=sys.stderr)
+
+    perc_conc_N_genome = (stage4_res["concN"] / total_conc_N) * 100
+    print("\t\tAligned to the genome: %d (%.2f%%)" % (stage4_res["concN"], perc_conc_N_genome), file=sys.stderr)
+
+    # lastly need to get the final alignment rate
+    total_reads = total_paired*2 + stage1_res["total_unpair"]
+    total_aligned = total_conc*2 + total_disc + total_single_genome
+    al_rate = (total_aligned / total_reads) * 100
+    print("%.2f%% overall alignment rate" % al_rate, file=sys.stderr)
+
+    # TODO: currently assumes there are no singletons in stage1
+
+    if log_fname is not None:
+        log_fh.close()
 
 def main(args):
     start_total = time.time()
@@ -75,18 +406,10 @@ def main(args):
                 counter += 1
                 continue
 
-    # FIRST INITIALIZE FILE HANDLERS TO STAGE OUTPUTS
-    stage1_transcriptome_fh = open(os.path.abspath(cur_tmp) + "/stage1_transcriptome.tmp", "w+")
-    stage2_translate_fh = open(os.path.abspath(cur_tmp) + "/stage2_translate.tmp", "w+")
-    stage3_locus_fh = open(os.path.abspath(cur_tmp) + "/stage3_locus.tmp", "w+")
-    stage4_genome_fh = open(os.path.abspath(cur_tmp) + "/stage4_locus.tmp", "w+")
-    stage5_merge_fh = open(os.path.abspath(cur_tmp) + "/stage5_locus.tmp", "w+")
-    final_fh = None
     if args.output.split(".")[-1] in ["bam", "sam", "cram"]:
-        final_fname = ".".join(args.output.split(".")[:-1]) + ".stats"
-        final_fh = open(final_fname, "w+")
+        final_fname = ".".join(args.output.split(".")[:-1]) + ".logs"
     else:
-        final_fh = open(args.output + ".stats", "w+")
+        final_fname = args.output + ".stats"
 
     transcriptome_cmd = None
     if args.type == "hisat":
@@ -97,7 +420,7 @@ def main(args):
                              # get path to the trans2genome that was compiled with the package,
                              "--no-spliced-alignment",
                              "--end-to-end",
-                             "--no-unal",
+                             "--rna-sensitive",
                              "-x", os.path.abspath(args.db) + "/db",
                              "-p", args.threads]
 
@@ -110,7 +433,6 @@ def main(args):
         # with the "-a" option enabled
         transcriptome_cmd = {"bowtie2",
                              "--end-to-end",
-                             "--no-unal",
                              "-x", os.path.abspath(args.db) + "/db",
                              "-p", args.threads}
         if args.bowtie:
@@ -126,19 +448,18 @@ def main(args):
                               "-2", args.m2))
     if not args.single is None:
         transcriptome_cmd.extend(("-U", args.single))
-    transcriptome_cmd.extend(("--un-conc", os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.fq",
-                              "--un", os.path.abspath(cur_tmp) + "/sample.trans.un_first.fq"))
+    # transcriptome_cmd.extend(("--un-conc", os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.fq",
+    #                           "--un", os.path.abspath(cur_tmp) + "/sample.trans.un_first.fq"))
 
     start_transcriptome = time.time()
+    stage1_transcriptome_fh = open(os.path.abspath(cur_tmp) + "/stage1_transcriptome.tmp", "w+")
     transcriptome_process = subprocess.Popen(transcriptome_cmd, stdout=subprocess.PIPE, stderr=stage1_transcriptome_fh)
-    unaligned_r1 = os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.1.fq"
-    unaligned_r2 = os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.2.fq"
-    unaligned_s = os.path.abspath(cur_tmp) + "/sample.trans.un_first.fq"
     trans2genome_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                      'cmake-build-release/trans2genome')  # get path to the trans2genome that was compiled with the package
     trans2genome_cmd = [trans2genome_path,
                         "-x", os.path.abspath(args.db) + "/db",
                         "-o", os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam",
+                        "-u", os.path.abspath(cur_tmp) + "/sample.trans_first",
                         "-q", "-p", str(args.threads)]
     if args.mf:
         trans2genome_cmd.append("-m")
@@ -148,37 +469,45 @@ def main(args):
         trans2genome_cmd.extend(["-l"])
     if args.errcheck:
         trans2genome_cmd.extend(["-s"])
+    if args.no_discord:
+        trans2genome_cmd.extend(["-j"])
+    if args.no_single:
+        trans2genome_cmd.extend(["-g"])
 
+    stage2_translate_fh = open(os.path.abspath(cur_tmp) + "/stage2_translate.tmp", "w+")
     translate_process = subprocess.Popen(trans2genome_cmd, stdin=transcriptome_process.stdout,
                                          stderr=stage2_translate_fh)
+
+    unaligned_r1 = os.path.abspath(cur_tmp) + "/sample.trans_first.unal_r1.fastq"
+    unaligned_r2 = os.path.abspath(cur_tmp) + "/sample.trans_first.unal_r2.fastq"
+    unaligned_s = os.path.abspath(cur_tmp) + "/sample.trans_first.unal_s.fastq"
 
     transcriptome_process.wait()
     transcriptome_process.stdout.close()
     # transcriptome_process.stderr.close()
 
     stage1_transcriptome_fh.close()
+    if args.verbose:
+        with open(os.path.abspath(cur_tmp) + "/stage1_transcriptome.tmp", "r") as inFP:
+            for line in inFP.readlines():
+                print(line.rstrip("\n"))
 
     # translate_process.stderr.close()
     translate_process.wait()
 
     stage2_translate_fh.close()
+    if args.verbose:
+        with open(os.path.abspath(cur_tmp) + "/stage2_translate.tmp", "r") as inFP:
+            for line in inFP.readlines():
+                print(line.rstrip("\n"))
 
     end_transcriptome = time.time()
     print("Transcriptome alignment time: "+str(datetime.timedelta(seconds=int(end_transcriptome-start_transcriptome))))
 
-    if args.errcheck:
-        if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r1.fastq"):
-            unaligned_r1 = unaligned_r1 + "," + os.path.abspath(
-                cur_tmp) + "/sample.trans2genome_first.bam.unal_r1.fastq"
-        if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r1.fastq"):
-            unaligned_r2 = unaligned_r2 + "," + os.path.abspath(
-                cur_tmp) + "/sample.trans2genome_first.bam.unal_r2.fastq"
-        if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_r1.fastq"):
-            unaligned_s = unaligned_s + "," + os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam.unal_s.fastq"
-
-        # locus-level alignment
+    # locus-level alignment
     locus_cmd = None
     if args.locus:
+        stage3_locus_fh = open(os.path.abspath(cur_tmp) + "/stage3_locus.tmp", "w+")
         if args.type == "bowtie":
             print("performing the locus lookup using bowtie2")
             locus_cmd = ["bowtie2",
@@ -211,9 +540,9 @@ def main(args):
                           "--un-conc", os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.fq",
                           "--un", os.path.abspath(cur_tmp) + "/sample.trans.un_first.locus.fq"))
 
-        unaligned_r1 = os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.1.fq"
-        unaligned_r2 = os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.2.fq"
-        unaligned_s = os.path.abspath(cur_tmp) + "/sample.trans.un_first.locus.fq"
+        unaligned_r1 = unaligned_r1+","+os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.1.fq"
+        unaligned_r2 = unaligned_r2+","+os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.2.fq"
+        unaligned_s = unaligned_s+","+os.path.abspath(cur_tmp) + "/sample.trans.un_first.locus.fq"
 
         start_locus = time.time()
         locus_process = subprocess.Popen(locus_cmd, stderr=stage3_locus_fh)
@@ -224,6 +553,10 @@ def main(args):
         # locus_process.stderr.close()
 
         stage3_locus_fh.close()
+        if args.verbose:
+            with open(os.path.abspath(cur_tmp) + "/stage3_locus.tmp", "r") as inFP:
+                for line in inFP.readlines():
+                    print(line.rstrip("\n"))
 
         end_locus = time.time()
         print("Locus alignment time: "+str(datetime.timedelta(seconds=int(end_locus-start_locus))))
@@ -245,6 +578,7 @@ def main(args):
         hisat2_cmd_genome.extend(args.hisat)
 
     start_genome = time.time()
+    stage4_genome_fh = open(os.path.abspath(cur_tmp) + "/stage4_genome.tmp", "w+")
     genome_process = subprocess.Popen(hisat2_cmd_genome, stderr=stage4_genome_fh)
     # convert_process = subprocess.Popen(["samtools", "view", "-h", "--output-fmt=BAM", "-@", args.threads, "-o",
     #                                     os.path.abspath(cur_tmp) + "/sample.genome.bam"], stdin=genome_process.stdout)
@@ -253,6 +587,10 @@ def main(args):
     # genome_process.stderr.close()
 
     stage4_genome_fh.close()
+    if args.verbose:
+        with open(os.path.abspath(cur_tmp) + "/stage4_genome.tmp", "r") as inFP:
+            for line in inFP.readlines():
+                print(line.rstrip("\n"))
 
     # convert_process.wait()
 
@@ -260,12 +598,15 @@ def main(args):
     print("Genome alignment time: "+str(datetime.timedelta(seconds=int(end_genome-start_genome))))
 
     if not args.keep:
-        if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.1.fq"):
-            os.remove(os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.1.fq")
-        if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.2.fq"):
-            os.remove(os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.2.fq")
-        if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans.un_first.fq"):
-            os.remove(os.path.abspath(cur_tmp) + "/sample.trans.un_first.fq")
+        for item in unaligned_r1.split(","):
+            if os.path.exists(item):
+                os.remove(item)
+        for item in unaligned_r2.split(","):
+            if os.path.exists(item):
+                os.remove(item)
+        for item in unaligned_s.split(","):
+            if os.path.exists(item):
+                os.remove(item)
 
     print("merging all sub-alignments")
     merge_cmd = ["samtools", "merge", "-f",
@@ -280,10 +621,15 @@ def main(args):
 
     merge_cmd.append(os.path.abspath(cur_tmp) + "/sample.genome.sam")
 
+    stage5_merge_fh = open(os.path.abspath(cur_tmp) + "/stage5_merge.tmp", "w+")
     if len(merge_cmd) > 6:
         start_merge = time.time()
         subprocess.call(merge_cmd, stderr=stage5_merge_fh)
         stage5_merge_fh.close()
+        if args.verbose:
+            with open(os.path.abspath(cur_tmp) + "/stage5_merge.tmp", "r") as inFP:
+                for line in inFP.readlines():
+                    print(line.rstrip("\n"))
         end_merge = time.time()
         print("Merge time: "+str(datetime.timedelta(seconds=int(end_merge-start_merge))))
     else:
@@ -293,16 +639,10 @@ def main(args):
         if not args.keep:
             os.remove(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam")
 
-    # lastly process the outputs of the stages and create final report
-    subprocess.call(["cat",
-                     os.path.abspath(cur_tmp) + "/stage1_transcriptome.tmp",
-                     os.path.abspath(cur_tmp) + "/stage2_translate.tmp",
-                     os.path.abspath(cur_tmp) + "/stage3_locus.tmp",
-                     os.path.abspath(cur_tmp) + "/stage4_locus.tmp",
-                     os.path.abspath(cur_tmp) + "/stage5_locus.tmp"], stdout=final_fh)
-    final_fh.close()
-
-    print(parse_logs(), file=sys.stderr)
+    if args.log:
+        print(parse_logs(cur_tmp, final_fname))
+    else:
+        parse_logs(cur_tmp)
 
     if not args.keep:
         shutil.rmtree(os.path.abspath(cur_tmp))
