@@ -1,20 +1,10 @@
 #include <iostream>
 #include <math.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <htslib/sam.h>
 #include <string.h>
-#include <sstream>
 
 #include "arg_parse.h"
-
-#include "GVec.hh"
 #include "tokenize.h"
 #include "Converter.h"
-
-// TODO: log of events to see if anything goes wrong during gtex realignment
-
-// trans2genome -g ~/JHU/transcriptome/hisatTrans2Genome/errorData/me_mi/data/ann.gff -i ~/JHU/transcriptome/hisatTrans2Genome/errorData/me_mi/al_1/sample.gffread.bam -s ~/JHU/transcriptome/hisatTrans2Genome/errorData/me_mi/data/genomic_header.sam -o ./test.bam
 
 enum Opt {IN_AL   = 'i',
         OUT_AL    = 'o',
@@ -59,9 +49,7 @@ int main(int argc, char** argv) {
 
     // TODO: implement the -k mode in which only a certain number of most frequent multimappers is reported (2,3,etc depending on the value set)
 
-    // TODO: new argument to output discordant and singletons as unaligned for realignment to the genome - compare accuracy between default and this flag
-
-    if(strcmp(argv[1],"--help")==0){
+    if(argc <= 1 || strcmp(argv[1],"--help")==0){
         std::cerr<<args.get_help()<<std::endl;
         exit(1);
     }

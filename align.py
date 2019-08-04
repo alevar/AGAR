@@ -65,11 +65,14 @@ def parse_hisat(stage_fname, log_fname, log_fh):
 
     with open(stage_fname, "r") as inFP:
         for line in inFP.readlines():
+            if log_fname is not None:
+                log_fh.write(line)
+
             if re.match(reg1, line) is not None or re.match(reg2, line) is not None:
                 line = line.rstrip()
                 lineCols = line.split(" ")
                 num_tab = lineCols.count("")
-                if num_tab == 0: # total number of reads in the sample
+                if num_tab == 0:  # total number of reads in the sample
                     hisat_container["total_reads"] = int(lineCols[num_tab])
                     reads = True
                     num_tab_stack.append(num_tab)
@@ -142,6 +145,9 @@ def parse_hisat_new(stage_fname, log_fname, log_fh):
 
     with open(stage_fname, "r") as stage_fh:
         for line in stage_fh.readlines():
+            if log_fname is not None:
+                log_fh.write(line)
+
             line = line.strip()
             reg = re.compile('Total pairs: \d+')
             if re.match(reg, line) is not None:
@@ -179,9 +185,6 @@ def parse_hisat_new(stage_fname, log_fname, log_fh):
             if re.match(reg, line) is not None:
                 hisat_container["alN"] = int(line.split(": ")[1].split(" ")[0])
 
-            if log_fname is not None:
-                log_fh.write(line)
-
     return hisat_container
 
 
@@ -190,6 +193,9 @@ def parse_t2g(stage_fname, log_fname, log_fh):
     t2g_container = dict()
     with open(stage_fname, "r") as stage_fh:
         for line in stage_fh.readlines():
+            if log_fname is not None:
+                log_fh.write(line)
+
             if "single reads were precomputed" in line and line[:6] == "@STATS":
                 t2g_container["single_precomp"] = int(line.split(":")[1].split(" ")[1])
             elif "discordant paired reads were precomputed" in line and line[:6] == "@STATS":
@@ -243,9 +249,6 @@ def parse_t2g(stage_fname, log_fname, log_fh):
             else:
                 continue
 
-            if log_fname is not None:
-                log_fh.write(line)
-
     return t2g_container
 
 
@@ -285,10 +288,9 @@ def parse_logs(tmpDir_tmp, log_fname=None):
 
     # COMPUTE FINAL STATS
 
-    # TODO: singletons which aligned in stage4 should be added to discordant since they correspond to the singletons in stage1
-    print("======================\n===== T2G REPORT =====\n======================\n", file=sys.stderr)
+    report = "======================\n===== T2G REPORT =====\n======================\n\n"
     total_paired = stage1_res["total_pair"]
-    print("Total pairs: %d" % total_paired, file=sys.stderr)
+    report += "Total pairs: %d\n" % total_paired
 
     trans_conc_N = stage2_res["paired_multi"]
     trans_conc_1 = stage2_res["pair_al"] - trans_conc_N
@@ -298,68 +300,69 @@ def parse_logs(tmpDir_tmp, log_fname=None):
 
     total_conc_0 = total_paired - total_conc
     perc_conc_0 = (total_conc_0 / total_paired) * 100
-    print("\tAligned concordantly 0 time: %d (%.2f%%)" % (total_conc_0, perc_conc_0), file=sys.stderr)
+    report += "\tAligned concordantly 0 time: %d (%.2f%%)\n" % (total_conc_0, perc_conc_0)
 
     trans_disc = stage2_res["disc_al"]
     genome_disc = stage4_res["disc"]
     total_disc = trans_disc + genome_disc
     perc_disc = (total_disc / total_conc_0) * 100
-    print("\t\tAligned discordantly: %d (%.2f%%)" % (total_disc, perc_disc), file=sys.stderr)
+    report += "\t\tAligned discordantly: %d (%.2f%%)\n" % (total_disc, perc_disc)
 
     perc_disc_trans = (trans_disc / total_disc) * 100
-    print("\t\t\tAligned to the transcriptome: %d (%.2f%%)" % (trans_disc, perc_disc_trans), file=sys.stderr)
+    report += "\t\t\tAligned to the transcriptome: %d (%.2f%%)\n" % (trans_disc, perc_disc_trans)
 
     perc_disc_genome = (genome_disc / total_disc) * 100
-    print("\t\t\tAligned to the genome: %d (%.2f%%)" % (genome_disc, perc_disc_genome), file=sys.stderr)
+    report += "\t\t\tAligned to the genome: %d (%.2f%%)\n" % (genome_disc, perc_disc_genome)
 
     total_conc_disc_0 = total_conc_0 - total_disc
     perc_conc_disc_0 = (total_conc_disc_0 / total_conc_0) * 100
-    print("\t\tAligned concordantly or discordantly 0 times: %d (%.2f%%)" % (total_conc_disc_0, perc_conc_disc_0), file=sys.stderr)
+    report += "\t\tAligned concordantly or discordantly 0 times: %d (%.2f%%)\n" % (total_conc_disc_0, perc_conc_disc_0)
 
     total_conc_disc_0_mates = total_conc_disc_0 * 2
-    print("\t\t\tNumber of mates that make up these pairs: %d" % total_conc_disc_0_mates, file=sys.stderr)
+    report += "\t\t\tNumber of mates that make up these pairs: %d\n" % total_conc_disc_0_mates
 
     trans_single = stage2_res["single_al"]
     genome_single = stage4_res["al1"] + stage4_res["alN"] + stage4_res["unpaired1"] + stage4_res["unpairedN"]
     total_single_genome = trans_single + genome_single
     perc_single = (total_single_genome / total_conc_disc_0_mates) * 100
-    print("\t\t\t\tAligned: %d (%.2f%%)" % (total_single_genome, perc_single), file=sys.stderr)
+    report += "\t\t\t\tAligned: %d (%.2f%%)\n" % (total_single_genome, perc_single)
 
     perc_trans_single = (trans_single / total_single_genome) * 100
-    print("\t\t\t\t\tAligned to the transcriptome: %d (%.2f%%)" % (trans_single, perc_trans_single), file=sys.stderr)
+    report += "\t\t\t\t\tAligned to the transcriptome: %d (%.2f%%)\n" % (trans_single, perc_trans_single)
 
     perc_genome_single = (genome_single / total_single_genome) * 100
-    print("\t\t\t\t\tAligned to the genome: %d (%.2f%%)" % (genome_single, perc_genome_single), file=sys.stderr)
+    report += "\t\t\t\t\tAligned to the genome: %d (%.2f%%)\n" % (genome_single, perc_genome_single)
 
     total_unal = stage4_res["al0"] + stage4_res["unpaired0"]
     perc_unal = (total_unal / total_conc_disc_0_mates) * 100
-    print("\t\t\t\tAligned 0 times: %d (%.2f%%)" % (total_unal, perc_unal), file=sys.stderr)
+    report += "\t\t\t\tAligned 0 times: %d (%.2f%%)\n" % (total_unal, perc_unal)
 
     perc_conc_1 = (total_conc_1 / total_paired) * 100
-    print("\tAligned concordantly 1 time: %d (%.2f%%)" % (total_conc_1, perc_conc_1), file=sys.stderr)
+    report += "\tAligned concordantly 1 time: %d (%.2f%%)\n" % (total_conc_1, perc_conc_1)
 
     perc_conc_1_trans = (trans_conc_1 / total_conc_1) * 100
-    print("\t\tAligned to the transcriptome: %d (%.2f%%)" % (trans_conc_1, perc_conc_1_trans), file=sys.stderr)
+    report += "\t\tAligned to the transcriptome: %d (%.2f%%)\n" % (trans_conc_1, perc_conc_1_trans)
 
     perc_conc_1_genome = (stage4_res["conc1"] / total_conc_1) * 100
-    print("\t\tAligned to the genome: %d (%.2f%%)" % (stage4_res["conc1"], perc_conc_1_genome), file=sys.stderr)
+    report += "\t\tAligned to the genome: %d (%.2f%%)\n" % (stage4_res["conc1"], perc_conc_1_genome)
 
     perc_conc_N = (total_conc_N / total_paired) * 100
-    print("\tAligned concordantly >1 times: %d (%.2f%%)" % (total_conc_N, perc_conc_N), file=sys.stderr)
+    report += "\tAligned concordantly >1 times: %d (%.2f%%)\n" % (total_conc_N, perc_conc_N)
 
     perc_conc_N_trans = (trans_conc_N / total_conc_N) * 100
-    print("\t\tAligned to the transcriptome: %d (%.2f%%)" % (trans_conc_N, perc_conc_N_trans), file=sys.stderr)
+    report += "\t\tAligned to the transcriptome: %d (%.2f%%)\n" % (trans_conc_N, perc_conc_N_trans)
 
     perc_conc_N_genome = (stage4_res["concN"] / total_conc_N) * 100
-    print("\t\tAligned to the genome: %d (%.2f%%)" % (stage4_res["concN"], perc_conc_N_genome), file=sys.stderr)
+    report += "\t\tAligned to the genome: %d (%.2f%%)\n" % (stage4_res["concN"], perc_conc_N_genome)
 
     # lastly need to get the final alignment rate
     total_reads = total_paired*2 + stage1_res["total_unpair"]
     total_aligned = total_conc*2 + total_disc + total_single_genome
     al_rate = (total_aligned / total_reads) * 100
-    print("%.2f%% overall alignment rate" % al_rate, file=sys.stderr)
+    report += "%.2f%% overall alignment rate\n" % al_rate
 
-    # TODO: currently assumes there are no singletons in stage1
+    print(report, file=sys.stderr)
+    log_fh.write(report)
 
     if log_fname is not None:
         log_fh.close()
@@ -416,7 +419,7 @@ def main(args):
         print("aligning with hisat2 against transcriptome")
         # perform a two-pass alignment one for less redundant transcripts and one for more redundant alignments
         # with the "-a" option enabled
-        transcriptome_cmd = ['/home/varabyou/soft/hisat2/hisat2',
+        transcriptome_cmd = ['hisat2',
                              # get path to the trans2genome that was compiled with the package,
                              "--no-spliced-alignment",
                              "--end-to-end",
@@ -455,7 +458,7 @@ def main(args):
     stage1_transcriptome_fh = open(os.path.abspath(cur_tmp) + "/stage1_transcriptome.tmp", "w+")
     transcriptome_process = subprocess.Popen(transcriptome_cmd, stdout=subprocess.PIPE, stderr=stage1_transcriptome_fh)
     trans2genome_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                     'cmake-build-release/trans2genome')  # get path to the trans2genome that was compiled with the package
+                                     'trans2genome')  # get path to the trans2genome that was compiled with the package
     trans2genome_cmd = [trans2genome_path,
                         "-x", os.path.abspath(args.db) + "/db",
                         "-o", os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam",
@@ -477,6 +480,8 @@ def main(args):
     stage2_translate_fh = open(os.path.abspath(cur_tmp) + "/stage2_translate.tmp", "w+")
     translate_process = subprocess.Popen(trans2genome_cmd, stdin=transcriptome_process.stdout,
                                          stderr=stage2_translate_fh)
+
+    # make sure the sam header has the exact information to run the tool
 
     unaligned_r1 = os.path.abspath(cur_tmp) + "/sample.trans_first.unal_r1.fastq"
     unaligned_r2 = os.path.abspath(cur_tmp) + "/sample.trans_first.unal_r2.fastq"
@@ -521,7 +526,7 @@ def main(args):
                 locus_cmd.extend(args.bowtie)
         elif args.type == "hisat":
             print("performing the locus lookup using hisat2")
-            locus_cmd = [os.path.abspath("/home/varabyou/soft/hisat2/hisat2"),
+            locus_cmd = [os.path.abspath("hisat2"),
                          "--rna-sensitive",
                          "--end-to-end",
                          "--no-unal",
@@ -562,7 +567,7 @@ def main(args):
         print("Locus alignment time: "+str(datetime.timedelta(seconds=int(end_locus-start_locus))))
 
     print("aligning with hisat2 against the genome")
-    hisat2_cmd_genome = ["/home/varabyou/soft/hisat2/hisat2",
+    hisat2_cmd_genome = ["hisat2",
                          "--rna-sensitive",
                          "-x", os.path.abspath(args.genome_db),
                          "-p", args.threads]
@@ -640,7 +645,7 @@ def main(args):
             os.remove(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam")
 
     if args.log:
-        print(parse_logs(cur_tmp, final_fname))
+        parse_logs(cur_tmp, final_fname)
     else:
         parse_logs(cur_tmp)
 
