@@ -31,7 +31,9 @@ enum Opt {IN_AL   = 'i',
         PERCENT   = 'e',
         OUTLIER_STDV   = 't',
         OUTLIER_RAW   = 'r',
-        NUM_READS_PRECOMP = 'n'};
+        NUM_READS_PRECOMP = 'n',
+        NODISCORD = 'j',
+        NOSINGLE = 'g'};
 
 int main(int argc, char** argv) {
 
@@ -42,7 +44,6 @@ int main(int argc, char** argv) {
     args.add_string(Opt::INDEX,"index","","path and basename of the index built by gtf_to_fasta",true);
     args.add_flag(Opt::MULTI,"multi","whether to search and evaluate multimappers",false);
     args.add_string(Opt::ABUNDANCE,"abund","","use abundances precomputed. Only gene-level abundance estimates computed by salmon are supported at the moment",false);
-    args.add_flag(Opt::UNALIGNED,"unal","search for unaligned reads, extract from alignment into separate files",false);
     args.add_flag(Opt::UNIQ,"uniq","input alignment contains only 1 mapping per read (no secondary alignments present such as in bowtie k1 mode)",false);
     args.add_int(Opt::FRAGLEN,"fraglen",200000,"fragment length of the paired reads",false);
     args.add_flag(Opt::ALL_MULTI,"all","whether to output all multimappers and not assign them based on likelihood. This flag negates -k",false);
@@ -52,8 +53,13 @@ int main(int argc, char** argv) {
     args.add_int(Opt::NUM_READS_PRECOMP,"nrp",500000,"number of reads to precompute based on the streaming",false);
     args.add_int(Opt::OUTLIER_STDV,"outlier_stdv",5,"Poisson threshold as the number of standard deviations. Everythin above the threshold will be discarded as a misalignment",false);
     args.add_int(Opt::OUTLIER_RAW,"outlier_raw",10,"Edit distance threshold for misalignments. For paired alignments the threshold is applied to each read separately",false);
+    args.add_string(Opt::UNALIGNED,"un","","output unaligned reads (singletons and pairs) to separate fastq.",false);
+    args.add_flag(Opt::NODISCORD,"nodiscord","report all dicscordant pairs as unaligned. If --un is specified, the reads will be deposited into respective fasta/fastq files. If not, SAM information will be set to indicate unaligned",false);
+    args.add_flag(Opt::NOSINGLE,"nosingle","report all mates for which the second mate is unaligned as unaligned. If --un is specified, the reads will be deposited into respective fasta/fastq files. If not, SAM information will be set to indicate unaligned",false);
 
     // TODO: implement the -k mode in which only a certain number of most frequent multimappers is reported (2,3,etc depending on the value set)
+
+    // TODO: new argument to output discordant and singletons as unaligned for realignment to the genome - compare accuracy between default and this flag
 
     if(strcmp(argv[1],"--help")==0){
         std::cerr<<args.get_help()<<std::endl;
@@ -69,9 +75,17 @@ int main(int argc, char** argv) {
         std::cerr<<"@LOG::will be using abundance from "<<args.get_string(Opt::ABUNDANCE)<<std::endl;
         converter.load_abundances(args.get_string(Opt::ABUNDANCE));
     }
-    if(args.get_flag(Opt::UNALIGNED)){
-        std::cerr<<"@LOG::will report unalgned reads"<<std::endl;
-        converter.set_unaligned();
+    if(args.is_set(Opt::UNALIGNED)){
+        std::cerr<<"@LOG::will report unaligned reads"<<std::endl;
+        converter.set_unaligned(args.get_string(Opt::UNALIGNED));
+    }
+    if(args.is_set(Opt::NODISCORD)){
+        std::cerr<<"@LOG::will report discordant alignments as unaligned unless able to repair"<<std::endl;
+        converter.set_discord_unaligned();
+    }
+    if(args.is_set(Opt::NOSINGLE)){
+        std::cerr<<"@LOG::will report mates for which the mate is unaligned as unaligned"<<std::endl;
+        converter.set_single_unaligned();
     }
     if(args.get_flag(Opt::UNIQ)){
         std::cerr<<"@LOG::trusting the user that input is uniq"<<std::endl;

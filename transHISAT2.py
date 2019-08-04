@@ -151,6 +151,19 @@ def main(args):
     parser_align.add_argument("--nounal",
                               action="store_true",
                               help="do not include unaligned reads in the output BAM")
+    parser_align.add_argument("-v",
+                              "--verbose",
+                              action="store_true",
+                              help="print all output of the tools to stderr. If not specified - only the final report will be generated")
+    parser_align.add_argument("--log",
+                              action="store_true",
+                              help="If enabled logs of the steps in the protocol will be compiled into a single document and saved in <output>.log")
+    parser_align.add_argument("--no-discord",
+                              action="store_true",
+                              help="realign discordant transcriptomic reads")
+    parser_align.add_argument("--no-single",
+                              action="store_true",
+                              help="realign single mates reported in transcriptomic alignment")
 
     parser_align.set_defaults(func=align.main)
 

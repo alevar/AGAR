@@ -316,7 +316,7 @@ public:
         if(!me.second){ // entry previously existed - can report a pair and remove from the stack
             me.first->second.restore(mate);
             mates.erase(me.first);
-            std::cout<<"s2: "<<bam_get_qname(mate)<<"\t"<<bam_get_qname(al)<<std::endl;
+//            std::cout<<"s2: "<<bam_get_qname(mate)<<"\t"<<bam_get_qname(al)<<std::endl;
             return 1;
         }
 //        else{
@@ -565,12 +565,12 @@ private:
     bool ztest = false, stdv_test = false;
     std::vector<uint32_t> observed = std::vector<uint32_t>(MAX_EDITS);
     int num_reads=0,sum_nm=0,cur_nm=0,cur_nm_mate=0;
-    float mean_nm,std2,thresh;
+    float mean_nm = -1,std2 = -1,thresh = -1;
 
     int stdv_pair = 3; // for standard deviation based outlier detection this parameter sets the number of standard deviations above the mean that the
     std::vector<uint32_t> observed_pair = std::vector<uint32_t>(MAX_EDITS);
     int num_reads_pair=0,sum_nm_pair=0,cur_nm_pair=0;
-    float mean_nm_pair,std2_pair,thresh_pair;
+    float mean_nm_pair = -1,std2_pair = -1,thresh_pair = -1;
 
     uint32_t get_nm(bam1_t *al){
         uint8_t* ptr_nm_1=bam_aux_get(al,"NM");
@@ -599,7 +599,9 @@ public:
     void precompute_save(int num_reads);
     void precompute(int perc);
     void print_multimappers();
-    void set_unaligned();
+    void set_unaligned(std::string out_fname);
+    void set_discord_unaligned();
+    void set_single_unaligned();
     void set_k1(){this->k1_mode = true;};
     void set_fraglen(int fraglen);
     void set_num_multi(int num_multi){this->mmap.set_num_multi(num_multi);};
@@ -609,22 +611,33 @@ public:
     void set_raw(int raw){errorCheck.set_raw(raw);}
 
     void print_stats(){
-        std::cerr<<"@STATS::error_check"<<std::endl;
-        std::cerr<<"\t!thresh_single:"<<errorCheck.get_thresh().first<<std::endl;
-        std::cerr<<"\t!thresh_paired:"<<errorCheck.get_thresh().second<<std::endl;
-        std::cerr<<"\t!num_single:"<<this->num_err_discarded<<std::endl;
-        std::cerr<<"\t!num_pair:"<<this->num_err_discarded_pair*2<<std::endl;
+        std::cerr<<"@STATS: "<<this->total_num_al<<" singleton reads were evaluated"<<std::endl;
+        std::cerr<<"@STATS: "<<this->total_num_disc_al<<" discordant reads were evaluated"<<std::endl;
+        std::cerr<<"@STATS: "<<this->total_num_pair_al<<" paired reads were evaluated"<<std::endl;
 
-        std::cerr<<"@STATS::multimapper"<<std::endl;
-        std::cerr<<"\t!num_single:"<<this->num_multi<<std::endl;
-        std::cerr<<"\t!num_pair:"<<this->num_multi_pair*2<<std::endl;
-        std::cerr<<"\t!rate_single:"<<double(num_multi_hits)/double(num_multi)<<std::endl;
-        std::cerr<<"\t!rate_pair:"<<double(num_multi_hits_pair)/double(num_multi_pair)<<std::endl;
+        std::cerr<<"@STATS: "<<this->num_err_discarded<<" singletons discarded due to high edit distance"<<std::endl;
+        std::cerr<<"@STATS: "<<this->num_err_discarded_disc<<" discordant reads discarded due to high edit distance"<<std::endl;
+        std::cerr<<"@STATS: "<<this->num_err_discarded_pair<<" concordant pairs discarded due to high edit distance"<<std::endl;
+        std::cerr<<"@STATS: "<<errorCheck.get_thresh().first<<" singleton edit distance threshold used"<<std::endl; // TODO: curently may output nan or bogus info if no threshold is set
+        std::cerr<<"@STATS: "<<errorCheck.get_thresh().second<<" concordant paired edit distance threshold used"<<std::endl; // TODO: currently may output nan or bogus info if no threshold is set
+
+        std::cerr<<"@STATS: "<<this->num_multi<<" multimapping singleton reads detected"<<std::endl;
+        std::cerr<<"@STATS: "<<this->num_multi_pair*2<<" multimapping concordantly paired reads detected"<<std::endl;
+        std::cerr<<"@STATS: "<<double(num_multi_hits)/double(num_multi)<<" mean singleton multimapping rate"<<std::endl;
+        std::cerr<<"@STATS: "<<double(num_multi_hits_pair)/double(num_multi_pair)<<" concordant pair multimapping rate"<<std::endl;
+
+        std::cerr<<"@STATS: "<<this->num_unal_paired*2<< " paired reads were unaligned"<<std::endl;
+        std::cerr<<"@STATS: "<<this->num_unal_single<<" singletons were unaligned"<<std::endl;
+        std::cerr<<"@STATS: "<<(this->num_unal_paired*2) + this->num_unal_single<<" reads were unaligned in total"<<std::endl;
     }
 
 private:
     // STATS
-    int num_err_discarded = 0,num_err_discarded_pair = 0;
+    int num_err_discarded = 0,num_err_discarded_pair = 0, num_err_discarded_disc = 0;
+    int total_num_pair_al = 0,total_num_al = 0, total_num_disc_al = 0, repaired = 0;
+    int num_multi = 0,num_multi_pair = 0,num_multi_hits=0,num_multi_hits_pair=0;
+    int num_unal_paired = 0, num_unal_single = 0;
+    int total_multi_detected;
 
     // MISALIGNMENT METHODS AND DECLARATIONS
     ErrorCheck errorCheck;
@@ -634,6 +647,7 @@ private:
     bool evaluate_errors_pair(bam1_t *curAl,bam1_t *mate,bool update);
     void write_unaligned(bam1_t *curAl,std::ofstream &out_ss);
     void write_unaligned_pair(bam1_t *curAl,bam1_t *mate);
+    void sam2unal(bam1_t *curAl); // set sam record to unaligned
     std::string unal_r1_fname,unal_r2_fname,unal_s_fname;
     std::ofstream unal_r1,unal_r2,unal_s;
     int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
@@ -641,9 +655,7 @@ private:
     size_t max_buf = 0;
     int perc_precomp = 10;
     int num_reads_precomp = 500000;
-    std::vector<bam1_t*> precomp_alns,precomp_alns_pair;
-    int total_num_pair_al = 0,total_num_al = 0;
-    int total_multi_detected;
+    std::vector<bam1_t*> precomp_alns,precomp_alns_pair,precomp_alns_disc;
 
     // INDEX METHODS
     void load_index(const std::string& index_base,bool multi);
@@ -658,8 +670,10 @@ private:
     bool abund = false;
     bool k1_mode = false;
     bool unaligned_mode = false;
+    bool discord_unaligned = false;
+    bool single_unaligned = false;
     int numThreads=1;
-    int fraglen = false;
+    int fraglen = 200000;
     int numTranscripts=0; // gtf_to_fasta returns a .info file with this information
     int maxLocID = 0; // what is the highest geneID assigned for the GFF by the index-builder
     int kmerlen; // kmer length used for index construction
@@ -689,6 +703,7 @@ private:
     int convert_cigar(int i,GSeg *next_exon,GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS],Position& pos_obj);
     bool has_valid_mate(bam1_t *curAl);
     bool has_mate(bam1_t *curAl);
+    bool yt_disc(bam1_t *al);
     bool get_read_start(GVec<GSeg>& exon_list,int32_t gff_start,int32_t& genome_start, int& exon_idx);
     void add_cigar(bam1_t *curAl,int num_cigars,int* cigars);
     void add_aux(bam1_t *curAl,char xs);
@@ -697,19 +712,22 @@ private:
     int collapse_genomic(bam1_t *curAl,size_t cigar_hash);
     int collapse_genomic(bam1_t *curAl,bam1_t *mateAl,size_t cigar_hash,size_t mate_cigar_hash);
     bool compare_mates(bam1_t *curAl,bam1_t* mate);
+    bool repair(bam1_t *curAl,bam1_t *mate); // see if two discordant reads can be fixed into a concordant alignment
+    void _process_disc(bam1_t* curAl,bam1_t* mate);
     void _process_pair(bam1_t* curAl,bam1_t* mate);
-//    void process_pair(bam1_t* curAl);
+    void process_disc(bam1_t* curAl,bam1_t* mate);
     void process_pair(bam1_t* curAl,bam1_t* mate);
     void process_single(bam1_t* curAl);
     size_t process_read(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
     void finish_read(bam1_t *curAl);
     void add_multi_tag(bam1_t* curAl);
+    bool check_misalign(bam1_t *curAl);
+    bool check_misalign(bam1_t *curAl,bam1_t *mate);
 
     // Multimapper-related methods
     int evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
     int evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
                                     int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate);
-    int num_multi = 0,num_multi_pair = 0,num_multi_hits=0,num_multi_hits_pair=0;
 
     // various printers relevant only for debug
     void print_transcriptome();
