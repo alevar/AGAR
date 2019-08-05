@@ -76,30 +76,29 @@ Converter::Converter(const std::string& alFP,const std::string& outFP,const std:
     this->outSAM=sam_open(outFP.c_str(),"wb");
     this->outSAM_header =bam_hdr_dup(genome_al_hdr);
 
-    cl = "@PG\tID:trans2genome\tPN:trans2genome\tVN:1.0\tCL:\""+cl+"\"\n";
-    int add_len = 0;
-    add_len += cl.size()+prev_pgs.size();
-    std::string hdr_text = std::string(outSAM_header->text);
-    if(hdr_text.back() != '\n'){
-        hdr_text += "\n";
-        add_len++;
-    }
-    hdr_text.append(prev_pgs);
-    hdr_text.append(cl);
-
-    size_t new_sz = outSAM_header->l_text + add_len + 2;
-    // call resize
-    char *tmp;
-    kroundup_size_t(new_sz);
-    tmp = (char*)realloc(outSAM_header->text, new_sz);
-    if (!tmp){
-        std::cerr<<"out of memory"<<std::endl;
-        exit(-1);
-    }
-    outSAM_header->text = tmp;
-    memcpy(outSAM_header->text + outSAM_header->l_text, hdr_text.c_str(), add_len);
-    outSAM_header->l_text += add_len;
-    outSAM_header->text[outSAM_header->l_text] = 0;
+//    cl = "@PG\tID:trans2genome\tPN:trans2genome\tVN:1.0\tCL:\""+cl+"\"\n";
+////    std::string hdr_text = std::string(outSAM_header->text);
+////    if(hdr_text.back() != '\n'){
+////        hdr_text += "\n";
+////        add_len++;
+////    }
+//    std::string hdr_text = "";
+//    hdr_text.append(prev_pgs);
+//    hdr_text.append(cl);
+//
+//    size_t new_sz = outSAM_header->l_text + hdr_text.size() + 2;
+//    // call resize
+//    char *tmp;
+//    kroundup_size_t(new_sz);
+//    tmp = (char*)realloc(outSAM_header->text, new_sz);
+//    if (!tmp){
+//        std::cerr<<"out of memory"<<std::endxl;
+//        exit(-1);
+//    }
+//    outSAM_header->text = tmp;
+//    memcpy(outSAM_header->text + outSAM_header->l_text, hdr_text.c_str(), hdr_text.size());
+//    outSAM_header->l_text += hdr_text.size();
+//    outSAM_header->text[outSAM_header->l_text] = 0;
 
     int ret = sam_hdr_write(outSAM,this->outSAM_header);
     for (int i=0;i<genome_al_hdr->n_targets;++i){
