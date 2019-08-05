@@ -56,9 +56,21 @@ int main(int argc, char** argv) {
 
     args.parse_args(argc,argv);
 
+    // first create the execution string
+    std::string cl="trans2genome ";
+    for (int i=0;i<argc;i++){
+        if(i==0){
+            cl+=argv[i];
+        }
+        else{
+            cl+=" ";
+            cl+=argv[i];
+        }
+    }
+
     std::string inputAlFP = args.is_set(Opt::IN_AL)?args.get_string(Opt::IN_AL):"-";
     std::cerr<<"@LOG::input alignment: "<<inputAlFP<<std::endl;
-    Converter converter(inputAlFP,args.get_string(Opt::OUT_AL),args.get_string(Opt::INDEX),args.get_int(Opt::THREADS),args.get_flag(Opt::MULTI));
+    Converter converter(inputAlFP,args.get_string(Opt::OUT_AL),args.get_string(Opt::INDEX),args.get_int(Opt::THREADS),args.get_flag(Opt::MULTI),cl);
     if(args.is_set(Opt::ABUNDANCE)){
         std::cerr<<"@LOG::will be using abundance from "<<args.get_string(Opt::ABUNDANCE)<<std::endl;
         converter.load_abundances(args.get_string(Opt::ABUNDANCE));

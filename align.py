@@ -252,7 +252,7 @@ def parse_t2g(stage_fname, log_fname, log_fh):
     return t2g_container
 
 
-def parse_logs(tmpDir_tmp, log_fname=None):
+def parse_logs(tmpDir_tmp, start_time, log_fname=None):
     log_fh = None
     if log_fname is not None:
         log_fh = open(log_fname, "w+")
@@ -289,6 +289,9 @@ def parse_logs(tmpDir_tmp, log_fname=None):
     # COMPUTE FINAL STATS
 
     report = "======================\n===== T2G REPORT =====\n======================\n\n"
+
+    report += start_time + "\n"
+
     total_paired = stage1_res["total_pair"]
     report += "Total pairs: %d\n" % total_paired
 
@@ -361,6 +364,9 @@ def parse_logs(tmpDir_tmp, log_fname=None):
     al_rate = (total_aligned / total_reads) * 100
     report += "%.2f%% overall alignment rate\n" % al_rate
 
+    end_time = datetime.datetime.now()
+    report += "Finished at: " + end_time.strftime("%Y-%m-%d %H:%M:%S") + "\n"
+
     print(report, file=sys.stderr)
     log_fh.write(report)
 
@@ -369,6 +375,7 @@ def parse_logs(tmpDir_tmp, log_fname=None):
 
 def main(args):
     start_total = time.time()
+    start_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     for ifp in args.m1.split(","):
         assert os.path.exists(os.path.abspath(ifp)), "#1 reads not found"
     for ifp in args.m2.split(","):
@@ -447,6 +454,8 @@ def main(args):
         transcriptome_cmd.extend(("-k", "1"))
     if args.fasta:
         transcriptome_cmd.append("-f")
+    # if args.no_single:
+    #     transcriptome_cmd.append("--no-mixed")  # TODO: develop a universal no-mixed parser using no "ambiguous" flags // TODO: verify there are no duplicates in the final output (one introduced by hisat and one by T2G
     transcriptome_cmd.extend(("-1", args.m1,
                               "-2", args.m2))
     if not args.single is None:
@@ -645,9 +654,9 @@ def main(args):
             os.remove(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam")
 
     if args.log:
-        parse_logs(cur_tmp, final_fname)
+        parse_logs(cur_tmp, start_time, final_fname)
     else:
-        parse_logs(cur_tmp)
+        parse_logs(cur_tmp, start_time)
 
     if not args.keep:
         shutil.rmtree(os.path.abspath(cur_tmp))

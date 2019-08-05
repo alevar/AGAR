@@ -33,7 +33,22 @@ void print_aux(bam1_t *al) {
     std::cout<<*sStop<<std::endl;
 }
 
-Converter::Converter(const std::string& alFP,const std::string& outFP,const std::string& index_base,const int& threads,bool multi){
+std::string extract_pg(bam_hdr_t *al_hdr){
+    std::string res_pg = "";
+
+    std::string tmpstr(al_hdr->text,al_hdr->l_text); // length optional, but needed if there may be zero's in your data
+    std::istringstream is(tmpstr);
+
+    std::string line;
+    while (getline(is,line)) {
+        if(line.substr(0,3)=="@PG"){
+            res_pg += line+"\n";
+        }
+    }
+    return res_pg;
+}
+
+Converter::Converter(const std::string& alFP,const std::string& outFP,const std::string& index_base,const int& threads,bool multi,std::string cl){
     this->numThreads=threads;
     this->outFP = outFP;
     this->alFP = alFP;
@@ -54,10 +69,37 @@ Converter::Converter(const std::string& alFP,const std::string& outFP,const std:
     this->al=hts_open(alFP.c_str(),"r");
     this->al_hdr=sam_hdr_read(this->al); // read the current alignment header
 
+    std::string prev_pgs = extract_pg(al_hdr);
+
     genome_al_hdr=sam_hdr_read(genome_al);
 
     this->outSAM=sam_open(outFP.c_str(),"wb");
     this->outSAM_header =bam_hdr_dup(genome_al_hdr);
+
+    cl = "@PG\tID:trans2genome\tPN:trans2genome\tVN:1.0\tCL:\""+cl+"\"\n";
+    int add_len = 0;
+    add_len += cl.size()+prev_pgs.size();
+    std::string hdr_text = std::string(outSAM_header->text);
+    if(hdr_text.back() != '\n'){
+        hdr_text += "\n";
+        add_len++;
+    }
+    hdr_text.append(prev_pgs);
+    hdr_text.append(cl);
+
+    size_t new_sz = outSAM_header->l_text + add_len + 2;
+    // call resize
+    char *tmp;
+    kroundup_size_t(new_sz);
+    tmp = (char*)realloc(outSAM_header->text, new_sz);
+    if (!tmp){
+        std::cerr<<"out of memory"<<std::endl;
+        exit(-1);
+    }
+    outSAM_header->text = tmp;
+    memcpy(outSAM_header->text + outSAM_header->l_text, hdr_text.c_str(), add_len);
+    outSAM_header->l_text += add_len;
+    outSAM_header->text[outSAM_header->l_text] = 0;
 
     int ret = sam_hdr_write(outSAM,this->outSAM_header);
     for (int i=0;i<genome_al_hdr->n_targets;++i){
@@ -164,10 +206,10 @@ void Converter::_load_transcriptome(std::ifstream& tlstfp,char* buffer){
     int k = tlstfp.gcount();
     uint32_t tid=0,start=0,end=0,chr=0,locus=0;
     enum Opt {TID = 0,
-            LOCUS = 1,
-            CHR   = 2,
-            START = 3,
-            END   = 4};
+        LOCUS = 1,
+        CHR   = 2,
+        START = 3,
+        END   = 4};
     uint32_t elem = Opt::TID;
     GSeg exon;
     GffTranscript transcript;
@@ -383,6 +425,173 @@ bool Converter::yt_disc(bam1_t *al){
     }
 }
 
+// returns the STATUS (conc/disc/mixed/single/etc) for a given read
+uint8_t Converter::get_read_status(bam1_t *curAl){
+    if(curAl->core.flag & 0x4){ // is unaligned
+        return STATUS::UNALIGNED_SINGLE;
+    }
+    return STATUS::ALIGNED_SINGLE;
+}
+
+uint8_t Converter::get_pair_status(bam1_t *curAl,bam1_t *mate){
+    if(curAl->core.flag & 0x2 && mate->core.flag & 0x2){
+        return STATUS::CONC;
+    }
+    else if(!(curAl->core.flag & 0x4) && !(mate->core.flag & 0x4)){
+        return STATUS::DISC;
+    }
+    else if(curAl->core.flag & 0x4 && mate->core.flag & 0x4){
+        return STATUS::UNALIGNED_PAIR;
+    }
+    else if(curAl->core.flag & 0x4 && !(mate->core.flag & 0x4)){
+        return STATUS::ALIGNED_MIXED_1; // mate was first
+    }
+    else if(!(curAl->core.flag & 0x4) && mate->core.flag & 0x4){
+        return STATUS::ALIGNED_MIXED_2;
+    }
+    else{
+        std::cout<<"ERROR STATUS PAIR"<<std::endl;
+        return STATUS::ERROR;
+    }
+}
+
+void Converter::process_status_precomp(bam1_t *mate,bam1_t *curAl,int &i,bool &check_mate){
+    if(std::strcmp(bam_get_qname(curAl),bam_get_qname(mate)) == 0){ // is a pair
+        uint8_t status = get_pair_status(curAl,mate);
+        // do stuff with the pair based on the status
+        switch(status){
+            case STATUS::CONC:
+                if(this->detect_misalign){
+                    bool ret = Converter::evaluate_errors_pair(curAl,mate,true); // add to the error checks
+                }
+                this->mmap.add_frag(curAl,mate);
+                precomp_alns_pair.push_back(bam_dup1(mate));
+                precomp_alns_pair.push_back(bam_dup1(curAl));
+                loaded_pair++;
+                break;
+            case STATUS::DISC:
+                if(this->detect_misalign){
+                    bool ret = Converter::evaluate_errors(mate,true); // add to the error checks
+                    ret = Converter::evaluate_errors(curAl,true); // add to the error checks
+                }
+                precomp_alns_disc.push_back(bam_dup1(mate));
+                precomp_alns_disc.push_back(bam_dup1(curAl));
+                loaded_disc++;
+                break;
+            case STATUS::ALIGNED_MIXED_1:
+                if(this->detect_misalign){
+                    bool ret = Converter::evaluate_errors(mate,true); // add to the error checks
+                }
+                precomp_alns_single_mate.push_back(bam_dup1(mate));
+                precomp_alns_single_mate.push_back(bam_dup1(curAl));
+                i--;
+                loaded_mate_single++;
+                break;
+            case STATUS::ALIGNED_MIXED_2:
+                if(this->detect_misalign){
+                    bool ret = Converter::evaluate_errors(curAl,true); // add to the error checks
+                }
+                precomp_alns_single_mate.push_back(bam_dup1(curAl));
+                precomp_alns_single_mate.push_back(bam_dup1(mate));
+                i--;
+                loaded_mate_single++;
+                break;
+            case STATUS::UNALIGNED_PAIR:
+                if (!this->unaligned_mode){finish_read(curAl);finish_read(mate);break;}
+                write_unaligned_pair(curAl,mate);
+                this->num_unal_paired++;
+                i-=2;
+                break;
+            default:
+                std::cout<<"@ERROR::SWITCH PAIR"<<std::endl;
+                break;
+        }
+        check_mate = false;
+    }
+    else{ // is not a pair - process the first as a singleton and move the second to the mate
+        uint8_t status = get_read_status(mate);
+        // do stuff with the single read based on the status
+        switch(status){
+            case STATUS::ALIGNED_SINGLE:
+                if(this->detect_misalign){
+                    bool ret = Converter::evaluate_errors(mate,true); // add to the error checks
+                }
+                precomp_alns.push_back(bam_dup1(mate));
+                loaded++;
+                break;
+            case STATUS::UNALIGNED_SINGLE:
+                if (!this->unaligned_mode){finish_read(mate);break;}
+                write_unaligned(mate,this->unal_s);
+                this->num_unal_single++;
+                i--;
+                break;
+            default:
+                std::cout<<"@ERROR::SWITCH SINGLE"<<std::endl;
+                break;
+        }
+        bam_copy1(mate,curAl);
+        check_mate = true;
+    }
+}
+
+void Converter::process_status(bam1_t *mate,bam1_t *curAl,bool &check_mate){
+    if(std::strcmp(bam_get_qname(curAl),bam_get_qname(mate)) == 0){ // is a pair
+        uint8_t status = get_pair_status(curAl,mate);
+        // do stuff with the pair based on the status
+        switch(status){
+            case STATUS::CONC:
+                this->process_pair(curAl,mate);
+                break;
+            case STATUS::DISC:
+                this->process_disc(curAl,mate);
+                break;
+            case STATUS::ALIGNED_MIXED_1:
+                this->process_single_mate(mate,curAl);
+                break;
+            case STATUS::ALIGNED_MIXED_2:
+                this->process_single_mate(curAl,mate);
+                break;
+            case STATUS::UNALIGNED_PAIR:
+                if (!this->unaligned_mode){finish_read(curAl);finish_read(mate);break;}
+                write_unaligned_pair(curAl,mate);
+                this->num_unal_paired++;
+                break;
+            default:
+                std::cout<<"@ERROR::SWITCH PAIR"<<std::endl;
+                break;
+        }
+        check_mate = false;
+    }
+    else{ // is not a pair - process the first as a singleton and move the second to the mate
+        uint8_t status = get_read_status(mate);
+        // do stuff with the single read based on the status
+        switch(status){
+            case STATUS::ALIGNED_SINGLE:
+                this->process_single(mate);
+                break;
+            case STATUS::UNALIGNED_SINGLE:
+                if (!this->unaligned_mode){finish_read(mate);break;}
+                write_unaligned(mate,this->unal_s);
+                this->num_unal_single++;
+                break;
+            default:
+                std::cout<<"@ERROR::SWITCH SINGLE"<<std::endl;
+                break;
+        }
+        bam_copy1(mate,curAl);
+        check_mate = true;
+    }
+}
+
+void Converter::add_T2G_aux(bam1_t *curAl){
+    // add optional tag with transcript ID
+    uint8_t* ptr_op=bam_aux_get(curAl,"ZT");
+    if(ptr_op){
+        bam_aux_del(curAl,ptr_op);
+    }
+    bam_aux_append(curAl,"ZT",'A',1,(const unsigned char*)"+");
+}
+
 // TODO: include fragment length in the precomputation
 // TODO: include fasta/fastq detection in the precomputation
 
@@ -391,17 +600,14 @@ bool Converter::yt_disc(bam1_t *al){
 void Converter::precompute_save(int num_reads){
     this->num_reads_precomp = num_reads;
     bam1_t *curAl = bam_init1(); // initialize the alignment record
-    bam1_t *mate = bam_init1(); // intialize mates
-    bam1_t *mate_un = bam_init1(); // holds mate of unaligned reads
-    bam1_t *mate_disc = bam_init1(); // hold mate for discordant alignments
+    bam1_t *mate = bam_init1(); // intialize mate
 
-    bool first_mate_found = false;
-    bool unmapped_mate_available = false;
-    bool disc_mate_available = false;
+    bool check_mate = false;
 
-    int loaded=0,loaded_pair=0,loaded_disc=0;
+    bool first = false;
 
-    for(int i=0;i<num_reads;i++){
+    int i = 0;
+    for(;i<num_reads;i++){
         int ret;
         err_recover:
         if (al->line.l == 0) {
@@ -419,96 +625,37 @@ void Converter::precompute_save(int num_reads){
             }
         }
         // do the rest of the logic here
-        if(curAl->core.flag & 0x4) { // check that it is aligned -  if not aligned - need to deal accordingly
-            if (!this->unaligned_mode){
-                continue;
-            }
-            if(curAl->core.flag & 0x8 && // mate is unmapped
-               curAl->core.flag & 0x1){ // mate exists
-                if(unmapped_mate_available && std::strcmp(bam_get_qname(curAl),bam_get_qname(mate_un))==0){
-                    write_unaligned_pair(curAl,mate_un);
-                    unmapped_mate_available = false;
-                    this->num_unal_paired++;
-                }
-                else{
-                    unmapped_mate_available = true;
-                    bam_copy1(mate_un,curAl);
-                }
-            }
-            else{ // mate is mapped or not available
-                if(unmapped_mate_available){
-                    std::cerr<<"something is wrong"<<std::endl;
-                }
-                write_unaligned(curAl,this->unal_s);
-                unmapped_mate_available = false;
-                this->num_unal_single++;
-            }
-            i--; // do not count this read
+        // add a flag signaling that this is T2G conversion
+        add_T2G_aux(curAl);
+        if(!first){ // only on first iteration
+            bam_copy1(mate,curAl);
+            first = true;
+            check_mate = true;
             continue;
         }
-        else{
-            if(unmapped_mate_available){
-                std::cerr<<"something is wrong2"<<std::endl;
-            }
-            if(!has_valid_mate(curAl)){
-                first_mate_found = false; // reset since next read can not be a valid pair
-                // first check the errors
-                if(this->detect_misalign){
-                    bool ret = Converter::evaluate_errors(curAl,true); // add to the error checks
-                }
-                if(yt_disc(curAl)){ // mate is mapped - discordant
-                    if(disc_mate_available && compare_mates(curAl,mate_disc)){
-                        precomp_alns_disc.push_back(bam_dup1(curAl));
-                        precomp_alns_disc.push_back(bam_dup1(mate));
-                        loaded_disc++;
-                        disc_mate_available = false;
-                    }
-                    else{
-                        bam_copy1(mate_disc,curAl);
-                        disc_mate_available = true;
-                        if(i+1==num_reads){ // if we reach here and we are at the end of the precomputing loop - need to extend the loop by one step in order to load the second mate
-                            i--;
-                        }
-                    }
-                }
-                else{
-                    precomp_alns.push_back(bam_dup1(curAl));
-                    loaded++;
-                }
-            }
-            else { // is paired
-                if(disc_mate_available){
-                    std::cerr<<"something is wrong3"<<std::endl;
-                }
-                // check if a pair previously seen
-                if (!first_mate_found) {
-                    bam_copy1(mate,curAl);
-                    first_mate_found = true;
-                    if(i+1==num_reads){ // if we reach here and we are at the end of the precomputing loop - need to extend the loop by one step in order to load the second mate
-                        i--;
-                    }
-                } else {
-                    if(this->detect_misalign){
-                        bool ret = Converter::evaluate_errors_pair(curAl,mate,true); // add to the error checks
-                    }
-                    this->mmap.add_frag(curAl,mate);
-                    precomp_alns_pair.push_back(bam_dup1(curAl));
-                    precomp_alns_pair.push_back(bam_dup1(mate));
-                    loaded_pair++;
-                    first_mate_found = false;
-                }
-            }
+
+        if(check_mate){
+            process_status_precomp(mate,curAl,i,check_mate);
         }
+        else{
+            bam_copy1(mate,curAl);
+            check_mate = true;
+        }
+    }
+
+    if(check_mate){ // the last record might not have been evaluated - need to finish here
+        process_status_precomp(mate,curAl,i,check_mate);
+        check_mate = false;
     }
 
     bam_destroy1(curAl);
     bam_destroy1(mate);
-    bam_destroy1(mate_un);
-    bam_destroy1(mate_disc);
 
     std::cerr<<"@STATS: "<<loaded<<" single reads were precomputed"<<std::endl;
     std::cerr<<"@STATS: "<<loaded_pair<<" concordant paired reads were precomputed"<<std::endl;
     std::cerr<<"@STATS: "<<loaded_disc<<" discordant paired reads were precomputed"<<std::endl;
+    std::cerr<<"@STATS: "<<this->num_unal_paired<<" discarded pairs as unaligned"<<std::endl;
+    std::cerr<<"@STATS: "<<this->num_unal_single<<" discarded singles as unaligned"<<std::endl;
     std::cerr<<"@STATS: "<<this->mmap.get_min_frag()<<" minimum fragment length threshold"<<std::endl; // TODO: The problem with computing fragment lengths this way is that it is computed on the transcriptomic level and not genomic - need conversion or a different approach all together
     std::cerr<<"@STATS: "<<this->mmap.get_max_frag()<<" maximum fragment length threshold"<<std::endl;
 }
@@ -644,12 +791,37 @@ void Converter::write_unaligned(bam1_t *curAl,std::ofstream &out_ss){
     }
 }
 
+void Converter::process_single_mate(bam1_t *aligned, bam1_t *unaligned){
+    if(this->single_unaligned){
+        if(this->unaligned_mode){
+            write_unaligned_pair(aligned,unaligned);
+            this->num_unal_paired++;
+            return;
+        }
+        else{ // TODO: implement here
+            sam2unal(aligned);
+            finish_read(aligned);
+            finish_read(unaligned);
+            return;
+        }
+    }
+    else{
+        process_single(aligned);
+        write_unaligned(unaligned,this->unal_s);
+    }
+}
+
 // if precomputation was performed from the stream, then the following function
 // can be used in order to process reads which have not been evaluated yet
 void Converter::convert_coords_precomp(){
     for(auto &v : this->precomp_alns){
         this->process_single(v);
         bam_destroy1(v);
+    }
+    for(int i=0;i<this->precomp_alns_single_mate.size();i+=2) {
+        process_single_mate(this->precomp_alns_single_mate[i],this->precomp_alns_single_mate[i+1]);
+        bam_destroy1(this->precomp_alns_single_mate[i]);
+        bam_destroy1(this->precomp_alns_single_mate[i+1]);
     }
     for(int i=0;i<this->precomp_alns_pair.size();i+=2){
         _process_pair(this->precomp_alns_pair[i],this->precomp_alns_pair[i+1]);
@@ -678,83 +850,36 @@ bool Converter::has_mate(bam1_t *curAl){ // TODO: needs to be used to properly h
 void Converter::convert_coords(){
     bam1_t *curAl = bam_init1(); // initialize the alignment record
     bam1_t *mate = bam_init1();
-    bam1_t *mate_un = bam_init1(); // mate for unmapped reads
-    bam1_t *mate_disc = bam_init1(); // discordant alignment
 
-    bool mate_available = false;
-    bool unmapped_mate_available = false;
-    bool disc_mate_available = false;
+    bool check_mate = false;
+    bool first = false;
 
     while(sam_read1(al,al_hdr,curAl)>=0) { // only perfom if unaligned flag is set to true
-        if (curAl->core.flag & 0x4) { // if read is unmapped
-            if (!this->unaligned_mode){
-                continue;
-            }
-            if(curAl->core.flag & 0x8 && // mate is unmapped
-               curAl->core.flag & 0x1){ // mate exists
-                if(unmapped_mate_available && std::strcmp(bam_get_qname(curAl),bam_get_qname(mate_un))==0){
-                    write_unaligned_pair(curAl,mate_un);
-                    unmapped_mate_available = false;
-                    this->num_unal_paired++;
-                }
-                else{
-                    unmapped_mate_available = true;
-                    bam_copy1(mate_un,curAl);
-                }
-            }
-            else{ // mate is unmapped
-                if(unmapped_mate_available){
-                    std::cerr<<"something is wrong"<<std::endl;
-                }
-                write_unaligned(curAl,this->unal_s);
-                unmapped_mate_available = false;
-                this->num_unal_single++;
-            }
+        add_T2G_aux(curAl); // add T2G tag
+        if(!first){ // only on first iteration
+            bam_copy1(mate,curAl);
+            first = true;
+            check_mate = true;
             continue;
         }
-        if(unmapped_mate_available){
-            std::cerr<<"something is wrong2"<<std::endl;
+
+        if(check_mate){
+            process_status(mate,curAl,check_mate);
         }
-        // otherwise we proceed to evaluate the reads accordingly
-        // first check if belongs to a valid pair
-        if(this->has_valid_mate(curAl)) { // belongs to a valid pair
-            if(mate_available && compare_mates(curAl,mate)){
-                this->process_pair(curAl,mate);
-                mate_available = false;
-            }
-            else{ // copy current read to the mate for later
-                mate_available = true;
-                bam_copy1(mate,curAl);
-            }
-        }
-        else{ // does not belong to a valid pair
-            if(yt_disc(curAl)){ // mate is mapped - discordant
-                if(disc_mate_available && compare_mates(curAl,mate_disc)){
-                    this->process_disc(curAl,mate_disc);
-                    disc_mate_available = false;
-                }
-                else{
-                    bam_copy1(mate_disc,curAl);
-                    disc_mate_available = true;
-                }
-            }
-            else{ // the only mapped mate
-                this->process_single(curAl);
-                mate_available = false;
-            }
+        else{
+            bam_copy1(mate,curAl);
+            check_mate = true;
         }
     }
     bam_destroy1(curAl);
     bam_destroy1(mate);
-    bam_destroy1(mate_un);
-    bam_destroy1(mate_disc);
 }
 
 bool Converter::has_valid_mate(bam1_t *curAl){
     return (curAl->core.flag & 0x1) && // belongs to a pair
            (curAl->core.flag & 0x2) && // mapped as a pair
-          !(curAl->core.flag & 0x4) && // is mapped
-          !(curAl->core.flag & 0x8); // mate is mapped
+           !(curAl->core.flag & 0x4) && // is mapped
+           !(curAl->core.flag & 0x8); // mate is mapped
 }
 
 bool Converter::get_read_start(GVec<GSeg>& exon_list,int32_t gff_start,int32_t& genome_start, int& exon_idx){
@@ -1166,7 +1291,7 @@ void Converter::add_multi_tag(bam1_t* curAl){ // TODO: replace with the number o
 }
 
 int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
-                                                int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate) {
+                                          int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate) {
     int unique;
     std::vector<Position> res_pos,res_pos_mate; // holds the results of the multimapper evaluation
     if(!this->abund){ // compute abundance dynamically

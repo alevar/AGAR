@@ -20,6 +20,7 @@
 
 //#include <htslib/khash.h> // TODO: consider moving the implementation to a better hashmap (such as khash or something else)
 #include <htslib/sam.h>
+#include <htslib/kstring.h>
 
 #include "GVec.hh"
 #include "Multimap.hh"
@@ -38,6 +39,8 @@
 #define MAX_EDITS 100
 
 #define KS_SEP_LINE  2
+
+#define KS_INITIALIZER {0,0,0}
 
 #include <cassert>
 
@@ -589,7 +592,7 @@ private:
 
 class Converter{
 public:
-    Converter(const std::string& alFP,const std::string& outFP,const std::string& index_base,const int& threads,bool multi);
+    Converter(const std::string& alFP,const std::string& outFP,const std::string& index_base,const int& threads,bool multi, std::string cl);
     ~Converter();
 
     void load_abundances(const std::string& abundFP); // add abundances to the transcripts
@@ -632,12 +635,22 @@ public:
     }
 
 private:
+    enum STATUS {CONC             = 0,
+                 DISC             = 1,
+                 UNALIGNED_PAIR   = 2,
+                 ALIGNED_MIXED_1  = 3,
+                 ALIGNED_MIXED_2  = 4,
+                 ALIGNED_SINGLE   = 5,
+                 UNALIGNED_SINGLE = 6,
+                 ERROR            = 7};
+
     // STATS
     int num_err_discarded = 0,num_err_discarded_pair = 0, num_err_discarded_disc = 0;
     int total_num_pair_al = 0,total_num_al = 0, total_num_disc_al = 0, repaired = 0;
     int num_multi = 0,num_multi_pair = 0,num_multi_hits=0,num_multi_hits_pair=0;
     int num_unal_paired = 0, num_unal_single = 0;
     int total_multi_detected;
+    int loaded=0,loaded_pair=0,loaded_disc=0,loaded_mate_single=0;
 
     // MISALIGNMENT METHODS AND DECLARATIONS
     ErrorCheck errorCheck;
@@ -655,7 +668,7 @@ private:
     size_t max_buf = 0;
     int perc_precomp = 10;
     int num_reads_precomp = 500000;
-    std::vector<bam1_t*> precomp_alns,precomp_alns_pair,precomp_alns_disc;
+    std::vector<bam1_t*> precomp_alns,precomp_alns_pair,precomp_alns_disc,precomp_alns_single_mate;
 
     // INDEX METHODS
     void load_index(const std::string& index_base,bool multi);
@@ -703,9 +716,16 @@ private:
     int convert_cigar(int i,GSeg *next_exon,GVec<GSeg>& exon_list,int &num_cigars,int read_start,bam1_t* curAl,int cigars[MAX_CIGARS],Position& pos_obj);
     bool has_valid_mate(bam1_t *curAl);
     bool has_mate(bam1_t *curAl);
+    void process_status_precomp(bam1_t *mate,bam1_t *curAl,int &i,bool &check_mate);
+    void process_status(bam1_t *mate,bam1_t *curAl,bool &check_mate);
+    uint8_t get_read_status(bam1_t *curAl);
+    uint8_t get_pair_status(bam1_t *curAl, bam1_t *mate);
     bool yt_disc(bam1_t *al);
+    bool yt_uu(bam1_t *al);
+    bool yt_up(bam1_t *al);
     bool get_read_start(GVec<GSeg>& exon_list,int32_t gff_start,int32_t& genome_start, int& exon_idx);
     void add_cigar(bam1_t *curAl,int num_cigars,int* cigars);
+    void add_T2G_aux(bam1_t *curAl);
     void add_aux(bam1_t *curAl,char xs);
     void change_nh_flag(bam1_t *curAl,int nh);
     void fix_flag(bam1_t *curAl);
@@ -718,6 +738,7 @@ private:
     void process_disc(bam1_t* curAl,bam1_t* mate);
     void process_pair(bam1_t* curAl,bam1_t* mate);
     void process_single(bam1_t* curAl);
+    void process_single_mate(bam1_t *aligned, bam1_t *unaligned);
     size_t process_read(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
     void finish_read(bam1_t *curAl);
     void add_multi_tag(bam1_t* curAl);

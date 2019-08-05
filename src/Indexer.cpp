@@ -262,7 +262,7 @@ void Indexer::save_header() {
         prev_id = v.first;
         genome_headerfp<<"@SQ\tSN:"<<v.second.first<<"\tLN:"<<v.second.second<<std::endl;
     }
-    genome_headerfp<<"@PG\tID:transHISAT2\tPN:transHISAT2\tVN:1.0\tCL:\"./transHISAT2.py\""<<std::endl;
+    // PG is added using the arguments from the execution of trans2genome during the conversion
     genome_headerfp.close();
 }
 
