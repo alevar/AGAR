@@ -97,7 +97,7 @@ void Indexer::add_to_geneMap(GffObj &p_trans){
     if(geneID==nullptr){
         geneID=p_trans.getGeneName();
         if(geneID==nullptr){
-            std::cerr<<"@ERROR::wrong geneID"<<std::endl;
+            std::cerr<<"@ERROR::wrong geneID: "<<p_trans.gseq_id<<"\t"<<p_trans.getID()<<std::endl;
             exit(1);
         }
     }
@@ -256,8 +256,8 @@ void Indexer::save_header() {
     int prev_id = -1;
     for(auto &v : this->id_to_ref){
         if(v.first<=prev_id || (v.first - prev_id) != 1){
-            std::cerr<<"@ERROR::error in reference IDs: "<<prev_id<<"\t"<<v.first<<std::endl;
-            exit(1);
+            std::cerr<<"@ERROR::error in reference IDs: "<<prev_id<<"\t"<<v.first<<"\t"<<v.second.first<<"\t"<<id_to_ref[prev_id].first<<"\t"<<std::endl;
+//            exit(1);
         }
         prev_id = v.first;
         genome_headerfp<<"@SQ\tSN:"<<v.second.first<<"\tLN:"<<v.second.second<<std::endl;

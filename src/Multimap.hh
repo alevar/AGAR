@@ -428,7 +428,6 @@ public:
         return this->chr==m.chr &&
                this->strand==m.strand &&
                this->start==m.start &&
-               this->locus==m.locus &&
                this->moves==m.moves;
     }
 
@@ -440,7 +439,6 @@ public:
         return this->chr<m.chr ||
                this->strand<m.strand ||
                this->start<m.start ||
-               this->locus<m.locus ||
                this->moves<m.moves;
     }
 
@@ -466,18 +464,77 @@ inline void hash_combine(std::size_t& seed, const T& v, Rest... rest) {
     hash_combine(seed, rest...);
 }
 
-
 // hash function to be used for
 namespace std {
     template<>
     struct hash<Position> {
         size_t operator()(const Position &p) const {
             size_t ret = 0;
-            hash_combine(ret,p.chr,p.strand,p.start,p.locus);
+            hash_combine(ret,p.chr,p.strand,p.start);
             return ret;
         }
     };
 }
+
+struct PosHash_noLoc {
+public:
+    size_t operator()(const Position & p) const {
+        size_t ret = 0;
+        hash_combine(ret,p.chr,p.strand,p.start);
+        return ret;
+    }
+};
+
+struct PosHash_withLoc {
+public:
+    size_t operator()(const Position & p) const {
+        size_t ret = 0;
+        hash_combine(ret,p.chr,p.strand,p.start,p.locus);
+        return ret;
+    }
+};
+
+struct PosEq_withLoc {
+public:
+    size_t operator()(const Position & p1,const Position & p2) const {
+        return p1.chr==p2.chr &&
+               p1.strand==p2.strand &&
+               p1.start==p2.start &&
+               p1.locus==p2.locus &&
+               p1.moves==p2.moves;
+    }
+};
+
+struct PosEq_noLoc {
+public:
+    size_t operator()(const Position & p1,const Position & p2) const {
+        return p1.chr==p2.chr &&
+               p1.strand==p2.strand &&
+               p1.start==p2.start &&
+               p1.moves==p2.moves;
+    }
+};
+
+struct PosLe_withLoc {
+public:
+    size_t operator()(const Position & p1,const Position & p2) const {
+        return p1.chr<p2.chr ||
+               p1.strand<p2.strand ||
+               p1.start<p2.start ||
+               p1.locus<p2.locus ||
+               p1.moves<p2.moves;
+    }
+};
+
+struct PosLe_noLoc {
+public:
+    size_t operator()(const Position & p1,const Position & p2) const {
+        return p1.chr<p2.chr ||
+               p1.strand<p2.strand ||
+               p1.start<p2.start ||
+               p1.moves<p2.moves;
+    }
+};
 
 struct GffTranscript: public GSeg {
     GVec<GSeg> exons;
@@ -1186,7 +1243,7 @@ private:
     int all_multi = false;
     bool precomputed_abundances = false;
 
-    typedef std::unordered_set<Position> pcord;
+    typedef std::unordered_set<Position,PosHash_noLoc,PosEq_noLoc> pcord;
     std::pair<pcord::iterator,bool> pce;
     std::unordered_map<std::string,pcord> kmer_coords;
     std::pair<std::unordered_map<std::string,pcord>::iterator,bool> kce;
@@ -1195,8 +1252,8 @@ private:
     std::unordered_map<std::string,int> uniq_cnt; // counts of unique kmers per transcript
     std::pair<std::unordered_map<std::string,int>::iterator,bool> ex_ucnt; // exists or not
 
-    std::unordered_map<Position,uint32_t> lookup_table;
-    std::pair<std::unordered_map<Position,uint32_t>::iterator,bool> lte; // entry exists in the lookup table
+    std::unordered_map<Position,uint32_t,PosHash_withLoc,PosEq_withLoc> lookup_table;
+    std::pair<std::unordered_map<Position,uint32_t,PosHash_withLoc,PosEq_withLoc>::iterator,bool> lte; // entry exists in the lookup table
     std::unordered_map<Position,uint32_t>::iterator ltf,ltf_mate; // iterator to found entry or the end
     std::vector<std::pair<Position,bool>> index; // the actual position as well as whether the next position is related to the current
     std::vector<std::pair<Position,bool>>::iterator ii,ii_mate; // iterator within the index
