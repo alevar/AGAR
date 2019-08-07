@@ -302,23 +302,23 @@ def parse_logs(tmpDir_tmp, start_time, log_fname=None):
     total_conc = total_conc_1 + total_conc_N
 
     total_conc_0 = total_paired - total_conc
-    perc_conc_0 = (total_conc_0 / total_paired) * 100
+    perc_conc_0 = 0 if total_paired == 0 else (total_conc_0 / total_paired) * 100
     report += "\tAligned concordantly 0 time: %d (%.2f%%)\n" % (total_conc_0, perc_conc_0)
 
     trans_disc = stage2_res["disc_al"]
     genome_disc = stage4_res["disc"]
     total_disc = trans_disc + genome_disc
-    perc_disc = (total_disc / total_conc_0) * 100
+    perc_disc = 0 if total_conc_0 == 0 else (total_disc / total_conc_0) * 100
     report += "\t\tAligned discordantly: %d (%.2f%%)\n" % (total_disc, perc_disc)
 
-    perc_disc_trans = (trans_disc / total_disc) * 100
+    perc_disc_trans = 0 if total_disc == 0 else (trans_disc / total_disc) * 100
     report += "\t\t\tAligned to the transcriptome: %d (%.2f%%)\n" % (trans_disc, perc_disc_trans)
 
-    perc_disc_genome = (genome_disc / total_disc) * 100
+    perc_disc_genome = 0 if total_disc == 0 else (genome_disc / total_disc) * 100
     report += "\t\t\tAligned to the genome: %d (%.2f%%)\n" % (genome_disc, perc_disc_genome)
 
     total_conc_disc_0 = total_conc_0 - total_disc
-    perc_conc_disc_0 = (total_conc_disc_0 / total_conc_0) * 100
+    perc_conc_disc_0 = 0 if total_conc_0 == 0 else (total_conc_disc_0 / total_conc_0) * 100
     report += "\t\tAligned concordantly or discordantly 0 times: %d (%.2f%%)\n" % (total_conc_disc_0, perc_conc_disc_0)
 
     total_conc_disc_0_mates = total_conc_disc_0 * 2
@@ -327,41 +327,41 @@ def parse_logs(tmpDir_tmp, start_time, log_fname=None):
     trans_single = stage2_res["single_al"]
     genome_single = stage4_res["al1"] + stage4_res["alN"] + stage4_res["unpaired1"] + stage4_res["unpairedN"]
     total_single_genome = trans_single + genome_single
-    perc_single = (total_single_genome / total_conc_disc_0_mates) * 100
+    perc_single = 0 if total_conc_disc_0_mates == 0 else (total_single_genome / total_conc_disc_0_mates) * 100
     report += "\t\t\t\tAligned: %d (%.2f%%)\n" % (total_single_genome, perc_single)
 
-    perc_trans_single = (trans_single / total_single_genome) * 100
+    perc_trans_single = 0 if total_single_genome == 0 else (trans_single / total_single_genome) * 100
     report += "\t\t\t\t\tAligned to the transcriptome: %d (%.2f%%)\n" % (trans_single, perc_trans_single)
 
-    perc_genome_single = (genome_single / total_single_genome) * 100
+    perc_genome_single = 0 if total_single_genome == 0 else (genome_single / total_single_genome) * 100
     report += "\t\t\t\t\tAligned to the genome: %d (%.2f%%)\n" % (genome_single, perc_genome_single)
 
     total_unal = stage4_res["al0"] + stage4_res["unpaired0"]
-    perc_unal = (total_unal / total_conc_disc_0_mates) * 100
+    perc_unal = 0 if total_conc_disc_0_mates == 0 else (total_unal / total_conc_disc_0_mates) * 100
     report += "\t\t\t\tAligned 0 times: %d (%.2f%%)\n" % (total_unal, perc_unal)
 
-    perc_conc_1 = (total_conc_1 / total_paired) * 100
+    perc_conc_1 = 0 if total_paired == 0 else (total_conc_1 / total_paired) * 100
     report += "\tAligned concordantly 1 time: %d (%.2f%%)\n" % (total_conc_1, perc_conc_1)
 
-    perc_conc_1_trans = (trans_conc_1 / total_conc_1) * 100
+    perc_conc_1_trans = 0 if total_conc_1 == 0 else (trans_conc_1 / total_conc_1) * 100
     report += "\t\tAligned to the transcriptome: %d (%.2f%%)\n" % (trans_conc_1, perc_conc_1_trans)
 
-    perc_conc_1_genome = (stage4_res["conc1"] / total_conc_1) * 100
+    perc_conc_1_genome = 0 if total_conc_1 == 0 else (stage4_res["conc1"] / total_conc_1) * 100
     report += "\t\tAligned to the genome: %d (%.2f%%)\n" % (stage4_res["conc1"], perc_conc_1_genome)
 
-    perc_conc_N = (total_conc_N / total_paired) * 100
+    perc_conc_N = 0 if total_paired == 0 else (total_conc_N / total_paired) * 100
     report += "\tAligned concordantly >1 times: %d (%.2f%%)\n" % (total_conc_N, perc_conc_N)
 
-    perc_conc_N_trans = (trans_conc_N / total_conc_N) * 100
+    perc_conc_N_trans = 0 if total_conc_N == 0 else (trans_conc_N / total_conc_N) * 100
     report += "\t\tAligned to the transcriptome: %d (%.2f%%)\n" % (trans_conc_N, perc_conc_N_trans)
 
-    perc_conc_N_genome = (stage4_res["concN"] / total_conc_N) * 100
+    perc_conc_N_genome = 0 if total_conc_N == 0 else (stage4_res["concN"] / total_conc_N) * 100
     report += "\t\tAligned to the genome: %d (%.2f%%)\n" % (stage4_res["concN"], perc_conc_N_genome)
 
     # lastly need to get the final alignment rate
     total_reads = total_paired*2 + stage1_res["total_unpair"]
     total_aligned = total_conc*2 + total_disc + total_single_genome
-    al_rate = (total_aligned / total_reads) * 100
+    al_rate = 0 if total_reads == 0 else (total_aligned / total_reads) * 100
     report += "%.2f%% overall alignment rate\n" % al_rate
 
     end_time = datetime.datetime.now()
@@ -467,7 +467,7 @@ def main(args):
     stage1_transcriptome_fh = open(os.path.abspath(cur_tmp) + "/stage1_transcriptome.tmp", "w+")
     transcriptome_process = subprocess.Popen(transcriptome_cmd, stdout=subprocess.PIPE, stderr=stage1_transcriptome_fh)
     trans2genome_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                     'cmake-build-release/trans2genome')  # get path to the trans2genome that was compiled with the package
+                                     'trans2genome')  # get path to the trans2genome that was compiled with the package
     trans2genome_cmd = [trans2genome_path,
                         "-x", os.path.abspath(args.db) + "/db",
                         "-o", os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam",
