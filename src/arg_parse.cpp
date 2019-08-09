@@ -14,8 +14,8 @@ ArgParse::~ArgParse() = default;
 std::string ArgParse::get_help(){
     std::stringstream ss;
 
-    ss << "Trans2Genome Help Page"<<std::endl<<std::endl;
-    ss << "salmon2genome ";
+    ss << desc_ << " Help Page"<<std::endl<<std::endl;
+    ss << desc_ <<std::endl;
     for(auto & arg : args_){ // process required arguments
         if(arg.second.required){
             ss<<"-"<<arg.first<<" ";

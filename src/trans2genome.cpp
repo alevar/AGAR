@@ -27,7 +27,7 @@ enum Opt {IN_AL   = 'i',
 
 int main(int argc, char** argv) {
 
-    ArgParse args("salmon2genome");
+    ArgParse args("trans2genome");
     args.add_string(Opt::IN_AL,"input","","input alignment SAM/BAM",false);
     args.add_string(Opt::OUT_AL,"output","","output file path (BAM)",true);
     args.add_int(Opt::THREADS,"threads",1,"number of threads (default = 1)",false);

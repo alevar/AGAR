@@ -164,6 +164,11 @@ def main(args):
     parser_align.add_argument("--no-single",
                               action="store_true",
                               help="realign single mates reported in transcriptomic alignment")
+    parser_align.add_argument("--sleep",
+                              required=False,
+                              type=int,
+                              default=60,
+                              help="instructs the protocol to sleep for the specified number of seconds after each operation which writes data to disk.")
 
     parser_align.set_defaults(func=align.main)
 

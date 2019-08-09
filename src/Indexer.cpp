@@ -290,7 +290,7 @@ enum Opt {GFF_FP   = 'a',
 
 int main(int argc, char *argv[])
 {
-    ArgParse args("Map2GFF");
+    ArgParse args("trans2genome_indexer");
     args.add_string(Opt::GFF_FP,"gff","","path to the annotation of the genome is GFF/GTF format",true);
     args.add_string(Opt::REF_FA,"ref","","path to the reference genome in the FASTA format",true);
     args.add_string(Opt::OUT_FA,"output","","base name for the output files",true);

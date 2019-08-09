@@ -518,6 +518,9 @@ def main(args):
     end_transcriptome = time.time()
     print("Transcriptome alignment time: "+str(datetime.timedelta(seconds=int(end_transcriptome-start_transcriptome))))
 
+    if args.sleep is not None:
+        time.sleep(args.sleep)
+
     # locus-level alignment
     locus_cmd = None
     if args.locus:
@@ -575,6 +578,9 @@ def main(args):
         end_locus = time.time()
         print("Locus alignment time: "+str(datetime.timedelta(seconds=int(end_locus-start_locus))))
 
+        if args.sleep is not None:
+            time.sleep(args.sleep)
+
     print("aligning with hisat2 against the genome")
     hisat2_cmd_genome = ["hisat2",
                          "--rna-sensitive",
@@ -610,6 +616,9 @@ def main(args):
 
     end_genome = time.time()
     print("Genome alignment time: "+str(datetime.timedelta(seconds=int(end_genome-start_genome))))
+
+    if args.sleep is not None:
+        time.sleep(args.sleep)
 
     if not args.keep:
         for item in unaligned_r1.split(","):
@@ -664,6 +673,4 @@ def main(args):
     end_total = time.time()
     print("Total time elapsed: "+str(datetime.timedelta(seconds=int(end_total-start_total))))
 
-    # TODO: need to remove all output from different internal tools and report only general alignment (and realignment report)
-    # TODO: create a unified alignment rate report for the total number of alignments across both transcriptome and genome searches
     # TODO: automatically detect the directory where all tools are installed and verify that everything is installed
