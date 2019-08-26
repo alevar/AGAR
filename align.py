@@ -454,8 +454,6 @@ def main(args):
         transcriptome_cmd.extend(("-k", "1"))
     if args.fasta:
         transcriptome_cmd.append("-f")
-    # if args.no_single:
-    #     transcriptome_cmd.append("--no-mixed")  # TODO: develop a universal no-mixed parser using no "ambiguous" flags // TODO: verify there are no duplicates in the final output (one introduced by hisat and one by T2G
     transcriptome_cmd.extend(("-1", args.m1,
                               "-2", args.m2))
     if not args.single is None:

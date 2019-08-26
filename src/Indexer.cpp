@@ -138,8 +138,6 @@ void Indexer::make_transcriptome(){
 
         p_contig_vec = contigTransMap_[cur_contig.id_];
 
-//        std::cerr<<cur_contig.id_<<std::endl;
-
         FastaRecord out_rec;
         for (int trans_idx : *p_contig_vec) {
             GffObj *p_trans = gtfReader_.gflst.Get(trans_idx);

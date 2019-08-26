@@ -593,6 +593,7 @@ void Converter::add_T2G_aux(bam1_t *curAl){
 
 // TODO: include fragment length in the precomputation
 // TODO: include fasta/fastq detection in the precomputation
+// TODO: repetitive regions result in spikes of coverage due to the multimapping - need to think of how to deal with them
 
 // This function preforms the same operations as the regular precompute
 // but the reads are being saved for evaluation later
@@ -662,7 +663,6 @@ void Converter::precompute_save(int num_reads){
 // this function cycles through a section of the bam file loads some preliminary data
 // necessary for thecoorect parsing of the errors, multimappers, etc
 void Converter::precompute(int perc){
-    // TODO: here check if the paired alignments appear correctly in the SAM file or not. If yes - then switch to the simple detection strategy (mates appear consecutively)
     this->perc_precomp = perc;
     bam1_t *curAl = bam_init1(); // initialize the alignment record
     bam1_t *mate = bam_init1(); // intialize mates
@@ -1281,12 +1281,13 @@ void Converter::process_single(bam1_t *curAl){
     total_num_al++;
 }
 
-void Converter::add_multi_tag(bam1_t* curAl){ // TODO: replace with the number of multimappers
-    uint8_t* ptr_op=bam_aux_get(curAl,"ZZ");
-    if(ptr_op){
-        bam_aux_del(curAl,ptr_op);
+// appends the transcript id to which the multimapping was done
+void Converter::add_multi_tag(bam1_t* curAl,int new_tid){
+    uint8_t* ptr_zz=bam_aux_get(curAl,"ZZ");
+    if(ptr_zz){
+        bam_aux_del(curAl,ptr_zz);
     }
-    bam_aux_append(curAl,"ZZ",'A',1,(const unsigned char*)"+");
+    bam_aux_append(curAl,"ZZ",'i',4,(uint8_t*)&new_tid);
 }
 
 int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Position &cur_pos,Position &cur_pos_mate,
@@ -1309,6 +1310,8 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
         curAl->core.mpos = cur_pos_mate.start-1;
         curAl_mate->core.pos = cur_pos_mate.start-1;
         curAl_mate->core.mpos = cur_pos.start-1;
+        set_xs(curAl,cur_pos.strand);
+        set_xs(curAl_mate,cur_pos_mate.strand);
         // add already computed cigar to the read
         add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
         add_cigar(curAl_mate, num_cigars_mate, cigars_mate); // will be performed afterwards
@@ -1317,9 +1320,6 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
         return unique;
     }
     else{
-//        std::cerr<<"not unique pair"<<std::endl;
-        add_multi_tag(curAl);
-        add_multi_tag(curAl_mate);
         change_nh_flag(curAl,res_pos.size());
         change_nh_flag(curAl_mate,res_pos.size());
         bool prim = true;
@@ -1353,6 +1353,9 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
                 }
             }
 
+            add_multi_tag(curAl,res_pos[pos_idx].transID);
+            add_multi_tag(curAl_mate,res_pos_mate[pos_idx].transID);
+
             curAl->core.pos = res_pos[pos_idx].start-1;
             curAl->core.mpos = res_pos_mate[pos_idx].start-1;
             curAl->core.tid = res_pos[pos_idx].chr;
@@ -1361,6 +1364,8 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
             curAl_mate->core.mpos = res_pos[pos_idx].start-1;
             curAl_mate->core.tid = res_pos_mate[pos_idx].chr;
             curAl_mate->core.mtid = res_pos[pos_idx].chr;
+            set_xs(curAl,res_pos[pos_idx].strand);
+            set_xs(curAl_mate,res_pos_mate[pos_idx].strand);
 
             // reconvert the cur_pos into a read and output
             num_cigars = 0,num_cigars_mate = 0;
@@ -1415,13 +1420,13 @@ int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[
         }
         curAl->core.pos = cur_pos.start-1;
         curAl->core.tid = cur_pos.chr;
+        set_xs(curAl,cur_pos.strand);
         // add already computed cigar to the read
         add_cigar(curAl, num_cigars, cigars); // will be performed afterwards
         this->finish_read(curAl);
         return unique;
     }
     else{
-        add_multi_tag(curAl);
         change_nh_flag(curAl,res_pos.size());
         bool prim = true;
         for(auto &v : res_pos){
@@ -1446,6 +1451,9 @@ int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[
 
             curAl->core.pos = v.start-1; // assign new position
             curAl->core.tid = v.chr;
+            set_xs(curAl,v.strand);
+
+            add_multi_tag(curAl,v.transID);
 
             // reconvert the cur_pos into a read and output
             num_cigars = 0;
@@ -1468,6 +1476,22 @@ int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[
             prim = false;
         }
         return unique;
+    }
+}
+
+void Converter::set_xs(bam1_t *curAl,uint8_t xs){
+    uint8_t* ptr=bam_aux_get(curAl,"XS");
+    if(ptr){
+        bam_aux_del(curAl,ptr);
+    }
+    if(xs == '+'){
+        bam_aux_append(curAl,"XS",'A',1,(const unsigned char*)"+");
+    }
+    else if(xs == '-'){
+        bam_aux_append(curAl,"XS",'A',1,(const unsigned char*)"-");
+    }
+    else{
+        bam_aux_append(curAl,"XS",'A',1,(const unsigned char*)"0");
     }
 }
 

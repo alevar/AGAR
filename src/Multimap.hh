@@ -333,6 +333,9 @@ private:
                     end = 0;
                     break;
                 case ':':
+                    if(locus>=this->loci.size()){
+                        this->loci.resize(locus+10000);
+                    }
                     loc.set_id(locus);
                     elem = Opt::ELEN;
                     locus = 0;
@@ -485,6 +488,15 @@ public:
     }
 };
 
+struct PosHash_noLoc_noStrand {
+public:
+    size_t operator()(const Position & p) const {
+        size_t ret = 0;
+        hash_combine(ret,p.chr,p.start);
+        return ret;
+    }
+};
+
 struct PosHash_withLoc {
 public:
     size_t operator()(const Position & p) const {
@@ -494,11 +506,30 @@ public:
     }
 };
 
+struct PosHash_withLoc_noStrand {
+public:
+    size_t operator()(const Position & p) const {
+        size_t ret = 0;
+        hash_combine(ret,p.chr,p.start,p.locus);
+        return ret;
+    }
+};
+
 struct PosEq_withLoc {
 public:
     size_t operator()(const Position & p1,const Position & p2) const {
         return p1.chr==p2.chr &&
                p1.strand==p2.strand &&
+               p1.start==p2.start &&
+               p1.locus==p2.locus &&
+               p1.moves==p2.moves;
+    }
+};
+
+struct PosEq_withLoc_noStrand {
+public:
+    size_t operator()(const Position & p1,const Position & p2) const {
+        return p1.chr==p2.chr &&
                p1.start==p2.start &&
                p1.locus==p2.locus &&
                p1.moves==p2.moves;
@@ -515,11 +546,19 @@ public:
     }
 };
 
-struct PosLe_withLoc {
+struct PosEq_noLoc_noStrand {
+public:
+    size_t operator()(const Position & p1,const Position & p2) const {
+        return p1.chr==p2.chr &&
+               p1.start==p2.start &&
+               p1.moves==p2.moves;
+    }
+};
+
+struct PosLe_withLoc_noStrand {
 public:
     size_t operator()(const Position & p1,const Position & p2) const {
         return p1.chr<p2.chr ||
-               p1.strand<p2.strand ||
                p1.start<p2.start ||
                p1.locus<p2.locus ||
                p1.moves<p2.moves;
@@ -531,6 +570,15 @@ public:
     size_t operator()(const Position & p1,const Position & p2) const {
         return p1.chr<p2.chr ||
                p1.strand<p2.strand ||
+               p1.start<p2.start ||
+               p1.moves<p2.moves;
+    }
+};
+
+struct PosLe_noLoc_noStrand {
+public:
+    size_t operator()(const Position & p1,const Position & p2) const {
+        return p1.chr<p2.chr ||
                p1.start<p2.start ||
                p1.moves<p2.moves;
     }

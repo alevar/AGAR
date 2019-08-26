@@ -727,6 +727,7 @@ private:
     void add_cigar(bam1_t *curAl,int num_cigars,int* cigars);
     void add_T2G_aux(bam1_t *curAl);
     void add_aux(bam1_t *curAl,char xs);
+    void set_xs(bam1_t *curAl,uint8_t xs);
     void change_nh_flag(bam1_t *curAl,int nh);
     void fix_flag(bam1_t *curAl);
     int collapse_genomic(bam1_t *curAl,size_t cigar_hash);
@@ -741,7 +742,7 @@ private:
     void process_single_mate(bam1_t *aligned, bam1_t *unaligned);
     size_t process_read(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars);
     void finish_read(bam1_t *curAl);
-    void add_multi_tag(bam1_t* curAl);
+    void add_multi_tag(bam1_t* curAl,int new_tid);
     bool check_misalign(bam1_t *curAl);
     bool check_misalign(bam1_t *curAl,bam1_t *mate);
 

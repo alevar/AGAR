@@ -75,24 +75,24 @@ Trans2Genome Help Page
 ```
 salmon2genome -o -x [-a -e -f -g -i -j -k -l -m -n -p -q -r -s -t -u ]
 Arguments:
-	a/--abund	use abundances precomputed. Only gene-level abundance estimates computed by salmon are supported at the moment
-	e/--perc	percent of the reads to be evaluated when pre-loading data before parsing
-	f/--fraglen	fragment length of the paired reads
-	g/--nosingle	report all mates for which the second mate is unaligned as unaligned. If --un is specified, the reads will be deposited into respective fasta/fastq files. If not, SAM information will be set to indicate unaligned
-	i/--input	input alignment SAM/BAM
-	j/--nodiscord	report all dicscordant pairs as unaligned. If --un is specified, the reads will be deposited into respective fasta/fastq files. If not, SAM information will be set to indicate unaligned
-	k/--nmult	The number of most likely multimappers to report
-	l/--all	whether to output all multimappers and not assign them based on likelihood. This flag negates -k
-	m/--multi	whether to search and evaluate multimappers
-	n/--nrp	number of reads to precompute based on the streaming
-	o/--output	output file path (BAM)
-	p/--threads	number of threads (default = 1)
-	q/--uniq	input alignment contains only 1 mapping per read (no secondary alignments present such as in bowtie k1 mode)
-	r/--outlier_raw	Edit distance threshold for misalignments. For paired alignments the threshold is applied to each read separately
-	s/--mis	try to eliminate misaligned reads based on the error distribution
-	t/--outlier_stdv	Poisson threshold as the number of standard deviations. Everythin above the threshold will be discarded as a misalignment
-	u/--un	output unaligned reads (singletons and pairs) to separate fastq.
-	x/--index	path and basename of the index built by gtf_to_fasta
+	-a/--abund	        use abundances precomputed. Only gene-level abundance estimates computed by salmon are supported at the moment
+	-e/--perc	        percent of the reads to be evaluated when pre-loading data before parsing
+	-f/--fraglen	        fragment length of the paired reads
+	-g/--nosingle	        report all mates for which the second mate is unaligned as unaligned. If --un is specified, the reads will be deposited into respective fasta/fastq files. If not, SAM information will be set to indicate unaligned
+	-i/--input	        input alignment SAM/BAM
+	-j/--nodiscord	        report all dicscordant pairs as unaligned. If --un is specified, the reads will be deposited into respective fasta/fastq files. If not, SAM information will be set to indicate unaligned
+	-k/--nmult	        The number of most likely multimappers to report
+	-l/--all	        whether to output all multimappers and not assign them based on likelihood. This flag negates -k
+	-m/--multi	        whether to search and evaluate multimappers
+	-n/--nrp	        number of reads to precompute based on the streaming
+	-o/--output	        output file path (BAM)
+	-p/--threads	        number of threads (default = 1)
+	-q/--uniq	        input alignment contains only 1 mapping per read (no secondary alignments present such as in bowtie k1 mode)
+	-r/--outlier_raw	Edit distance threshold for misalignments. For paired alignments the threshold is applied to each read separately
+	-s/--mis	        try to eliminate misaligned reads based on the error distribution
+	-t/--outlier_stdv	Poisson threshold as the number of standard deviations. Everythin above the threshold will be discarded as a misalignment
+	-u/--un	                output unaligned reads (singletons and pairs) to separate fastq.
+	-x/--index	        path and basename of the index built by gtf_to_fasta
 ```
 	
 ## Building the Index for T2G with trans2genome_indexer
@@ -111,12 +111,12 @@ coordinates which are share identical sequence within the transcriptome
 ```
    trans2genome_indexer -a -o -r [-k -m -u ]
    Arguments:
-   	a/--gff	path to the annotation of the genome is GFF/GTF format
-   	k/--kmer	kmer length to use for building the index
-   	m/--multi	identify all multimappers present in the input transcriptome
-   	o/--output	base name for the output files
-   	r/--ref	path to the reference genome in the FASTA format
-   	u/--uniq	get a separate output with uniq kmers per each transcript
+   	-a/--gff	    path to the annotation of the genome is GFF/GTF format
+   	-k/--kmer	    kmer length to use for building the index
+   	-m/--multi	    identify all multimappers present in the input transcriptome
+   	-o/--output	    base name for the output files
+   	-r/--ref	    path to the reference genome in the FASTA format
+   	-u/--uniq	    get a separate output with uniq kmers per each transcript
 ```
 
 ## TransHISAT2.py - automated alignment protocol
