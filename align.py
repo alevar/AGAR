@@ -463,6 +463,7 @@ def main(args):
 
     start_transcriptome = time.time()
     stage1_transcriptome_fh = open(os.path.abspath(cur_tmp) + "/stage1_transcriptome.tmp", "w+")
+    print(" ".join(transcriptome_cmd))
     transcriptome_process = subprocess.Popen(transcriptome_cmd, stdout=subprocess.PIPE, stderr=stage1_transcriptome_fh)
     trans2genome_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                      'trans2genome')  # get path to the trans2genome that was compiled with the package

@@ -409,6 +409,15 @@ public:
     void set_locus(uint32_t locus){this->locus=locus;this->num_elems++;}
     void set_trans(uint32_t trans){this->transID=trans;this->num_elems++;}
 
+    static bool moves_eq(const std::vector<uint32_t>& m1,const std::vector<uint32_t>& m2) { // m1 must be smaller or equal to m2
+        for(int i=0;i<m1.size();i++){
+            if(m1[i] != m2[i]){
+                return i == m1.size() - 1 && m1[i] <= m2[i];
+            }
+        }
+        return true;
+    }
+
     std::string get_strg() const {
         std::string res;
         res.append(std::to_string(this->transID));
@@ -443,6 +452,12 @@ public:
                this->strand<m.strand ||
                this->start<m.start ||
                this->moves<m.moves;
+    }
+
+    bool lt_noStrand(const Position& rhs) const{
+        return this->chr<rhs.chr ||
+               this->start<rhs.start ||
+               this->moves<rhs.moves;
     }
 
     void clear(){
@@ -522,7 +537,8 @@ public:
                p1.strand==p2.strand &&
                p1.start==p2.start &&
                p1.locus==p2.locus &&
-               p1.moves==p2.moves;
+               Position::moves_eq(p1.moves,p2.moves);
+//               p1.moves==p2.moves;
     }
 };
 
@@ -532,7 +548,8 @@ public:
         return p1.chr==p2.chr &&
                p1.start==p2.start &&
                p1.locus==p2.locus &&
-               p1.moves==p2.moves;
+               Position::moves_eq(p1.moves,p2.moves);
+        // p1.moves==p2.moves;
     }
 };
 
@@ -542,7 +559,8 @@ public:
         return p1.chr==p2.chr &&
                p1.strand==p2.strand &&
                p1.start==p2.start &&
-               p1.moves==p2.moves;
+               Position::moves_eq(p1.moves,p2.moves);
+//               p1.moves==p2.moves;
     }
 };
 
@@ -551,7 +569,8 @@ public:
     size_t operator()(const Position & p1,const Position & p2) const {
         return p1.chr==p2.chr &&
                p1.start==p2.start &&
-               p1.moves==p2.moves;
+               Position::moves_eq(p1.moves,p2.moves);
+        // p1.moves==p2.moves;
     }
 };
 
@@ -561,7 +580,8 @@ public:
         return p1.chr<p2.chr ||
                p1.start<p2.start ||
                p1.locus<p2.locus ||
-               p1.moves<p2.moves;
+               Position::moves_eq(p1.moves,p2.moves);
+        // p1.moves==p2.moves;
     }
 };
 
@@ -571,7 +591,8 @@ public:
         return p1.chr<p2.chr ||
                p1.strand<p2.strand ||
                p1.start<p2.start ||
-               p1.moves<p2.moves;
+               Position::moves_eq(p1.moves,p2.moves);
+        // p1.moves==p2.moves;
     }
 };
 
@@ -580,7 +601,8 @@ public:
     size_t operator()(const Position & p1,const Position & p2) const {
         return p1.chr<p2.chr ||
                p1.start<p2.start ||
-               p1.moves<p2.moves;
+               Position::moves_eq(p1.moves,p2.moves);
+        // p1.moves==p2.moves;
     }
 };
 
@@ -724,6 +746,7 @@ public:
             int cur_num_multi = get_block_size();
             if(this->all_multi){ // just output the entire block
                 copy_current(pos_res);
+                this->remove_strand_duplicates(pos_res);
                 return cur_num_multi; // done
             }
             while(this->ii->second){ // iterate until the end of the block
@@ -767,6 +790,7 @@ public:
             int cur_num_multi = get_block_size();
             if(this->all_multi){ // just output the entire block
                 copy_current(pos_res);
+                this->remove_strand_duplicates(pos_res);
                 return cur_num_multi; // done
             }
             while(this->ii->second){ // iterate until the end of the block
@@ -873,6 +897,7 @@ public:
                     pos_res.push_back((this->ii + mp.first)->first);
                     pos_res_mate.push_back((this->ii + mp.second)->first);
                 }
+                remove_strand_duplicates_pair(pos_res,pos_res_mate);
                 return cur_num_multi; // done
             }
             for(auto & mp: multi_pairs){
@@ -962,6 +987,7 @@ public:
                     pos_res.push_back((this->ii + mp.first)->first);
                     pos_res_mate.push_back((this->ii_mate + mp.second)->first);
                 }
+                remove_strand_duplicates_pair(pos_res,pos_res_mate);
                 return cur_num_multi; // done
             }
             for(auto & mp: multi_pairs){
@@ -1134,9 +1160,100 @@ public:
         }
     }
 
+    bool lt_noStrand_pair(const std::pair<Position,Position>& lhs, const std::pair<Position,Position>& rhs) const{
+        return (lhs.first.chr <rhs.first.chr ||
+                lhs.first.start<rhs.first.start ||
+                lhs.first.moves<rhs.first.moves) || (lhs.second.chr  <rhs.second.chr ||
+                                                     lhs.second.start<rhs.second.start ||
+                                                     lhs.second.moves<rhs.second.moves);
+//        return lhs.first.lt_noStrand(rhs.first) || lhs.second.lt_noStrand(rhs.second);
+    }
+
 private:
     // FRAGMENT LENGTH STUFF
     Fragments frags;
+
+    // this function checks the multimapping block and resolves ambiguity due to the presence of multiple positions on opposite strands but at the same coordinates
+    // in which case a single entry is created and the strand is set to 0
+    void remove_strand_duplicates(std::vector<Position>& pos_res){
+        if(pos_res.size()<=1){
+            return;
+        }
+        // first sort positions by coordinates only (no locus or strand)
+        std::sort(pos_res.begin(), pos_res.end(),[](Position const& lhs, Position const& rhs) { return lhs.lt_noStrand(rhs); });
+
+        // next iterate through and replace any duplicates with a single entry
+        // if the strands in the duplicates are different - set to 0
+        // otherwise keep the strand but still remove the duplicates
+        auto prev_it = pos_res.begin();
+        for (auto it = prev_it+1; it != pos_res.end(); it++) {
+            if(it->chr==std::prev(it)->chr &&
+               it->start==std::prev(it)->start &&
+               it->moves==std::prev(it)->moves){ // the two are the same
+                if(it->strand != std::prev(it)->strand){
+                    prev_it->strand = '0';
+                    pos_res.erase(it--);
+                }
+                else{
+                    prev_it = it;
+                }
+            }
+        }
+    }
+
+    static bool sortbysec(const std::pair<Position,Position> &a,const std::pair<Position,Position> &b){
+        return (a.first.lt_noStrand(b.first))||(a.second.lt_noStrand(b.second));
+    }
+
+    void remove_strand_duplicates_pair(std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){
+        if(pos_res.size()<=1){
+            return;
+        }
+        // still needs some form of sorting without the strand or the locus information...
+        std::vector<int> idx2del; // indices to remove from the positions
+        std::vector<std::pair<Position,Position>> alls;
+        alls.reserve(pos_res.size());
+        std::transform(pos_res.begin(), pos_res.end(), pos_res_mate.begin(), std::back_inserter(alls),
+                       [](Position a, Position b) { return std::make_pair(a, b); });
+//        for(auto& v : alls){
+//            std::cout<<v.first.get_strg()<<"\t-\t"<<v.second.get_strg()<<std::endl;
+//        }
+//        std::cout<<"+++++++++++++++++++"<<std::endl;
+//        std::sort(alls.begin(), alls.end(),[&](std::pair<Position,Position> const& lhs, std::pair<Position,Position> const& rhs) { return Multimap::lt_noStrand_pair(lhs,rhs); });
+//        sort(alls.begin(), alls.end(), Multimap::sortbysec);
+        for(int i=1;i<pos_res.size();i++){
+            if(pos_res[i].chr   == pos_res[i-1].chr &&
+               pos_res[i].start == pos_res[i-1].start &&
+               pos_res[i].moves == pos_res[i-1].moves &&
+               pos_res_mate[i].chr   == pos_res_mate[i-1].chr &&
+               pos_res_mate[i].start == pos_res_mate[i-1].start &&
+               pos_res_mate[i].moves == pos_res_mate[i-1].moves){ // the two are the same
+                if(pos_res[i].strand != pos_res_mate[i-1].strand &&
+                   pos_res[i].strand == pos_res_mate[i].strand &&
+                   pos_res[i-1].strand ==  pos_res_mate[i-1].strand){
+                    pos_res[i-1].strand = '0';
+                    pos_res_mate[i-1].strand = '0';
+                    idx2del.push_back(i);
+                }
+            }
+        }
+        int i=0,idx_pos=0;
+        for(auto it=pos_res.begin();it!=pos_res.end();it++){
+            if(idx_pos < idx2del.size() && i == idx2del[idx_pos]){
+                pos_res.erase(it--);
+                idx_pos++;
+            }
+            i++;
+        }
+        i=0;idx_pos=0;
+        for(auto it=pos_res_mate.begin();it!=pos_res_mate.end();it++){
+            if(idx_pos < idx2del.size() && i == idx2del[idx_pos]){
+                pos_res_mate.erase(it--);
+                idx_pos++;
+            }
+            i++;
+        }
+    }
 
     // we know that the kmer spans an intron
     // this function appends the intron/exon information to moves of the position object

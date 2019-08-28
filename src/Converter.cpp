@@ -1032,7 +1032,9 @@ void Converter::add_aux(bam1_t *curAl,char xs){
     if(ptr_op){
         bam_aux_del(curAl,ptr_op);
     }
-    bam_aux_append(curAl,"OP",'i',4,(uint8_t*)&curAl->core.tid);
+//    std::string(al_hdr->target_name[curAl->core.tid]);
+    int temp = atoi(al_hdr->target_name[curAl->core.tid]);
+    bam_aux_append(curAl, "OP", 'i', 4, (uint8_t*)&temp);
 }
 
 // this function modifies the flags for the alignment
@@ -1295,13 +1297,15 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
     int unique;
     std::vector<Position> res_pos,res_pos_mate; // holds the results of the multimapper evaluation
     if(!this->abund){ // compute abundance dynamically
+//        std::cout<<"\n================\n"<<std::endl;
+//        std::cout<<bam_get_qname(curAl)<<std::endl;
         unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
     }
     else{ // compute abundance dynamically
         unique = this->mmap.process_pos_pair_precomp(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
     }
 //    std::cerr<<"eval multi_pair: "<<unique<<std::endl;
-    if(unique==0){ // increment abundance
+    if(res_pos.empty()){ // increment abundance
         if(!this->abund) {
             this->loci.add_read(cur_pos.locus);
             this->loci.add_read(cur_pos_mate.locus);
@@ -1414,7 +1418,7 @@ int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[
     else{ // compute abundance dynamically
         unique = this->mmap.process_pos_precomp(cur_pos,this->loci,res_pos);
     }
-    if(unique==0){ // increment abundance
+    if(res_pos.empty()){ // increment abundance
         if(!this->abund){
             this->loci.add_read(cur_pos.locus);
         }
@@ -1430,8 +1434,6 @@ int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[
         change_nh_flag(curAl,res_pos.size());
         bool prim = true;
         for(auto &v : res_pos){
-            // modify the NH tag to include however many multimappers were added
-
             // increment total abundances of the locus to which the new cur_pos belongs - performed for each locus if multiple positions are reported (all or -k)
             if(!this->abund) {
                 this->loci.add_read_multi(v.locus);
@@ -1491,7 +1493,7 @@ void Converter::set_xs(bam1_t *curAl,uint8_t xs){
         bam_aux_append(curAl,"XS",'A',1,(const unsigned char*)"-");
     }
     else{
-        bam_aux_append(curAl,"XS",'A',1,(const unsigned char*)"0");
+        return; // do not write an XS flag
     }
 }
 
