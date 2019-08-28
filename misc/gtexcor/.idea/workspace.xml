@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CMakeRunConfigurationManager" shouldGenerate="true" shouldDeleteObsolete="true">
+    <generated>
+      <config projectName="gtexcor" targetName="gtexcor" />
+      <config projectName="gtexcor" targetName="htslib" />
+    </generated>
+  </component>
+  <component name="CMakeSettings">
+    <configurations>
+      <configuration PROFILE_NAME="Debug" CONFIG_NAME="Debug" />
+      <configuration PROFILE_NAME="Release" CONFIG_NAME="Release" />
+    </configurations>
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="b06efcd5-d9a0-4c25-a65d-3254041b52fe" name="Default Changelist" comment="" />
+    <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="DatabaseView">
+    <option name="SHOW_INTERMEDIATE" value="true" />
+    <option name="GROUP_DATA_SOURCES" value="true" />
+    <option name="GROUP_SCHEMA" value="true" />
+    <option name="GROUP_CONTENTS" value="false" />
+    <option name="SORT_POSITIONED" value="false" />
+    <option name="SHOW_EMPTY_GROUPS" value="false" />
+    <option name="AUTO_SCROLL_FROM_SOURCE" value="false" />
+    <option name="HIDDEN_KINDS">
+      <set />
+    </option>
+    <expand />
+    <select />
+  </component>
+  <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:Release" />
+  <component name="FavoritesManager">
+    <favorites_list name="gtexcor" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="OCFindUsagesOptions" text="true" ivars="false" properties="true" derivedClasses="false" />
+  <component name="ProjectConfigurationFiles">
+    <option name="files">
+      <list>
+        <option value="$PROJECT_DIR$/.idea/gtexcor.iml" />
+        <option value="$PROJECT_DIR$/.idea/misc.xml" />
+        <option value="$PROJECT_DIR$/.idea/vcs.xml" />
+        <option value="$PROJECT_DIR$/.idea/modules.xml" />
+      </list>
+    </option>
+  </component>
+  <component name="ProjectId" id="1PtBIr7VGNURJidCDrtsUa1JHet" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="PropertiesComponent">
+    <property name="ASKED_SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
+    <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
+    <property name="WebServerToolWindowFactoryState" value="true" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
+    <property name="settings.editor.selected.configurable" value="CMakeSettings" />
+  </component>
+  <component name="RunDashboard">
+    <option name="ruleStates">
+      <list>
+        <RuleState>
+          <option name="name" value="ConfigurationTypeDashboardGroupingRule" />
+        </RuleState>
+        <RuleState>
+          <option name="name" value="StatusDashboardGroupingRule" />
+        </RuleState>
+      </list>
+    </option>
+  </component>
+  <component name="RunManager" selected="CMake Application.gtexcor SRR1071717">
+    <configuration name="gtexcor SRR1071717" type="CMakeRunConfiguration" factoryName="Application" PROGRAM_PARAMS="-i $PROJECT_DIR$/examples/SRR1071717.bam -o $PROJECT_DIR$/output/SRR1071717.bam -m $USER_HOME$/genomicData/hg38/refseq_vs_gencode.intersection.prot_lnc.no_altsIDX/db.multi -t $USER_HOME$/genomicData/hg38/refseq_vs_gencode.intersection.prot_lnc.no_altsIDX/db.tgmap -l $PROJECT_DIR$/notebooks/db.multiloc -g $USER_HOME$/genomicData/hg38/refseq_vs_gencode.intersection.prot_lnc.no_altsIDX/db.glst -s $USER_HOME$/genomicData/hg38/refseq_vs_gencode.intersection.prot_lnc.no_altsIDX/db.tlst -f $USER_HOME$/genomicData/hg38/refseq_vs_gencode.intersection.prot_lnc.no_altsIDX/db.info" WORKING_DIR="file://$PROJECT_DIR$" PASS_PARENT_ENVS_2="true" PROJECT_NAME="gtexcor" TARGET_NAME="gtexcor" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="gtexcor" RUN_TARGET_NAME="gtexcor">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="gtexcor" type="CMakeRunConfiguration" factoryName="Application" PROGRAM_PARAMS="-i $PROJECT_DIR$/examples/test5.sam -o $PROJECT_DIR$/output/test5.bam -m $PROJECT_DIR$/examples/test5DB/db.multi -t $PROJECT_DIR$/examples/test5DB/db.tgmap -l $PROJECT_DIR$/notebooks/db.multiloc -g $PROJECT_DIR$/examples/test5DB/db.glst -s $PROJECT_DIR$/examples/test5DB/db.tlst -f $PROJECT_DIR$/examples/test5DB/db.info" WORKING_DIR="file://$PROJECT_DIR$" PASS_PARENT_ENVS_2="true" PROJECT_NAME="gtexcor" TARGET_NAME="gtexcor" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="gtexcor" RUN_TARGET_NAME="gtexcor">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+    <list>
+      <item itemvalue="CMake Application.gtexcor" />
+      <item itemvalue="CMake Application.gtexcor SRR1071717" />
+    </list>
+  </component>
+  <component name="SvnConfiguration">
+    <configuration />
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="b06efcd5-d9a0-4c25-a65d-3254041b52fe" name="Default Changelist" comment="" />
+      <created>1566483200821</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1566483200821</updated>
+      <workItem from="1566483202136" duration="1790000" />
+      <workItem from="1566488144405" duration="11252000" />
+      <workItem from="1566501881383" duration="1533000" />
+      <workItem from="1566525466813" duration="5501000" />
+      <workItem from="1566683437563" duration="35534000" />
+      <workItem from="1566840392276" duration="42324000" />
+    </task>
+    <servers />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/src/gtexcor.cpp</url>
+          <line>496</line>
+          <option name="timeStamp" value="21" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
+  </component>
+</project>
