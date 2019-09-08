@@ -421,12 +421,16 @@ def main(args):
     else:
         final_fname = args.output + ".stats"
 
+    hisat2_rnasens_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                 'external/hisat2/hisat2')  # get path to the trans2genome that was compiled with the package
+    assert os.path.exists(hisat2_rnasens_path),"included version of hisat is not found: "+hisat2_rnasens_path
+
     transcriptome_cmd = None
     if args.type == "hisat":
         print("aligning with hisat2 against transcriptome")
         # perform a two-pass alignment one for less redundant transcripts and one for more redundant alignments
         # with the "-a" option enabled
-        transcriptome_cmd = ['hisat2',
+        transcriptome_cmd = [hisat2_rnasens_path,
                              # get path to the trans2genome that was compiled with the package,
                              "--no-spliced-alignment",
                              "--end-to-end",
@@ -537,7 +541,7 @@ def main(args):
                 locus_cmd.extend(args.bowtie)
         elif args.type == "hisat":
             print("performing the locus lookup using hisat2")
-            locus_cmd = [os.path.abspath("hisat2"),
+            locus_cmd = [hisat2_rnasens_path,
                          "--rna-sensitive",
                          "--end-to-end",
                          "--no-unal",
@@ -581,7 +585,7 @@ def main(args):
             time.sleep(args.sleep)
 
     print("aligning with hisat2 against the genome")
-    hisat2_cmd_genome = ["hisat2",
+    hisat2_cmd_genome = [hisat2_rnasens_path,
                          "--rna-sensitive",
                          "-x", os.path.abspath(args.genome_db),
                          "-p", args.threads]

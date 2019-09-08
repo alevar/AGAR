@@ -17,11 +17,14 @@ def main(args):
     # indexer
     print("Extracting transcriptome data and building an index")
     indexer_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                     'cmake-build-release/trans2genome_indexer')  # get path to the gtf_to_fasta that was compiled with the package
+                                     'trans2genome_indexer')  # get path to the gtf_to_fasta that was compiled with the package
     print(" ".join([indexer_path, "-k", str(args.kmerlen), "-a", args.gff, "-r", args.ref, "-o",
                     os.path.abspath(args.output) + "/db", "-m"]))
     subprocess.call([indexer_path, "-k", str(args.kmerlen), "-a", args.gff, "-r", args.ref, "-o",
                      os.path.abspath(args.output) + "/db", "-m"])
+
+    hisat2_rnasens_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                 'external/hisat2/hisat2-build')  # get path to the trans2genome that was compiled with the package
 
     if args.type == "bowtie":
         print("Building additional bowtie transcriptome index")

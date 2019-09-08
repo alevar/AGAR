@@ -167,7 +167,7 @@ def main(args):
     parser_align.add_argument("--sleep",
                               required=False,
                               type=int,
-                              default=60,
+                              default=0,
                               help="instructs the protocol to sleep for the specified number of seconds after each operation which writes data to disk.")
 
     parser_align.set_defaults(func=align.main)

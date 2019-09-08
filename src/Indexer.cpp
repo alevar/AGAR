@@ -38,8 +38,6 @@ std::string Indexer::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::
     return exon_seq;
 }
 
-
-
 Indexer::Indexer(std::string gtf_fname, std::string genome_fname,const std::string& out_fname, int kmerlen,bool multi){
     gtf_fname_ = gtf_fname;
     gtf_fhandle_ = fopen(gtf_fname_.c_str(), "r");
@@ -292,7 +290,7 @@ int main(int argc, char *argv[])
     args.add_string(Opt::GFF_FP,"gff","","path to the annotation of the genome is GFF/GTF format",true);
     args.add_string(Opt::REF_FA,"ref","","path to the reference genome in the FASTA format",true);
     args.add_string(Opt::OUT_FA,"output","","base name for the output files",true);
-    args.add_int(Opt::KMER_LEN,"kmer",76,"kmer length to use for building the index",false);
+    args.add_int(Opt::KMER_LEN,"kmer",150,"kmer length to use for building the index",false);
     args.add_flag(Opt::UNIQ,"uniq","get a separate output with uniq kmers per each transcript",false);
     args.add_flag(Opt::MULTI,"multi","identify all multimappers present in the input transcriptome",false);
 
