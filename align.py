@@ -488,6 +488,8 @@ def main(args):
         trans2genome_cmd.extend(["-j"])
     if args.no_single:
         trans2genome_cmd.extend(["-g"])
+    if args.editdist:
+        trans2genome_cmd.extend(["-s"])
 
     stage2_translate_fh = open(os.path.abspath(cur_tmp) + "/stage2_translate.tmp", "w+")
     translate_process = subprocess.Popen(trans2genome_cmd, stdin=transcriptome_process.stdout,
@@ -551,8 +553,6 @@ def main(args):
             if args.hisat:
                 locus_cmd.extend(args.hisat)
 
-        if args.fasta:
-            locus_cmd.append("-f")
         locus_cmd.extend(("-S", os.path.abspath(cur_tmp) + "/sample.trans_second.locus.sam",
                           "-1", unaligned_r1,
                           "-2", unaligned_r2,
@@ -591,8 +591,6 @@ def main(args):
                          "-p", args.threads]
     if args.nounal:
         hisat2_cmd_genome.append("--no-unal")
-    if args.fasta:
-        hisat2_cmd_genome.append("-f")
     hisat2_cmd_genome.extend(("-S", os.path.abspath(cur_tmp) + "/sample.genome.sam",
                               "-1", unaligned_r1,
                               "-2", unaligned_r2,

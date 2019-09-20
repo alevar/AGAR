@@ -169,6 +169,10 @@ def main(args):
                               type=int,
                               default=0,
                               help="instructs the protocol to sleep for the specified number of seconds after each operation which writes data to disk.")
+    parser_align.add_argument("--editdist",
+                              required=False,
+                              action="store_true",
+                              help="Perform detection of misaligned reads based on the error distribution")
 
     parser_align.set_defaults(func=align.main)
 
