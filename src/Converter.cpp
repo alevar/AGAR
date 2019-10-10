@@ -368,6 +368,7 @@ void Converter::load_index(const std::string& index_base,bool multi){
 
 // this function takes in the abundance estimation from salmon and augments the transcriptome index with the data
 void Converter::load_abundances(const std::string& abundFP){
+    std::cout<<"using salmon abundances"<<std::endl;
     this->abund = true;
     this->loci.set_precomputed_abundances();
     std::ifstream abundstream;
@@ -399,6 +400,23 @@ void Converter::load_abundances(const std::string& abundFP){
     }
     abundstream.close();
     std::cerr<<"@LOG::Loaded transcript abundance data"<<std::endl;
+}
+
+void Converter::print_abundances(const std::string& out_abund_fname){
+    std::ofstream out_abund_fp;
+    out_abund_fp.open(out_abund_fname, std::ofstream::out | std::ofstream::trunc);
+    if(this->loci.is_precomp_abund()){
+        for(int i=0;i<this->loci.get_size();i++){
+            out_abund_fp<<i<<"\t"<<this->loci[i].get_abund()<<std::endl;
+        }
+    }
+    else{
+        for(int i=0;i<this->loci.get_size();i++){
+            out_abund_fp<<i<<"\t"<<this->loci.get_abund(i)<<std::endl;
+        }
+    }
+
+    out_abund_fp.close();
 }
 
 // this metod performs evaluation of errors detected by the aligner
@@ -1301,7 +1319,7 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
 //        std::cout<<bam_get_qname(curAl)<<std::endl;
         unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
     }
-    else{ // compute abundance dynamically
+    else{ // rely on the salmon abundance
         unique = this->mmap.process_pos_pair_precomp(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
     }
 //    std::cerr<<"eval multi_pair: "<<unique<<std::endl;

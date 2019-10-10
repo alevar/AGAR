@@ -41,8 +41,8 @@ int main(int argc, char** argv) {
     args.add_flag(Opt::MISALIGN,"mis","try to eliminate misaligned reads based on the error distribution",false);
     args.add_int(Opt::PERCENT,"perc",10,"percent of the reads to be evaluated when pre-loading data before parsing",false);
     args.add_int(Opt::NUM_READS_PRECOMP,"nrp",500000,"number of reads to precompute based on the streaming",false);
-    args.add_int(Opt::OUTLIER_STDV,"outlier_stdv",5,"Poisson threshold as the number of standard deviations. Everythin above the threshold will be discarded as a misalignment",false);
-    args.add_int(Opt::OUTLIER_RAW,"outlier_raw",10,"Edit distance threshold for misalignments. For paired alignments the threshold is applied to each read separately",false);
+    args.add_int(Opt::OUTLIER_STDV,"outlier_stdv",2,"Poisson threshold as the number of standard deviations. Everything above the threshold will be discarded as a misalignment",false);
+    args.add_int(Opt::OUTLIER_RAW,"outlier_raw",3,"Edit distance threshold for misalignments. For paired alignments the threshold is applied to each read separately",false);
     args.add_string(Opt::UNALIGNED,"un","","output unaligned reads (singletons and pairs) to separate fastq.",false);
     args.add_flag(Opt::NODISCORD,"nodiscord","report all dicscordant pairs as unaligned. If --un is specified, the reads will be deposited into respective fasta/fastq files. If not, SAM information will be set to indicate unaligned",false);
     args.add_flag(Opt::NOSINGLE,"nosingle","report all mates for which the second mate is unaligned as unaligned. If --un is specified, the reads will be deposited into respective fasta/fastq files. If not, SAM information will be set to indicate unaligned",false);
@@ -108,11 +108,11 @@ int main(int argc, char** argv) {
         converter.set_misalign();
 
         if(args.is_set(Opt::OUTLIER_STDV)){
-            std::cerr<<"@LOG::misalignment is set to be detected at "<<args.get_int(Opt::OUTLIER_STDV)<<std::endl;
+            std::cerr<<"@LOG::misalignment is set to be detected with standard deviation at "<<args.get_int(Opt::OUTLIER_STDV)<<std::endl;
             converter.set_stdv(args.get_int(Opt::OUTLIER_STDV));
         }
-        if(args.is_set(Opt::OUTLIER_RAW)){
-            std::cerr<<"@LOG::misalignment is set to be detected at "<<args.get_int(Opt::OUTLIER_RAW)<<std::endl;
+        else{
+            std::cerr<<"@LOG::misalignment is set to be detected with raw threshold at "<<args.get_int(Opt::OUTLIER_RAW)<<std::endl;
             converter.set_raw(args.get_int(Opt::OUTLIER_RAW));
         }
     }
@@ -136,6 +136,10 @@ int main(int argc, char** argv) {
         converter.convert_coords_precomp();
         std::cerr<<"@LOG::Done Translating Coordinates of precomputed reads"<<std::endl;
     }
+
+    std::string out_abund_fname = args.get_string(Opt::OUT_AL);
+    out_abund_fname.append(".loc.abunds");
+    converter.print_abundances(out_abund_fname);
 
     converter.print_stats();
 

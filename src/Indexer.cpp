@@ -28,6 +28,7 @@ std::string Indexer::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::
             this->mmap.add_sequence(exon_seq,p_trans,this->found_gene->second.get_locid(),transID);
         }
         else{
+
             std::cerr<<"@ERROR::something went wrong with gene ID assignment"<<std::endl;
             std::cerr<<"@ERROR::looking up: "<<p_trans.getGeneID()<<"\t"<<std::string(p_trans.getGeneID())<<std::endl;
             exit(1);
@@ -68,6 +69,12 @@ Indexer::Indexer(std::string gtf_fname, std::string genome_fname,const std::stri
 
     this->tgmap_fname = out_fname;
     this->tgmap_fname.append(".tgmap"); // used as a map for salmon estimation
+
+    this->gnamemap_fname = out_fname;
+    this->gnamemap_fname.append(".gnamemap"); // used as a map for salmon estimation
+
+    this->tnamemap_fname = out_fname;
+    this->tnamemap_fname.append(".tnamemap"); // used as a map for salmon estimation
 
     genome_fname_ = std::move(genome_fname);
 
@@ -124,6 +131,8 @@ void Indexer::make_transcriptome(){
 
     std::ofstream tlst(this->tlst_fname);
     std::ofstream tgmap(this->tgmap_fname);
+    std::ofstream gnamemap(this->gnamemap_fname);
+    std::ofstream tnamemap(this->tnamemap_fname);
 
     while (fastaReader.good()) {
         fastaReader.next(cur_contig);
@@ -169,6 +178,8 @@ void Indexer::make_transcriptome(){
             tlst << out_rec.id_ << '\t' << out_rec.desc_ << std::endl;
             tlst.flush();
             tgmap << trans_idx <<"\t"<<found_gene->second.get_locid()<<std::endl;
+            gnamemap<<found_gene->second.get_locid()<<"\t"<<p_trans->getGeneID()<<std::endl;
+            tnamemap<<trans_idx<<"\t"<<p_trans->getID()<<std::endl;
             fastaWriter.write(out_rec);
         }
     }
@@ -252,6 +263,9 @@ void Indexer::save_header() {
     int prev_id = -1;
     for(auto &v : this->id_to_ref){
         if(v.first<=prev_id || (v.first - prev_id) != 1){
+            for(int y=prev_id+1;y<v.first;y++){
+                genome_headerfp<<"@SQ\tSN:DUMMY"<<y<<"\tLN:0"<<std::endl; // write dummies for contigs without annotation and hope it works
+            }
             std::cerr<<"@ERROR::error in reference IDs: "<<prev_id<<"\t"<<v.first<<"\t"<<v.second.first<<"\t"<<id_to_ref[prev_id].first<<"\t"<<std::endl;
 //            exit(1);
         }

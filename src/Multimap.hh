@@ -245,9 +245,14 @@ public:
     }
 
     void set_precomputed_abundances(){this->precomputed_abundances = true;}
+    bool is_precomp_abund(){return this->precomputed_abundances;}
 
     void add_locus(uint32_t lid,uint32_t elen){
         this->loci[lid].set_elen(elen);
+    }
+
+    int get_size(){
+        return this->loci.size();
     }
 
     void add_read(const int index){
@@ -830,6 +835,7 @@ public:
             int pos_idx = this->get_likely(res,0.0,1.0);
             // now follow the iterator to get the actual position object which corresponds to the selected item
             pos_res.push_back((this->index.begin()+this->ltf->second+pos_idx)->first);
+//            std::cout<<"getting likely"<<std::endl;
             return cur_num_multi;
         }
     }
@@ -905,6 +911,9 @@ public:
                 // for this we need the uniq abundances which determine base likelihood
                 // as well as current assignments of multimappers
                 abunds.push_back(loci[(this->ii+mp.first)->first.locus].get_abund());
+                if(loci[(this->ii+mp.first)->first.locus].get_locid()==15206){
+                    std::cout<<"found"<<std::endl;
+                }
                 total += abunds.back();
             }
 
@@ -990,6 +999,7 @@ public:
                 remove_strand_duplicates_pair(pos_res,pos_res_mate);
                 return cur_num_multi; // done
             }
+            bool found = false;
             for(auto & mp: multi_pairs){
                 // first need to compute expected values
                 // for this we need the uniq abundances which determine base likelihood
@@ -998,7 +1008,14 @@ public:
                 utotal+=uniq.back();
                 multi.push_back(loci.get_abund_total((this->ii+mp.first)->first.locus));
                 mtotal+=multi.back();
+                if(loci[(this->ii+mp.first)->first.locus].get_locid()==15206){
+                    std::cout<<"found"<<std::endl;
+                    found = true;
+                }
             }
+
+            // TODO: manually count the reads  - where they come from and which ones are multimappers
+            // then walk through the algorithm and make sure it works as expected
 
             // get expected and compute PID
             utotal = (utotal==0)?1:utotal;
@@ -1017,6 +1034,10 @@ public:
                 res.push_back(v/rtotal);
             }
 
+            if(found){
+                std::cout<<"found2"<<std::endl;
+            }
+
             // now need to make the decision which is best
             int pos_idx = this->get_likely(res,0.0,1.0);
             // now follow the iterator to get the actual position object which corresponds to the selected item
@@ -1025,16 +1046,21 @@ public:
             int offset_mate = multi_pairs[pos_idx].second;
             pos_res.push_back((this->index.begin()+this->ltf->second+offset)->first);
             pos_res_mate.push_back((this->index.begin()+this->ltf_mate->second+offset_mate)->first);
+//            std::cout<<"getting likely pair"<<std::endl;
             return cur_num_multi;
         }
     }
 
+    // because abunds not in 0-1 range when precompted this fails
+    // the method which loads the abundances before this function is currently only using the precomputed, so the other does not work
+
     // thanks to https://medium.com/@dimonasdf/hi-your-code-is-correct-but-in-pseudocode-it-should-be-fc1875cf9de3 for the idea
     int get_likely(std::vector<double>& abunds,double min, double max){
         double rv = (max - min) * ( (double)rand() / (double)RAND_MAX ) + min;
+//        double rv = std::fmod((double)std::rand(),(max+1.0));
 
         for(int i=0;i<abunds.size();i++){
-            rv = rv - abunds[i];
+            rv -= abunds[i];
             if(rv<=0){
                 return i;
             }

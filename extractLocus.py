@@ -17,10 +17,10 @@ def extractLocus(args):
             chrDict[lineCols[0]]=int(lineCols[1])
             
     df=pd.read_csv(args.input,sep="\t",names=gff3Cols,comment="#")
-    df["parent"]=df.attributes.str.split("Parent=",expand=True)[1].str.split(";",expand=True)[0]
-    df=df[df["parent"].isnull()].reset_index(drop=True)
+    df["parent"]=df.attributes.str.split("gene_id \"",expand=True)[1].str.split("\";",expand=True)[0]
+    df=df[~df["parent"].isnull()].reset_index(drop=True)
     df.drop_duplicates(["seqid","start","end","strand"],inplace=True)
-    df["id"]=df.attributes.str.split("ID=",expand=True)[1].str.split(";",expand=True)[0]
+    df["id"]=df.attributes.str.split("transcript_id \"",expand=True)[1].str.split("\";",expand=True)[0]
     df.drop_duplicates("id",inplace=True)
     df.reset_index(drop=True,inplace=True)
     df.drop(["id","parent"],axis=1)

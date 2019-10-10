@@ -596,6 +596,7 @@ public:
     ~Converter();
 
     void load_abundances(const std::string& abundFP); // add abundances to the transcripts
+    void print_abundances(const std::string& outAbundFP);
 
     void convert_coords_precomp();
     void convert_coords();

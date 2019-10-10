@@ -5,6 +5,7 @@ import time
 import shutil
 import datetime
 import subprocess
+from shutil import which
 
 
 # for the salmon mode - here are the commands
@@ -388,19 +389,20 @@ def main(args):
         for fp in ["1.ht2", "2.ht2", "3.ht2", "4.ht2", "5.ht2", "6.ht2", "7.ht2", "8.ht2"]:
             assert os.path.exists(os.path.abspath(args.db) + "/db." + fp), args.db + "/db." + fp + " file not found"
     if args.type == "bowtie":
+        assert which("bowtie2") is not None, "bowtie2 is not found in the system - please make sure it is included in your path"
         for fp in ["1.bt2", "2.bt2", "3.bt2", "4.bt2", "rev.1.bt2", "rev.2.bt2"]:
             assert os.path.exists(os.path.abspath(args.db) + "/db." + fp), args.db + "/db." + fp + " file not found"
     if args.locus:
         for fp in ["1.bt2", "2.bt2", "3.bt2", "4.bt2", "rev.1.bt2", "rev.2.bt2"]:
             assert os.path.exists(
-                os.path.abspath(args.db) + "/db.locus." + fp), args.db + "/db." + fp + " file not found"
+                os.path.abspath(args.db) + "/db.locus." + fp), args.db + "/db.locus." + fp + " file not found"
     # assert (bool(args.type=="hisat") != bool(args.bowtie)), "can not define both type hisat and bowtie2"
     for fp in ["tlst", "fasta", "genome_header", "info", "glst"]:
         assert os.path.exists(os.path.abspath(args.db) + "/db." + fp), args.db + "/db." + fp + " file not found"
     if args.mf:
         assert os.path.exists(os.path.abspath(args.db) + "/db.multi"), args.db + "/db.multi file not found"
-    for fp in ["1.ht2", "2.ht2", "3.ht2", "4.ht2", "5.ht2", "6.ht2", "7.ht2", "8.ht2"]:
-        assert os.path.exists(args.genome_db + "." + fp), args.genome_db + "." + fp + " file not found"
+    # for fp in ["1.ht2", "2.ht2", "3.ht2", "4.ht2", "5.ht2", "6.ht2", "7.ht2", "8.ht2"]:
+    #     assert os.path.exists(args.genome_db + "." + fp), args.genome_db + "." + fp + " file not found"
 
     cur_tmp = args.tmp
     if not os.path.exists(args.tmp):
@@ -445,10 +447,10 @@ def main(args):
         print("aligning with bowtie2 against transcriptome")
         # perform a two-pass alignment one for less redundant transcripts and one for more redundant alignments
         # with the "-a" option enabled
-        transcriptome_cmd = {"bowtie2",
+        transcriptome_cmd = ["bowtie2",
                              "--end-to-end",
                              "-x", os.path.abspath(args.db) + "/db",
-                             "-p", args.threads}
+                             "-p", args.threads]
         if args.bowtie:
             transcriptome_cmd.extend(args.bowtie)
 
@@ -480,7 +482,8 @@ def main(args):
         trans2genome_cmd.append("-m")
     if args.abunds is not None:
         trans2genome_cmd.extend(["-a", args.abunds])
-    if args.all is not None:
+    if args.all:
+        print("all enabled")
         trans2genome_cmd.extend(["-l"])
     if args.errcheck:
         trans2genome_cmd.extend(["-s"])
@@ -527,6 +530,10 @@ def main(args):
         time.sleep(args.sleep)
 
     # locus-level alignment
+    # TODO: need the following editions
+    #     - edit-distance correction - (get edit distance used in transcriptome alignment and use it here in a simple script which accepts piped input from the aligner)
+    #     - need to make sure that non-concordant alignments are all excluded from this alignment and are passed onto the next level
+    #     - need to make sure that locus-level alignment results and logs are included in the final report and calculation of alignment statistics
     locus_cmd = None
     if args.locus:
         stage3_locus_fh = open(os.path.abspath(cur_tmp) + "/stage3_locus.tmp", "w+")
@@ -534,7 +541,6 @@ def main(args):
             print("performing the locus lookup using bowtie2")
             locus_cmd = ["bowtie2",
                          "--end-to-end",
-                         "--no-unal",
                          "-k", "5",
                          "-x", os.path.abspath(args.db) + "/db.locus",
                          "-p", args.threads]
@@ -546,7 +552,6 @@ def main(args):
             locus_cmd = [hisat2_rnasens_path,
                          "--rna-sensitive",
                          "--end-to-end",
-                         "--no-unal",
                          "-x", os.path.abspath(args.db) + "/db.locus",
                          "-p", args.threads]
 
@@ -557,12 +562,13 @@ def main(args):
                           "-1", unaligned_r1,
                           "-2", unaligned_r2,
                           "-U", unaligned_s,
+                          "--no-unal",
                           "--un-conc", os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.fq",
                           "--un", os.path.abspath(cur_tmp) + "/sample.trans.un_first.locus.fq"))
 
-        unaligned_r1 = unaligned_r1+","+os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.1.fq"
-        unaligned_r2 = unaligned_r2+","+os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.2.fq"
-        unaligned_s = unaligned_s+","+os.path.abspath(cur_tmp) + "/sample.trans.un_first.locus.fq"
+        unaligned_r1 = os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.1.fq"
+        unaligned_r2 = os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.2.fq"
+        unaligned_s = os.path.abspath(cur_tmp) + "/sample.trans.un_first.locus.fq"
 
         start_locus = time.time()
         locus_process = subprocess.Popen(locus_cmd, stderr=stage3_locus_fh)
@@ -600,6 +606,7 @@ def main(args):
 
     start_genome = time.time()
     stage4_genome_fh = open(os.path.abspath(cur_tmp) + "/stage4_genome.tmp", "w+")
+    print(" ".join(hisat2_cmd_genome))
     genome_process = subprocess.Popen(hisat2_cmd_genome, stderr=stage4_genome_fh)
     # convert_process = subprocess.Popen(["samtools", "view", "-h", "--output-fmt=BAM", "-@", args.threads, "-o",
     #                                     os.path.abspath(cur_tmp) + "/sample.genome.bam"], stdin=genome_process.stdout)
@@ -648,6 +655,7 @@ def main(args):
     stage5_merge_fh = open(os.path.abspath(cur_tmp) + "/stage5_merge.tmp", "w+")
     if len(merge_cmd) > 6:
         start_merge = time.time()
+        print(merge_cmd)
         subprocess.call(merge_cmd, stderr=stage5_merge_fh)
         stage5_merge_fh.close()
         if args.verbose:
