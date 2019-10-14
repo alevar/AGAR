@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(trans2genome)
+project(agar)
 
 set (CMAKE_STATIC_LINKER_FLAGS "-Wl,--as-needed.-lcurl")
 
@@ -28,7 +28,7 @@ include("cmake/hisat2.cmake")
 
 include_directories(src)
 
-add_executable(trans2genome_indexer
+add_executable(agar_indexer
         src/arg_parse.cpp
         src/arg_parse.h
         src/codons.cpp
@@ -51,10 +51,10 @@ add_executable(trans2genome_indexer
         src/tokenize.cpp
         src/Multimap.hh)
 
-add_dependencies(trans2genome_indexer htslib)
-target_link_libraries(trans2genome_indexer ${htslib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl -lz)
+add_dependencies(agar_indexer htslib)
+target_link_libraries(agar_indexer ${htslib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl -lz)
 
-add_executable(trans2genome
+add_executable(agar
         src/arg_parse.cpp
         src/arg_parse.h
         src/codons.cpp
@@ -68,8 +68,28 @@ add_executable(trans2genome
         src/Converter.h
         src/tokenize.cpp
         src/tokenize.h
-        src/trans2genome.cpp
+        src/agar.cpp
         src/Multimap.hh)
 
-add_dependencies(trans2genome htslib)
-target_link_libraries(trans2genome ${htslib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl -lz)
+add_dependencies(agar htslib)
+target_link_libraries(agar ${htslib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl -lz)
+
+add_executable(agar_diff
+        src/arg_parse.cpp
+        src/arg_parse.h
+        src/codons.cpp
+        src/codons.h
+        src/GBase.cpp
+        src/GBase.h
+        src/GHash.hh
+        src/GList.hh
+        src/GVec.hh
+        src/Comparator.cpp
+        src/Comparator.h
+        src/tokenize.cpp
+        src/tokenize.h
+        src/agar_diff.cpp
+        src/Multimap.hh)
+
+add_dependencies(agar_diff htslib)
+target_link_libraries(agar_diff ${htslib_LIB} -lbz2 -llzma -pthread -lcrypto -lcurl -lz)

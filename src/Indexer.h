@@ -90,6 +90,7 @@ private:
     std::map<std::string,Gene>::iterator found_gene;
 
     std::map<int,std::pair<std::string,int>> id_to_ref; // this is used ot build a header for the genomic file. contains the index (line in header), ref name and length
+    std::map<std::string,int> id_to_ref_no_trans; // to append at the end
 
     // TODO: needs to handle reverse complement of a kmer for the multimapper index
 };

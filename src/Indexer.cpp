@@ -140,6 +140,8 @@ void Indexer::make_transcriptome(){
         // associated with it. Skip it.
         if (contigTransMap_.find(cur_contig.id_) ==
             contigTransMap_.end()){
+            // no transcripts are found - contig needs to be added at the end of the BAM header just in case
+            this->id_to_ref_no_trans.insert(std::make_pair(cur_contig.id_,cur_contig.seq_.size()));
             continue;
         }
 
@@ -271,6 +273,10 @@ void Indexer::save_header() {
         }
         prev_id = v.first;
         genome_headerfp<<"@SQ\tSN:"<<v.second.first<<"\tLN:"<<v.second.second<<std::endl;
+    }
+    // now append contigs with no known transcripts to the end of the header
+    for(auto &v : this->id_to_ref_no_trans){
+        genome_headerfp<<"@SQ\tSN:"<<v.first<<"\tLN:"<<v.second<<std::endl;
     }
     // PG is added using the arguments from the execution of trans2genome during the conversion
     genome_headerfp.close();

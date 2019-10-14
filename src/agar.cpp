@@ -27,7 +27,7 @@ enum Opt {IN_AL   = 'i',
 
 int main(int argc, char** argv) {
 
-    ArgParse args("trans2genome");
+    ArgParse args("agar");
     args.add_string(Opt::IN_AL,"input","","input alignment SAM/BAM",false);
     args.add_string(Opt::OUT_AL,"output","","output file path (BAM)",true);
     args.add_int(Opt::THREADS,"threads",1,"number of threads (default = 1)",false);
@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
     args.parse_args(argc,argv);
 
     // first create the execution string
-    std::string cl="trans2genome ";
+    std::string cl="agar ";
     for (int i=0;i<argc;i++){
         if(i==0){
             cl+=argv[i];
