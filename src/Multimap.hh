@@ -19,6 +19,7 @@
 #include <random>
 #include <ctime>
 #include <algorithm>
+#include <cassert>
 
 #include "gff.h"
 #include <htslib/sam.h>
@@ -394,12 +395,13 @@ private:
 class Position{
 public:
     Position() = default;
-    Position(uint32_t chr,uint32_t strand,uint32_t start,uint32_t locus,uint32_t transID){
+    Position(uint32_t chr,uint32_t strand,uint32_t start,uint32_t locus,uint32_t transID,bool revcmp){
         this->chr = chr;
         this->strand = strand;
         this->start = start;
         this->locus = locus;
         this->transID = transID;
+        this->revcmp = revcmp;
     }
     Position(bam1_t* curAl){ // generate position from an alignment
         this->chr = (uint32_t)curAl->core.tid;
@@ -413,6 +415,7 @@ public:
     void set_start(uint32_t start){this->start=start;this->num_elems++;}
     void set_locus(uint32_t locus){this->locus=locus;this->num_elems++;}
     void set_trans(uint32_t trans){this->transID=trans;this->num_elems++;}
+    void set_rev(bool rev_tag){this->revcmp;this->num_elems++;}
 
     static bool moves_eq(const std::vector<uint32_t>& m1,const std::vector<uint32_t>& m2) { // m1 must be smaller or equal to m2
         for(int i=0;i<m1.size();i++){
@@ -425,6 +428,7 @@ public:
 
     std::string get_strg() const {
         std::string res;
+        res.append(std::to_string(this->revcmp)); // the first character always indicates whether reverse complemented or not
         res.append(std::to_string(this->transID));
         res += ">";
         res.append(std::to_string(this->locus));
@@ -476,6 +480,7 @@ public:
     uint32_t chr,strand,start,locus;
     uint32_t transID; // transID can be any transcript which can describe the position to which it belongs; it does not participate in the equality computation
     std::vector<uint32_t> moves; // simplified CIGAR describing the intron-exon coverage of the given kmer
+    bool revcmp;
 };
 
 inline void hash_combine(std::size_t& seed) { }
@@ -1202,6 +1207,26 @@ public:
         uniq_ss.close();
     }
 
+    std::string reverse(std::string seq){ // https://stackoverflow.com/questions/33074574/creating-complement-of-dna-sequence-and-reversing-it-c
+        auto lambda = [](const char c) {
+            switch (c) {
+                case 'A':
+                    return 'T';
+                case 'G':
+                    return 'C';
+                case 'C':
+                    return 'G';
+                case 'T':
+                    return 'A';
+                default:
+                    throw std::domain_error("Invalid nucleotide.");
+            }
+        };
+
+        std::transform(seq.cbegin(), seq.cend(), seq.begin(), lambda);
+        return seq;
+    }
+
     // given a full transcript sequence and the pointer to the transcript description (constituent exons)
     // get all kmers and coordinates and load them into the multimapper index
     void add_sequence(std::string& seq,GffObj &p_trans,uint32_t geneID,int transID){
@@ -1209,18 +1234,24 @@ public:
 
         int el_pos = 0; // current position within the exon list
         int exon_pos = 0;
-        std::string kmer = ""; // currently evaluated kmer
+        std::string kmer = "",kmer_rc = ""; // currently evaluated kmer
         GffExon *cur_exon = exon_list[el_pos];
         for(int i=0;i<seq.size()-this->kmerlen+1;i++){ // iterate over all kmers in the sequence
             kmer=seq.substr(i,this->kmerlen);
+            kmer_rc=seq.substr(i,this->kmerlen);
+            kmer_rc = reverse(kmer_rc);
 
-            Position p(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos,geneID,transID); // initialize position and add information to it accordingly
+            Position p(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos,geneID,transID,false); // initialize position and add information to it accordingly
+            Position p_rc(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos,geneID,transID,true); // initialize position and add information to it accordingly
 
             this->kce = this->kmer_coords.insert(std::make_pair(kmer,pcord{}));
+            this->kce_rc = this->kmer_coords.insert(std::make_pair(kmer_rc,pcord{}));
 
             process_remaining(el_pos,exon_pos,p,exon_list,cur_exon); // adds moves to the position object
+            process_remaining(el_pos,exon_pos,p_rc,exon_list,cur_exon); // adds moves to the position object
 
             this->pce = this->kce.first->second.insert(p); // insert new completed position now
+            this->pce_rc = this->kce_rc.first->second.insert(p_rc); // insert new completed position now
 
             // reset_parameters
             exon_pos++; // increment and evaluate
@@ -1377,12 +1408,14 @@ private:
     void _load(std::ifstream &infp,char *buffer){
         int k = infp.gcount();
         uint32_t cur=0,chr=0,strand=0,start=0,move=0,locus=0,trans=0;
+        bool rev_tag = false;
         enum Opt {CHR   = 0,
                 START = 1,
                 MOVE  = 2,
                 LOCUS = 3,
-                TRANS = 4};
-        uint32_t elem = Opt::TRANS;
+                TRANS = 4,
+                REVCMP= 5};
+        uint32_t elem = Opt::REVCMP; // Opt::TRANS;
         Position pos;
         // Multimappers are all stored on a single line, so instead of creating pointers for each, we can simply store two small integers, which describe which positions in the index characterize a multimapper
         uint32_t multi_block_start = 0;
@@ -1395,7 +1428,8 @@ private:
                     this->lte = this->lookup_table.insert(std::make_pair(pos,multi_block_start));
                     multi_block_start = this->index.size(); // end of line implies end of the multimapping block. Now set the start of the next block
                     pos.clear();
-                    elem = Opt::TRANS;
+                    elem = Opt::REVCMP;
+//                    elem = Opt::TRANS;
                     move = 0;
                     break;
                 case '\t':
@@ -1404,7 +1438,8 @@ private:
                     this->index.push_back(std::make_pair(pos,true));
                     this->lte = this->lookup_table.insert(std::make_pair(pos,multi_block_start));
                     pos.clear();
-                    elem = Opt::TRANS;
+                    elem = Opt::REVCMP;
+//                    elem = Opt::TRANS;
                     move = 0;
                     break;
                 case ' ':
@@ -1458,6 +1493,11 @@ private:
                         case 4:
                             trans = 10*trans + buffer[i] - '0';
                             break;
+                        case 5:
+                            rev_tag = (bool)(10*trans+buffer[i] - '0');
+                            elem = Opt::TRANS;
+                            pos.set_rev(rev_tag);
+                            break;
                         default:
                             std::cerr<<"@ERROR::should never happen _load from Multimap with value: "<<elem<<std::endl;
                             exit(1);
@@ -1481,9 +1521,9 @@ private:
     bool precomputed_abundances = false;
 
     typedef std::unordered_set<Position,PosHash_noLoc,PosEq_noLoc> pcord;
-    std::pair<pcord::iterator,bool> pce;
+    std::pair<pcord::iterator,bool> pce,pce_rc;
     std::unordered_map<std::string,pcord> kmer_coords;
-    std::pair<std::unordered_map<std::string,pcord>::iterator,bool> kce;
+    std::pair<std::unordered_map<std::string,pcord>::iterator,bool> kce,kce_rc;
 
     // now time to write the unique kmers for transcripts
     std::unordered_map<std::string,int> uniq_cnt; // counts of unique kmers per transcript

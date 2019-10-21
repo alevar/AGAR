@@ -1317,7 +1317,11 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
                                           int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate) {
     int unique;
     std::vector<Position> res_pos,res_pos_mate; // holds the results of the multimapper evaluation
-    if(!this->abund){ // compute abundance dynamically
+    if(!this->multi){ // no need to look for multimappers at all
+        // just proceed to the evaluation
+        unique = 0;// TODO: is this really set to 0 or should it be 1?
+    }
+    else if(!this->abund){ // compute abundance dynamically
 //        std::cout<<"\n================\n"<<std::endl;
 //        std::cout<<bam_get_qname(curAl)<<std::endl;
         unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
@@ -1433,7 +1437,11 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
 int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){
     int unique;
     std::vector<Position> res_pos; // holds the results of the multimapper evaluation
-    if(!this->abund){ // compute abundance dynamically
+    if(!this->multi){ // no need to output multimappers
+        // just continue if multimappers are not being asked for
+        unique = 0; // TODO: is this really set to 0 or should it be set to 1
+    }
+    else if(!this->abund){ // compute abundance dynamically
         unique = this->mmap.process_pos(cur_pos,this->loci,res_pos);
     }
     else{ // compute abundance dynamically
