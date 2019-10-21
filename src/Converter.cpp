@@ -1382,6 +1382,13 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
                 }
             }
 
+            if(res_pos[pos_idx].revcmp){ // need to reverse complement the sequence
+                // TODO: implement reverse complement of the sequence
+            }
+            if(res_pos_mate[pos_idx].revcmp){ // need to reverse complement the sequence
+                // TODO: implement reverse complement of the sequence
+            }
+
             add_multi_tag(curAl,res_pos[pos_idx].transID);
             add_multi_tag(curAl_mate,res_pos_mate[pos_idx].transID);
 
@@ -1478,6 +1485,10 @@ int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[
                 if(read_start>=exon_list[i].start && read_start<=exon_list[i].end){
                     break;
                 }
+            }
+
+            if(v.revcmp){ // need to reverse complement the sequence
+                // TODO: implement reverse complement of the sequence
             }
 
             curAl->core.pos = v.start-1; // assign new position

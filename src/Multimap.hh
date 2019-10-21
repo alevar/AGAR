@@ -1218,7 +1218,30 @@ public:
                     return 'G';
                 case 'T':
                     return 'A';
+                case 'N':
+                    return 'N';
+                case 'R':
+                    return 'Y';
+                case 'Y':
+                    return 'R';
+                case 'S':
+                    return 'S';
+                case 'W':
+                    return 'W';
+                case 'K':
+                    return 'M';
+                case 'M':
+                    return 'K';
+                case 'B':
+                    return 'V';
+                case 'V':
+                    return 'B';
+                case 'D':
+                    return 'H';
+                case 'H':
+                    return 'D';
                 default:
+                    std::cout<<c<<std::endl;
                     throw std::domain_error("Invalid nucleotide.");
             }
         };
@@ -1238,8 +1261,12 @@ public:
         GffExon *cur_exon = exon_list[el_pos];
         for(int i=0;i<seq.size()-this->kmerlen+1;i++){ // iterate over all kmers in the sequence
             kmer=seq.substr(i,this->kmerlen);
-            kmer_rc=seq.substr(i,this->kmerlen);
+            transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
+            kmer_rc=kmer;
+//            std::cout<<">"<<kmer<<std::endl;
             kmer_rc = reverse(kmer_rc);
+            std::reverse(kmer_rc.begin(), kmer_rc.end());
+//            std::cout<<"<"<<kmer_rc<<std::endl;
 
             Position p(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos,geneID,transID,false); // initialize position and add information to it accordingly
             Position p_rc(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos,geneID,transID,true); // initialize position and add information to it accordingly
