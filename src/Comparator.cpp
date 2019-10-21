@@ -1185,7 +1185,6 @@ void Comparator::merge(){
                 std::cerr<<"@ERROR:::transcriptomic read does not have expected mate"<<std::endl;
                 exit(-1);
             }
-
             gt_cmp_status = cmp_gt(al_g1,al_g2,al_t1,al_t2);
 
             // PROCESS separately: concordant and discordant/single - discordant and single should be compared on a per-mate bases while concordant should be compared based on both reads

@@ -514,8 +514,6 @@ def main(args):
         print("all enabled")
         agar_diff_cmd.extend(["-l"])
 
-    print(" ".join(agar_diff_cmd))
-
     stage3_translate_fh = open(os.path.abspath(cur_tmp) + "/stage3_translate.tmp", "w+")
     translate_process = subprocess.Popen(agar_diff_cmd, stdin=transcriptome_process.stdout,
                                          stderr=stage3_translate_fh)
