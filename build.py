@@ -19,7 +19,7 @@ def main(args):
     # indexer
     print("Extracting transcriptome data and building an index")
     indexer_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                'trans2genome_indexer')  # get path to the gtf_to_fasta that was compiled with the package
+                                'agar_indexer')  # get path to the gtf_to_fasta that was compiled with the package
     print(" ".join([indexer_path, "-k", str(args.kmerlen), "-a", args.gff, "-r", args.ref, "-o",
                     os.path.abspath(args.output) + "/db", "-m"]))
     subprocess.call([indexer_path, "-k", str(args.kmerlen), "-a", args.gff, "-r", args.ref, "-o",

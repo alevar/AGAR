@@ -8,26 +8,6 @@ import subprocess
 from shutil import which
 
 
-# for the salmon mode - here are the commands
-# ~/soft/salmon-latest_linux_x86_64/bin/salmon index -t db.fasta -i ./db
-# ~/soft/salmon-latest_linux_x86_64/bin/salmon quant -l A -i ./data/salmonHisatIDX_p8/db -1 ./data/SRR1071717_r1.fq -2 ./data/SRR1071717_r2.fq --writeMappings ./outBladder_salmon/SRR1071717.sam --writeUnmappedNames -o ./outBladder_salmon/SRR1071717 -p 24 --validateMappings
-# samtools sort -n --output-fmt=BAM -@ 3 -o ./outBladder_salmon/SRR1071717.sorted.bam ./outBladder_salmon/SRR1071717.bam
-
-# /ccb/salz4-4/avaraby/tools_under_development/trans2genome_gtftofasta/salmon2genome -t ./salmonHisatIDX_p8/db.fasta.tlst -i ./outBladder_salmon/SRR1071717_salmon_stdout.sorted.bam -s ./salmonHisatIDX_p8/db.genome.header -o ./outBladder_salmon/SRR1071717.trans2genome.bam -n 154368 -a ./outBladder_salmon/SRR1071717/quant.sf
-
-# cut -d' ' -f1 SRR1071717/aux_info/unmapped_names.txt | seqtk subseq ../data/SRR1071717_r2.fq - > SRR1071717_salmon_unmapped_r2.fq
-# cut -d' ' -f1 SRR1071717/aux_info/unmapped_names.txt | seqtk subseq ../data/SRR1071717_r2.fq - > SRR1071717_salmon_unmapped_r2.fq
-
-# hisat2 -x /home/gpertea/ncbi/dbGaP-10908/hg38/genome_tran -1 ./SRR1071717_salmon_unmapped_r1.fq -2 SRR1071717_salmon_unmapped_r2.fq --very-sensitive --no-unal -k 30 -p 24 -S ./SRR1071717_salmon_unmapped_hisat.sam
-
-# samtools view -h --output-fmt=BAM -@ 24 ./SRR1071717_salmon_unmapped_hisat.sam -o ./SRR1071717_salmon_unmapped_hisat.bam
-
-# samtools merge -@ 24 SRR1071717_salmon_hisat.bam SRR1071717_salmon_unmapped_hisat.bam SRR1071717.trans2genome.bam
-
-# samtools sort --output-fmt=BAM -@ 24 -o ./SRR1071717_salmon_hisat.sorted.bam ./SRR1071717_salmon_hisat.bam
-
-# stringtie ./SRR1071717_salmon_hisat.sorted.bam -p 24 -m 150 -G ../data/hg38_p8.biotype_flt.cls.gff3 -o SRR1071717_stringtie.gt
-
 def parse_hisat(stage_fname, log_fname, log_fh):
     hisat_container = {"total_reads": 0,
                        "total_pair": 0,
@@ -129,6 +109,7 @@ def parse_hisat(stage_fname, log_fname, log_fh):
                     print("ERROR parsing hisat2 summary #6", num_tab, line)
 
     return hisat_container
+
 
 def parse_hisat_new(stage_fname, log_fname, log_fh):
     hisat_container = {"total_pair": 0,
@@ -275,9 +256,9 @@ def parse_logs(tmpDir_tmp, start_time, log_fname=None):
     stage3_res = parse_hisat(stage3_fname, log_fname, log_fh)
 
     # STAGE4 - GENOME ALIGNMENT
-    stage4_fname = tmpDir + "/stage4_genome.tmp"
-    assert os.path.exists(stage4_fname), "stage4: genome alignment log is not found"
-    stage4_res = parse_hisat(stage4_fname, log_fname, log_fh)
+    stage4_fname = tmpDir + "/stage2_genome.tmp"
+    assert os.path.exists(stage2_fname), "stage2: genome alignment log is not found"
+    stagew_res = parse_hisat(stage2_fname, log_fname, log_fh)
 
     # STAGE5 - MERGING OF THE ALIGNMENT FILES
     if log_fname is not None:
@@ -360,8 +341,8 @@ def parse_logs(tmpDir_tmp, start_time, log_fname=None):
     report += "\t\tAligned to the genome: %d (%.2f%%)\n" % (stage4_res["concN"], perc_conc_N_genome)
 
     # lastly need to get the final alignment rate
-    total_reads = total_paired*2 + stage1_res["total_unpair"]
-    total_aligned = total_conc*2 + total_disc + total_single_genome
+    total_reads = total_paired * 2 + stage1_res["total_unpair"]
+    total_aligned = total_conc * 2 + total_disc + total_single_genome
     al_rate = 0 if total_reads == 0 else (total_aligned / total_reads) * 100
     report += "%.2f%% overall alignment rate\n" % al_rate
 
@@ -373,6 +354,7 @@ def parse_logs(tmpDir_tmp, start_time, log_fname=None):
 
     if log_fname is not None:
         log_fh.close()
+
 
 def main(args):
     start_total = time.time()
@@ -389,14 +371,10 @@ def main(args):
         for fp in ["1.ht2", "2.ht2", "3.ht2", "4.ht2", "5.ht2", "6.ht2", "7.ht2", "8.ht2"]:
             assert os.path.exists(os.path.abspath(args.db) + "/db." + fp), args.db + "/db." + fp + " file not found"
     if args.type == "bowtie":
-        assert which("bowtie2") is not None, "bowtie2 is not found in the system - please make sure it is included in your path"
+        assert which(
+            "bowtie2") is not None, "bowtie2 is not found in the system - please make sure it is included in your path"
         for fp in ["1.bt2", "2.bt2", "3.bt2", "4.bt2", "rev.1.bt2", "rev.2.bt2"]:
             assert os.path.exists(os.path.abspath(args.db) + "/db." + fp), args.db + "/db." + fp + " file not found"
-    if args.locus:
-        for fp in ["1.bt2", "2.bt2", "3.bt2", "4.bt2", "rev.1.bt2", "rev.2.bt2"]:
-            assert os.path.exists(
-                os.path.abspath(args.db) + "/db.locus." + fp), args.db + "/db.locus." + fp + " file not found"
-    # assert (bool(args.type=="hisat") != bool(args.bowtie)), "can not define both type hisat and bowtie2"
     for fp in ["tlst", "fasta", "genome_header", "info", "glst"]:
         assert os.path.exists(os.path.abspath(args.db) + "/db." + fp), args.db + "/db." + fp + " file not found"
     if args.mf:
@@ -424,21 +402,20 @@ def main(args):
         final_fname = args.output + ".stats"
 
     hisat2_rnasens_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                 'external/hisat2/hisat2')  # get path to the trans2genome that was compiled with the package
-    assert os.path.exists(hisat2_rnasens_path),"included version of hisat is not found: "+hisat2_rnasens_path
+                                       'external/hisat2/hisat2')  # get path to the trans2genome that was compiled with the package
+    assert os.path.exists(hisat2_rnasens_path), "included version of hisat is not found: " + hisat2_rnasens_path
 
     transcriptome_cmd = None
     if args.type == "hisat":
         print("aligning with hisat2 against transcriptome")
-        # perform a two-pass alignment one for less redundant transcripts and one for more redundant alignments
-        # with the "-a" option enabled
         transcriptome_cmd = [hisat2_rnasens_path,
                              # get path to the trans2genome that was compiled with the package,
                              "--no-spliced-alignment",
                              "--end-to-end",
                              "--rna-sensitive",
                              "-x", os.path.abspath(args.db) + "/db",
-                             "-p", args.threads]
+                             "-p", args.threads,
+                             "--reorder"]
 
         if args.hisat:
             transcriptome_cmd.extend(args.hisat)
@@ -450,7 +427,8 @@ def main(args):
         transcriptome_cmd = ["bowtie2",
                              "--end-to-end",
                              "-x", os.path.abspath(args.db) + "/db",
-                             "-p", args.threads]
+                             "-p", args.threads,
+                             "--reorder"]
         if args.bowtie:
             transcriptome_cmd.extend(args.bowtie)
 
@@ -464,212 +442,90 @@ def main(args):
                               "-2", args.m2))
     if not args.single is None:
         transcriptome_cmd.extend(("-U", args.single))
-    # transcriptome_cmd.extend(("--un-conc", os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.fq",
-    #                           "--un", os.path.abspath(cur_tmp) + "/sample.trans.un_first.fq"))
+
+    transcriptome_cmd.extend(("-S", os.path.abspath(cur_tmp) + "/stage1_transcriptome.sam"))
 
     start_transcriptome = time.time()
     stage1_transcriptome_fh = open(os.path.abspath(cur_tmp) + "/stage1_transcriptome.tmp", "w+")
     print(" ".join(transcriptome_cmd))
-    transcriptome_process = subprocess.Popen(transcriptome_cmd, stdout=subprocess.PIPE, stderr=stage1_transcriptome_fh)
-    trans2genome_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                     'agar')  # get path to the trans2genome that was compiled with the package
-    trans2genome_cmd = [trans2genome_path,
-                        "-x", os.path.abspath(args.db) + "/db",
-                        "-o", os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam",
-                        "-u", os.path.abspath(cur_tmp) + "/sample.trans_first",
-                        "-q", "-p", str(args.threads)]
-    if args.mf:
-        trans2genome_cmd.append("-m")
-    if args.abunds is not None:
-        trans2genome_cmd.extend(["-a", args.abunds])
-    if args.all:
-        print("all enabled")
-        trans2genome_cmd.extend(["-l"])
-    if args.errcheck:
-        trans2genome_cmd.extend(["-s"])
-    if args.no_discord:
-        trans2genome_cmd.extend(["-j"])
-    if args.no_single:
-        trans2genome_cmd.extend(["-g"])
-    if args.editdist:
-        trans2genome_cmd.extend(["-s"])
-
-    stage2_translate_fh = open(os.path.abspath(cur_tmp) + "/stage2_translate.tmp", "w+")
-    translate_process = subprocess.Popen(trans2genome_cmd, stdin=transcriptome_process.stdout,
-                                         stderr=stage2_translate_fh)
-
-    # make sure the sam header has the exact information to run the tool
-
-    unaligned_r1 = os.path.abspath(cur_tmp) + "/sample.trans_first.unal_r1.fastq"
-    unaligned_r2 = os.path.abspath(cur_tmp) + "/sample.trans_first.unal_r2.fastq"
-    unaligned_s = os.path.abspath(cur_tmp) + "/sample.trans_first.unal_s.fastq"
+    transcriptome_process = subprocess.Popen(transcriptome_cmd, stderr=stage1_transcriptome_fh)
 
     transcriptome_process.wait()
-    transcriptome_process.stdout.close()
-    # transcriptome_process.stderr.close()
-
     stage1_transcriptome_fh.close()
+
     if args.verbose:
         with open(os.path.abspath(cur_tmp) + "/stage1_transcriptome.tmp", "r") as inFP:
             for line in inFP.readlines():
                 print(line.rstrip("\n"))
 
-    # translate_process.stderr.close()
-    translate_process.wait()
-
-    stage2_translate_fh.close()
-    if args.verbose:
-        with open(os.path.abspath(cur_tmp) + "/stage2_translate.tmp", "r") as inFP:
-            for line in inFP.readlines():
-                print(line.rstrip("\n"))
-
     end_transcriptome = time.time()
-    print("Transcriptome alignment time: "+str(datetime.timedelta(seconds=int(end_transcriptome-start_transcriptome))))
-
-    if args.sleep is not None:
-        time.sleep(args.sleep)
-
-    # locus-level alignment
-    # TODO: need the following editions
-    #     - edit-distance correction - (get edit distance used in transcriptome alignment and use it here in a simple script which accepts piped input from the aligner)
-    #     - need to make sure that non-concordant alignments are all excluded from this alignment and are passed onto the next level
-    #     - need to make sure that locus-level alignment results and logs are included in the final report and calculation of alignment statistics
-    locus_cmd = None
-    if args.locus:
-        stage3_locus_fh = open(os.path.abspath(cur_tmp) + "/stage3_locus.tmp", "w+")
-        if args.type == "bowtie":
-            print("performing the locus lookup using bowtie2")
-            locus_cmd = ["bowtie2",
-                         "--end-to-end",
-                         "-k", "5",
-                         "-x", os.path.abspath(args.db) + "/db.locus",
-                         "-p", args.threads]
-
-            if args.bowtie:
-                locus_cmd.extend(args.bowtie)
-        elif args.type == "hisat":
-            print("performing the locus lookup using hisat2")
-            locus_cmd = [hisat2_rnasens_path,
-                         "--rna-sensitive",
-                         "--end-to-end",
-                         "-x", os.path.abspath(args.db) + "/db.locus",
-                         "-p", args.threads]
-
-            if args.hisat:
-                locus_cmd.extend(args.hisat)
-
-        locus_cmd.extend(("-S", os.path.abspath(cur_tmp) + "/sample.trans_second.locus.sam",
-                          "-1", unaligned_r1,
-                          "-2", unaligned_r2,
-                          "-U", unaligned_s,
-                          "--no-unal",
-                          "--un-conc", os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.fq",
-                          "--un", os.path.abspath(cur_tmp) + "/sample.trans.un_first.locus.fq"))
-
-        unaligned_r1 = os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.1.fq"
-        unaligned_r2 = os.path.abspath(cur_tmp) + "/sample.trans.unconc_first.locus.2.fq"
-        unaligned_s = os.path.abspath(cur_tmp) + "/sample.trans.un_first.locus.fq"
-
-        start_locus = time.time()
-        locus_process = subprocess.Popen(locus_cmd, stderr=stage3_locus_fh)
-        # subprocess.Popen(["samtools", "view", "-h", "--output-fmt=BAM", "-@", args.threads, "-o",
-        #                   os.path.abspath(cur_tmp) + "/sample.trans_second.locus.bam"], stdin=locus_process.stdout)
-
-        locus_process.wait()
-        # locus_process.stderr.close()
-
-        stage3_locus_fh.close()
-        if args.verbose:
-            with open(os.path.abspath(cur_tmp) + "/stage3_locus.tmp", "r") as inFP:
-                for line in inFP.readlines():
-                    print(line.rstrip("\n"))
-
-        end_locus = time.time()
-        print("Locus alignment time: "+str(datetime.timedelta(seconds=int(end_locus-start_locus))))
-
-        if args.sleep is not None:
-            time.sleep(args.sleep)
+    print("Transcriptome alignment time: " + str(
+        datetime.timedelta(seconds=int(end_transcriptome - start_transcriptome))))
 
     print("aligning with hisat2 against the genome")
     hisat2_cmd_genome = [hisat2_rnasens_path,
                          "--rna-sensitive",
                          "-x", os.path.abspath(args.genome_db),
-                         "-p", args.threads]
-    if args.nounal:
-        hisat2_cmd_genome.append("--no-unal")
-    hisat2_cmd_genome.extend(("-S", os.path.abspath(cur_tmp) + "/sample.genome.sam",
-                              "-1", unaligned_r1,
-                              "-2", unaligned_r2,
-                              "-U", unaligned_s))
+                         "-p", args.threads,
+                         "--reorder"]
+    hisat2_cmd_genome.extend(("-1", args.m1,
+                              "-2", args.m2))
+    if not args.single is None:
+        hisat2_cmd_genome.extend(("-U", args.single))
+    if args.fasta:
+        hisat2_cmd_genome.append("-f")
+    hisat2_cmd_genome.extend(("-S", os.path.abspath(cur_tmp) + "/sample.genome.sam"))
     if args.hisat:
         hisat2_cmd_genome.extend(args.hisat)
 
     start_genome = time.time()
-    stage4_genome_fh = open(os.path.abspath(cur_tmp) + "/stage4_genome.tmp", "w+")
+    stage2_genome_fh = open(os.path.abspath(cur_tmp) + "/stage2_genome.tmp", "w+")
     print(" ".join(hisat2_cmd_genome))
-    genome_process = subprocess.Popen(hisat2_cmd_genome, stderr=stage4_genome_fh)
-    # convert_process = subprocess.Popen(["samtools", "view", "-h", "--output-fmt=BAM", "-@", args.threads, "-o",
-    #                                     os.path.abspath(cur_tmp) + "/sample.genome.bam"], stdin=genome_process.stdout)
+    genome_process = subprocess.Popen(hisat2_cmd_genome, stderr=stage2_genome_fh)
 
     genome_process.wait()  # allows trans2genome to run at the same time as hisat2
-    # genome_process.stderr.close()
 
-    stage4_genome_fh.close()
+    stage2_genome_fh.close()
     if args.verbose:
-        with open(os.path.abspath(cur_tmp) + "/stage4_genome.tmp", "r") as inFP:
+        with open(os.path.abspath(cur_tmp) + "/stage2_genome.tmp", "r") as inFP:
             for line in inFP.readlines():
                 print(line.rstrip("\n"))
 
-    # convert_process.wait()
-
     end_genome = time.time()
-    print("Genome alignment time: "+str(datetime.timedelta(seconds=int(end_genome-start_genome))))
+    print("Genome alignment time: " + str(datetime.timedelta(seconds=int(end_genome - start_genome))))
 
     if args.sleep is not None:
         time.sleep(args.sleep)
 
-    if not args.keep:
-        for item in unaligned_r1.split(","):
-            if os.path.exists(item):
-                os.remove(item)
-        for item in unaligned_r2.split(","):
-            if os.path.exists(item):
-                os.remove(item)
-        for item in unaligned_s.split(","):
-            if os.path.exists(item):
-                os.remove(item)
+    print("Translating, filtering and merging sub-alignments")
+    agar_diff_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                  'agar_diff')  # get path to the trans2genome that was compiled with the package
+    agar_diff_cmd = [agar_diff_path,
+                     "-t", os.path.abspath(cur_tmp) + "/stage1_transcriptome.sam",
+                     "-g", os.path.abspath(cur_tmp) + "/sample.genome.sam",
+                     "-x", os.path.abspath(args.db) + "/db",
+                     "-o", args.output,
+                     "-p", str(args.threads)]
+    if args.mf:
+        agar_diff_cmd.append("-m")
+    if args.abunds is not None:
+        agar_diff_cmd.extend(["-a", args.abunds])
+    if args.all:
+        print("all enabled")
+        agar_diff_cmd.extend(["-l"])
 
-    print("merging all sub-alignments")
-    merge_cmd = ["samtools", "merge", "-f",
-                 "-@", args.threads,
-                 args.output,
-                 os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam"]
-    if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans_second.locus.sam") and args.locus:
-        merge_cmd.append(os.path.abspath(cur_tmp) + "/sample.trans_second.locus.sam")
+    print(" ".join(agar_diff_cmd))
 
-    if os.path.exists(os.path.abspath(cur_tmp) + "/sample.trans2genome_second.sam"):
-        merge_cmd.append(os.path.abspath(cur_tmp) + "/sample.trans2genome_second.sam")
+    stage3_translate_fh = open(os.path.abspath(cur_tmp) + "/stage3_translate.tmp", "w+")
+    translate_process = subprocess.Popen(agar_diff_cmd, stdin=transcriptome_process.stdout,
+                                         stderr=stage3_translate_fh)
+    translate_process.wait()
 
-    merge_cmd.append(os.path.abspath(cur_tmp) + "/sample.genome.sam")
-
-    stage5_merge_fh = open(os.path.abspath(cur_tmp) + "/stage5_merge.tmp", "w+")
-    if len(merge_cmd) > 6:
-        start_merge = time.time()
-        print(merge_cmd)
-        subprocess.call(merge_cmd, stderr=stage5_merge_fh)
-        stage5_merge_fh.close()
-        if args.verbose:
-            with open(os.path.abspath(cur_tmp) + "/stage5_merge.tmp", "r") as inFP:
-                for line in inFP.readlines():
-                    print(line.rstrip("\n"))
-        end_merge = time.time()
-        print("Merge time: "+str(datetime.timedelta(seconds=int(end_merge-start_merge))))
-    else:
-        if os.path.exists(os.path.abspath(cur_tmp) + "/sample.genome.sam") and not args.keep:
-            os.remove(os.path.abspath(cur_tmp) + "/sample.genome.sam")
-        os.rename(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam", args.output)
-        if not args.keep:
-            os.remove(os.path.abspath(cur_tmp) + "/sample.trans2genome_first.bam")
+    stage3_translate_fh.close()
+    if args.verbose:
+        with open(os.path.abspath(cur_tmp) + "/stage3_translate.tmp", "r") as inFP:
+            for line in inFP.readlines():
+                print(line.rstrip("\n"))
 
     if args.log:
         parse_logs(cur_tmp, start_time, final_fname)
@@ -680,4 +536,4 @@ def main(args):
         shutil.rmtree(os.path.abspath(cur_tmp))
 
     end_total = time.time()
-    print("Total time elapsed: "+str(datetime.timedelta(seconds=int(end_total-start_total))))
+    print("Total time elapsed: " + str(datetime.timedelta(seconds=int(end_total - start_total))))

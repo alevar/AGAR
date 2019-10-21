@@ -99,19 +99,31 @@ void Indexer::add_to_geneMap(GffObj &p_trans){
     int nst=p_trans.start;
     int nen=p_trans.end;
     char* geneID=p_trans.getGeneID();
-    if(geneID==nullptr){
-        geneID=p_trans.getGeneName();
-        if(geneID==nullptr){
-            std::cerr<<"@ERROR::wrong geneID: "<<p_trans.gseq_id<<"\t"<<p_trans.getID()<<std::endl;
-            exit(1);
+    char* geneName=p_trans.getGeneName();
+    if(geneID==nullptr && geneName==nullptr){
+        std::cerr<<"@ERROR::wrong gene: "<<p_trans.gseq_id<<"\t"<<p_trans.getID()<<std::endl;
+        exit(1);
+    }
+    else if(geneID==nullptr){
+        std::cerr<<"no gene id found"<<std::endl;
+        exit(-1);
+    }
+    else if(geneName==nullptr){
+        std::cerr<<"no gene name found"<<std::endl;
+        exit(-1);
+    }
+    else{
+        // map ID to name
+        this->gid2name.insert(std::make_pair(std::string(geneID),std::string(geneName)));
+        this->gname2id.insert(std::make_pair(std::string(geneName),std::string(geneID)));
+
+        exists_cur_gene = this->geneMap.insert(std::make_pair(std::string(geneID),Gene(this->curGeneID,p_trans)));
+        if(!exists_cur_gene.second){ // the key did exist - update start and end and add new exons
+            exists_cur_gene.first->second.add_transcript(p_trans);
         }
-    }
-    exists_cur_gene = this->geneMap.insert(std::make_pair(std::string(geneID),Gene(this->curGeneID,p_trans)));
-    if(!exists_cur_gene.second){ // the key did exist - update start and end and add new exons
-        exists_cur_gene.first->second.add_transcript(p_trans);
-    }
-    else{ // saw a new gene, so need to create a new identifier
-        this->curGeneID++;
+        else{ // saw a new gene, so need to create a new identifier
+            this->curGeneID++;
+        }
     }
 }
 
@@ -140,6 +152,8 @@ void Indexer::make_transcriptome(){
         // associated with it. Skip it.
         if (contigTransMap_.find(cur_contig.id_) ==
             contigTransMap_.end()){
+            // no transcripts are found - contig needs to be added at the end of the BAM header just in case
+            this->id_to_ref_no_trans.insert(std::make_pair(cur_contig.id_,cur_contig.seq_.size()));
             continue;
         }
 
@@ -178,13 +192,18 @@ void Indexer::make_transcriptome(){
             tlst << out_rec.id_ << '\t' << out_rec.desc_ << std::endl;
             tlst.flush();
             tgmap << trans_idx <<"\t"<<found_gene->second.get_locid()<<std::endl;
-            gnamemap<<found_gene->second.get_locid()<<"\t"<<p_trans->getGeneID()<<std::endl;
             tnamemap<<trans_idx<<"\t"<<p_trans->getID()<<std::endl;
             fastaWriter.write(out_rec);
         }
     }
+    // TODO: include reverse strand in the multimpper index - needs to be handled correctly when evaluating multimappers
+    //     also needs to be reflected in the flags when performing evaluation
     tlst.close();
     tgmap.close();
+    for(auto& gv : this->geneMap){
+        gnamemap<<gv.second.get_locid()<<"\t"<<gv.first<<std::endl;
+    }
+    gnamemap.close();
     std::cerr<<"@LOG::done parsing transcriptome"<<std::endl;
 
     std::cerr<<"@LOG::writing gene information"<<std::endl;
@@ -271,6 +290,10 @@ void Indexer::save_header() {
         }
         prev_id = v.first;
         genome_headerfp<<"@SQ\tSN:"<<v.second.first<<"\tLN:"<<v.second.second<<std::endl;
+    }
+    // now append contigs with no known transcripts to the end of the header
+    for(auto &v : this->id_to_ref_no_trans){
+        genome_headerfp<<"@SQ\tSN:"<<v.first<<"\tLN:"<<v.second<<std::endl;
     }
     // PG is added using the arguments from the execution of trans2genome during the conversion
     genome_headerfp.close();

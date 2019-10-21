@@ -911,9 +911,6 @@ public:
                 // for this we need the uniq abundances which determine base likelihood
                 // as well as current assignments of multimappers
                 abunds.push_back(loci[(this->ii+mp.first)->first.locus].get_abund());
-                if(loci[(this->ii+mp.first)->first.locus].get_locid()==15206){
-                    std::cout<<"found"<<std::endl;
-                }
                 total += abunds.back();
             }
 
@@ -933,26 +930,85 @@ public:
         }
     }
 
-    int process_pos_pair(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){
+    int process_pos_no_abund(Position& pos,Loci& loci,std::vector<Position>& pos_res){
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
-            return 0;
+            std::cerr<<"should never happen since this function only get's called for valid multimappers"<<std::endl;
+            exit(-1);
         }
-        this->ltf_mate = this->lookup_table.find(pos_mate);
-        if(this->ltf_mate == this->lookup_table.end()){ // position is not a multimapper
-            return 0;
-        }
-
         else{ // multimappers exist - need to evaluate
             std::vector<double> uniq,multi,tmp_res,res; // holds pid-corrected abundances
             double utotal=0,mtotal=0,rtotal=0;
 
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
+            int offset = this->ltf->second;
+            int cur_num_multi = get_block_size();
+            copy_current(pos_res);
+            return pos_res.size(); // done
+        }
+    }
+
+    int process_pos_pair(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){
+        std::vector<double> uniq,multi,tmp_res,res; // holds pid-corrected abundances
+        double utotal=0,mtotal=0,rtotal=0;
+        int idx=0,idx_mate=0; // indices help us keep track of the positions within multimapper blocks
+        int locus_index = 0; // indicates the position within block of the current locus
+
+        std::vector<std::pair<int,int>> multi_pairs; // holds offsets of the correct paired positions
+
+        this->ltf = this->lookup_table.find(pos);
+        this->ltf_mate = this->lookup_table.find(pos_mate);
+        if(this->ltf == this->lookup_table.end() && this->ltf_mate == this->lookup_table.end()){ // pair is not a multimapper
+            return 0;
+        }
+        else if(this->ltf == this->lookup_table.end()){
+            // get multimappers to the mate and check if compatible with the current
+            // just get all multimappers for the multimapping position
+            std::vector<Position> tmp_pos;
+            process_pos_no_abund(pos_mate,loci,tmp_pos);  // TODO: continued - ideally the likelihood estimation will be a separate function after refactoring - for now will create another duplicate of process_pos
+            // now need to iterate and find valid pairs given
+            for(auto& v : tmp_pos){
+                if(v.locus == pos.locus && std::abs((int)v.start - (int)pos.start) < this->fraglen){ // valid pair // TODO: set fragment length based on the precomputed distribution
+                    pos_res.push_back(pos);
+                    pos_res_mate.push_back(v);
+                }
+            }
+            if(pos_res_mate.empty()){
+                return 0;
+                // TODO: currently this function does not guarantee that the original pair is preserved - it may still be discarded due to the fraglen distribution. However, it should guarantee it is returned or processed somehow else
+            }
+            if(this->all_multi){ // just output the entire block
+                remove_strand_duplicates_pair(pos_res,pos_res_mate);
+                return pos_res_mate.size(); // done
+            }
+            // TODO: does not do abundance estimation at the moment - need done
+        }
+        else if(this->ltf_mate == this->lookup_table.end()){
+            // get multimappers to the mate and check if compatible with the current
+            // just get all multimappers for the multimapping position
+            std::vector<Position> tmp_pos;
+            process_pos_no_abund(pos,loci,tmp_pos); // TODO: continued - ideally the likelihood estimation will be a separate function after refactoring - for now will create another duplicate of process_pos
+            // now need to iterate and find valid pairs given
+            for(Position v : tmp_pos){
+                if(v.locus == pos_mate.locus && std::abs((int)v.start - (int)pos_mate.start) < this->fraglen){ // valid pair // TODO: set fragment length based on the precomputed distribution
+                    pos_res_mate.push_back(pos_mate);
+                    pos_res.push_back(v);
+                }
+            }
+            if(pos_res.empty()){
+                return 0;
+                // TODO: currently this function does not guarantee that the original pair is preserved - it may still be discarded due to the fraglen distribution. However, it should guarantee it is returned or processed somehow else
+            }
+            if(this->all_multi){ // just output the entire block
+                remove_strand_duplicates_pair(pos_res,pos_res_mate);
+                return pos_res_mate.size(); // done
+            }
+            // TODO: does not do abundance estimation at the moment - need done
+        }
+        else{ // multimappers exist - need to evaluate
+            this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
             this->ii_mate = this->index.begin()+this->ltf_mate->second; // get iterator to the start of a multimapping block in the array
             // here we rely on the sorted order of the multimappers in the index, which guarantees that multimappers on the same locus will appear close by
-            int idx=0,idx_mate=0; // indices help us keep track of the positions within multimapper blocks
-            int locus_index = 0; // indicates the position within block of the current locus
-            std::vector<std::pair<int,int>> multi_pairs; // holds offsets of the correct paired positions
             while(true){
                 this->ii_mate = this->index.begin()+this->ltf_mate->second+locus_index; // reset iterator to the beginning
                 idx_mate = locus_index;
@@ -999,7 +1055,6 @@ public:
                 remove_strand_duplicates_pair(pos_res,pos_res_mate);
                 return cur_num_multi; // done
             }
-            bool found = false;
             for(auto & mp: multi_pairs){
                 // first need to compute expected values
                 // for this we need the uniq abundances which determine base likelihood
@@ -1008,10 +1063,6 @@ public:
                 utotal+=uniq.back();
                 multi.push_back(loci.get_abund_total((this->ii+mp.first)->first.locus));
                 mtotal+=multi.back();
-                if(loci[(this->ii+mp.first)->first.locus].get_locid()==15206){
-                    std::cout<<"found"<<std::endl;
-                    found = true;
-                }
             }
 
             // TODO: manually count the reads  - where they come from and which ones are multimappers
@@ -1034,10 +1085,6 @@ public:
                 res.push_back(v/rtotal);
             }
 
-            if(found){
-                std::cout<<"found2"<<std::endl;
-            }
-
             // now need to make the decision which is best
             int pos_idx = this->get_likely(res,0.0,1.0);
             // now follow the iterator to get the actual position object which corresponds to the selected item
@@ -1046,7 +1093,6 @@ public:
             int offset_mate = multi_pairs[pos_idx].second;
             pos_res.push_back((this->index.begin()+this->ltf->second+offset)->first);
             pos_res_mate.push_back((this->index.begin()+this->ltf_mate->second+offset_mate)->first);
-//            std::cout<<"getting likely pair"<<std::endl;
             return cur_num_multi;
         }
     }

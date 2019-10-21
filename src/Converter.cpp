@@ -872,6 +872,9 @@ void Converter::convert_coords(){
     bool first = false;
 
     while(sam_read1(al,al_hdr,curAl)>=0) { // only perfom if unaligned flag is set to true
+        if(std::strcmp(bam_get_qname(curAl),"read418248/rna-NR_046294.1;mate1:1739-1839;mate2:2138-2238")==0){
+            std::cout<<"found"<<std::endl;
+        }
         add_T2G_aux(curAl); // add T2G tag
         if(!first){ // only on first iteration
             bam_copy1(mate,curAl);
@@ -1246,7 +1249,7 @@ void Converter::_process_pair(bam1_t *curAl,bam1_t* mate){
     if(!this->k1_mode){
         int ret_val = collapse_genomic(curAl,mate,cigar_hash,mate_cigar_hash);
         if(!ret_val) {
-            bam_destroy1(mate);
+//            bam_destroy1(mate);
             return;
         }
     }
@@ -1555,6 +1558,7 @@ size_t Converter::process_read(bam1_t *curAl,Position& cur_pos,int cigars[MAX_CI
     cur_pos.set_start(read_start);
     cur_pos.set_locus(p_trans.get_geneID());
     cur_pos.set_strand(p_trans.strand);
+    cur_pos.set_trans(target_name);
 
     // secondly build a new cigar string
     int cur_cigar_full[MAX_CIGARS];
