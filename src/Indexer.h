@@ -61,6 +61,7 @@ private:
 
     void transcript_map();
     std::string get_exonic_sequence(GffObj& p_trans, FastaRecord& rec, std::string& coords,int transID);
+    std::string get_rc_exonic_sequence(GffObj& p_trans, FastaRecord& rec, std::string& coords,int transID);
     void add_to_geneMap(GffObj &p_trans);
     void add_to_refMap(GffObj &p_trans,int contig_len);
     void save_header();

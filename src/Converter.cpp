@@ -609,6 +609,14 @@ void Converter::add_T2G_aux(bam1_t *curAl){
     bam_aux_append(curAl,"ZT",'A',1,(const unsigned char*)"+");
 }
 
+void add_revcmp_tag(bam1_t* curAl){ // add tag that the alignment is reverse complemented from a multimapper
+    uint8_t* ptr_op=bam_aux_get(curAl,"ZR");
+    if(ptr_op){
+        bam_aux_del(curAl,ptr_op);
+    }
+    bam_aux_append(curAl,"ZR",'A',1,(const unsigned char*)"+");
+}
+
 // TODO: include fragment length in the precomputation
 // TODO: include fasta/fastq detection in the precomputation
 // TODO: repetitive regions result in spikes of coverage due to the multimapping - need to think of how to deal with them
@@ -1317,6 +1325,7 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
                                           int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate) {
     int unique;
     std::vector<Position> res_pos,res_pos_mate; // holds the results of the multimapper evaluation
+    bool revtag1,revtag2;
     if(!this->multi){ // no need to look for multimappers at all
         // just proceed to the evaluation
         unique = 0;// TODO: is this really set to 0 or should it be 1?
@@ -1324,10 +1333,10 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
     else if(!this->abund){ // compute abundance dynamically
 //        std::cout<<"\n================\n"<<std::endl;
 //        std::cout<<bam_get_qname(curAl)<<std::endl;
-        unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
+        unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate,revtag1,revtag2);
     }
     else{ // rely on the salmon abundance
-        unique = this->mmap.process_pos_pair_precomp(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
+        unique = this->mmap.process_pos_pair_precomp(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate,revtag1,revtag2);
     }
 //    std::cerr<<"eval multi_pair: "<<unique<<std::endl;
     if(res_pos.empty()){ // increment abundance
@@ -1352,7 +1361,13 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
         change_nh_flag(curAl,res_pos.size());
         change_nh_flag(curAl_mate,res_pos.size());
         bool prim = true;
+        bool al1_rc = curAl->core.flag&0x10;
+        bool al2_rc = curAl_mate->core.flag&0x10;
+        int orig_flag1 = curAl->core.flag;
+        int orig_flag2 = curAl_mate->core.flag;
         for(int pos_idx=0;pos_idx<res_pos.size();pos_idx++){
+            curAl->core.flag = orig_flag1;
+            curAl_mate->core.flag = orig_flag2;
             // increment total abundances of the locus to which the new cur_pos belongs
             if(!this->abund) {
                 this->loci.add_read_multi(res_pos[pos_idx].locus);
@@ -1384,9 +1399,11 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
 
             if(res_pos[pos_idx].revcmp){ // need to reverse complement the sequence
                 // TODO: implement reverse complement of the sequence
+                add_revcmp_tag(curAl);
             }
             if(res_pos_mate[pos_idx].revcmp){ // need to reverse complement the sequence
                 // TODO: implement reverse complement of the sequence
+                add_revcmp_tag(curAl_mate);
             }
 
             add_multi_tag(curAl,res_pos[pos_idx].transID);
@@ -1407,6 +1424,29 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
             num_cigars = 0,num_cigars_mate = 0;
             memset(cigars, 0, MAX_CIGARS);
             memset(cigars_mate, 0, MAX_CIGARS);
+
+            // check if the position is a reverse complement and change accordingly
+            if(res_pos[pos_idx].revcmp != revtag1){
+                add_revcmp_tag(curAl);
+                this->mmap.reverse_al(curAl);
+                // change mate reverse flag to the reverse of whatever it currently is
+                if(al1_rc){ // set as not reversed
+                    curAl_mate->core.flag &= ~BAM_FMREVERSE;
+                }
+                else { // otherwise set as reversed
+                    curAl_mate->core.flag |= BAM_FMREVERSE;
+                }
+            }
+            if(res_pos_mate[pos_idx].revcmp != revtag2){
+                add_revcmp_tag(curAl_mate);
+                this->mmap.reverse_al(curAl_mate);
+                if(al2_rc){ // if mate is reversed - set as not reversed
+                    curAl->core.flag &= ~BAM_FMREVERSE;
+                }
+                else { // otherwise set as reversed
+                    curAl->core.flag |= BAM_FMREVERSE;
+                }
+            }
 
             int ret_val = Converter::convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,res_pos[pos_idx]);
             if (!ret_val) {
@@ -1444,15 +1484,16 @@ int Converter::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posit
 int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars){
     int unique;
     std::vector<Position> res_pos; // holds the results of the multimapper evaluation
+    bool revtag;
     if(!this->multi){ // no need to output multimappers
         // just continue if multimappers are not being asked for
         unique = 0; // TODO: is this really set to 0 or should it be set to 1
     }
     else if(!this->abund){ // compute abundance dynamically
-        unique = this->mmap.process_pos(cur_pos,this->loci,res_pos);
+        unique = this->mmap.process_pos(cur_pos,this->loci,res_pos,revtag);
     }
     else{ // compute abundance dynamically
-        unique = this->mmap.process_pos_precomp(cur_pos,this->loci,res_pos);
+        unique = this->mmap.process_pos_precomp(cur_pos,this->loci,res_pos,revtag);
     }
     if(res_pos.empty()){ // increment abundance
         if(!this->abund){
@@ -1469,7 +1510,10 @@ int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[
     else{
         change_nh_flag(curAl,res_pos.size());
         bool prim = true;
+        bool al_rc = curAl->core.flag&0x10;
+        int orig_flag = curAl->core.flag;
         for(auto &v : res_pos){
+            curAl->core.flag = orig_flag;
             // increment total abundances of the locus to which the new cur_pos belongs - performed for each locus if multiple positions are reported (all or -k)
             if(!this->abund) {
                 this->loci.add_read_multi(v.locus);
@@ -1489,6 +1533,7 @@ int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[
 
             if(v.revcmp){ // need to reverse complement the sequence
                 // TODO: implement reverse complement of the sequence
+                add_revcmp_tag(curAl);
             }
 
             curAl->core.pos = v.start-1; // assign new position
@@ -1514,6 +1559,13 @@ int Converter::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[
             else{ // set as secondary alignment
                 curAl->core.flag |= BAM_FSECONDARY;
             }
+
+            // check if the position is a reverse complement and change accordingly
+            if(v.revcmp != revtag){
+                add_revcmp_tag(curAl);
+                this->mmap.reverse_al(curAl);
+            }
+
             this->finish_read(curAl);
             prim = false;
         }

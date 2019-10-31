@@ -23,6 +23,7 @@
 
 #include "gff.h"
 #include <htslib/sam.h>
+#include <htslib/kstring.h>
 
 class PID{
 public:
@@ -394,7 +395,19 @@ private:
 
 class Position{
 public:
-    Position() = default;
+    uint8_t num_elems = 0;
+    uint32_t chr=0,strand=0,start=0,locus=0;
+    uint32_t transID=0; // transID can be any transcript which can describe the position to which it belongs; it does not participate in the equality computation
+    std::vector<uint32_t> moves{}; // simplified CIGAR describing the intron-exon coverage of the given kmer
+    bool revcmp=false;
+
+    Position(){
+        num_elems = 0;
+        chr=0,strand=0,start=0,locus=0;
+        transID=0; // transID can be any transcript which can describe the position to which it belongs; it does not participate in the equality computation
+        moves.resize(0); // simplified CIGAR describing the intron-exon coverage of the given kmer
+        revcmp=false;
+    };
     Position(uint32_t chr,uint32_t strand,uint32_t start,uint32_t locus,uint32_t transID,bool revcmp){
         this->chr = chr;
         this->strand = strand;
@@ -410,12 +423,12 @@ public:
     ~Position() = default;
 
     void add_move(uint32_t move){this->moves.push_back(move);this->num_elems++;}
-    void set_chr(uint32_t chr){this->chr=chr;this->num_elems++;}
-    void set_strand(uint32_t strand){this->strand=strand;this->num_elems++;}
-    void set_start(uint32_t start){this->start=start;this->num_elems++;}
-    void set_locus(uint32_t locus){this->locus=locus;this->num_elems++;}
+    void set_chr(uint32_t new_chr){this->chr=new_chr;this->num_elems++;}
+    void set_strand(uint32_t new_strand){this->strand=new_strand;this->num_elems++;}
+    void set_start(uint32_t new_start){this->start=new_start;this->num_elems++;}
+    void set_locus(uint32_t locID){this->locus=locID;this->num_elems++;}
     void set_trans(uint32_t trans){this->transID=trans;this->num_elems++;}
-    void set_rev(bool rev_tag){this->revcmp;this->num_elems++;}
+    void set_rev(bool rev_tag){this->revcmp=rev_tag;this->num_elems++;}
 
     static bool moves_eq(const std::vector<uint32_t>& m1,const std::vector<uint32_t>& m2) { // m1 must be smaller or equal to m2
         for(int i=0;i<m1.size();i++){
@@ -457,30 +470,68 @@ public:
     }
 
     bool operator<(const Position& m) const{
-        return this->chr<m.chr ||
-               this->strand<m.strand ||
-               this->start<m.start ||
-               this->moves<m.moves;
+        if(this->chr<m.chr){
+            return true;
+        }
+        if(this->chr>m.chr){
+            return false;
+        }
+        if(this->strand<m.strand){
+            return true;
+        }
+        if(this->strand>m.strand){
+            return false;
+        }
+        if(this->start<m.start){
+            return true;
+        }
+        if(this->start>m.start){
+            return false;
+        }
+        if(this->moves<m.moves){
+            return true;
+        }
     }
 
     bool lt_noStrand(const Position& rhs) const{
-        return this->chr<rhs.chr ||
-               this->start<rhs.start ||
-               this->moves<rhs.moves;
+        if(this->chr<rhs.chr){
+            return true;
+        }
+        if(this->chr>rhs.chr){
+            return false;
+        }
+        if(this->start<rhs.start){
+            return true;
+        }
+        if(this->start>rhs.start){
+            return false;
+        }
+        if(this->moves<rhs.moves){
+            return true;
+        }
     }
 
     void clear(){
         this->moves.clear();
         this->num_elems = 0;
+        this->revcmp = false;
     }
 
     uint8_t size(){return this->num_elems;}
 
-    uint8_t num_elems = 0;
-    uint32_t chr,strand,start,locus;
-    uint32_t transID; // transID can be any transcript which can describe the position to which it belongs; it does not participate in the equality computation
-    std::vector<uint32_t> moves; // simplified CIGAR describing the intron-exon coverage of the given kmer
-    bool revcmp;
+    Position(const Position &p2) {
+        num_elems = p2.num_elems;
+        chr = p2.chr;
+        strand = p2.strand;
+        start = p2.start;
+        locus = p2.locus;
+        transID = p2.transID;
+        for(auto m : p2.moves){
+            this->add_move(m);
+        }
+//        copy(p2.moves.begin(), p2.moves.end(), back_inserter(moves));
+        this->revcmp = p2.revcmp;
+    }
 };
 
 inline void hash_combine(std::size_t& seed) { }
@@ -579,38 +630,6 @@ public:
     size_t operator()(const Position & p1,const Position & p2) const {
         return p1.chr==p2.chr &&
                p1.start==p2.start &&
-               Position::moves_eq(p1.moves,p2.moves);
-        // p1.moves==p2.moves;
-    }
-};
-
-struct PosLe_withLoc_noStrand {
-public:
-    size_t operator()(const Position & p1,const Position & p2) const {
-        return p1.chr<p2.chr ||
-               p1.start<p2.start ||
-               p1.locus<p2.locus ||
-               Position::moves_eq(p1.moves,p2.moves);
-        // p1.moves==p2.moves;
-    }
-};
-
-struct PosLe_noLoc {
-public:
-    size_t operator()(const Position & p1,const Position & p2) const {
-        return p1.chr<p2.chr ||
-               p1.strand<p2.strand ||
-               p1.start<p2.start ||
-               Position::moves_eq(p1.moves,p2.moves);
-        // p1.moves==p2.moves;
-    }
-};
-
-struct PosLe_noLoc_noStrand {
-public:
-    size_t operator()(const Position & p1,const Position & p2) const {
-        return p1.chr<p2.chr ||
-               p1.start<p2.start ||
                Position::moves_eq(p1.moves,p2.moves);
         // p1.moves==p2.moves;
     }
@@ -732,7 +751,7 @@ public:
     }
 
     // copies the multimappers of the block pointed to by the current iterator
-    void copy_current(std::vector<Position>& pos_res){
+    void copy_current(std::vector<Position>& pos_res){ // TODO: is there a way to remove strand duplicates here?
         while(this->ii->second){ // iterate until the end of the block
             pos_res.push_back(this->ii->first);
             this->ii++; // step to the next position
@@ -742,12 +761,13 @@ public:
 
     // TODO: need to refactor the process_pos functions
     //     mainly would prefer having a single function that handles all cases and is no longer redundant
-    int process_pos_precomp(Position& pos,Loci& loci,std::vector<Position>& pos_res){ // using precomputed abundance values only
+    int process_pos_precomp(Position& pos,Loci& loci,std::vector<Position>& pos_res,bool& revtag){ // using precomputed abundance values only
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
             return 0;
         }
         else{ // multimappers exist - need to evaluate
+            revtag = this->ltf->first.revcmp;
             // if all mode - need to keep a bool and then just iterate through the entire block and output all values into a vector of positions which can be accessed by the converter and written to the alignment
             std::vector<double>abunds,res; // holds pid-corrected abundances
             double total = 0;
@@ -786,12 +806,13 @@ public:
     // given a position generated from an alignment this function searches for multimapper
     // and returns true if the position is not multimapping or false if it is multimapping
     // for multimappers, it also replaces the data in the position with a position selected by likelihood
-    int process_pos(Position& pos,Loci& loci,std::vector<Position>& pos_res){
+    int process_pos(Position& pos,Loci& loci,std::vector<Position>& pos_res,bool& revtag){
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
             return 0;
         }
         else{ // multimappers exist - need to evaluate
+            revtag = this->ltf->first.revcmp;
             std::vector<double> uniq,multi,tmp_res,res; // holds pid-corrected abundances
             double utotal=0,mtotal=0,rtotal=0;
 
@@ -845,8 +866,8 @@ public:
         }
     }
 
-    int process_pos_pair_precomp(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){ // using precomputed abundance values only
-        this->ltf = this->lookup_table.find(pos);
+    int process_pos_pair_precomp(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate,bool& revtag1,bool& revtag2){ // using precomputed abundance values only
+        this->ltf = this->lookup_table.find(pos); // TODO: needs to be changed in order to produce multimappers (like the function below) when only one mate is a multimapper
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
             return 0;
         }
@@ -854,8 +875,9 @@ public:
         if(this->ltf_mate == this->lookup_table.end()){ // position is not a multimapper
             return 0;
         }
-
         else{ // multimappers exist - need to evaluate
+            revtag1 = this->ltf->first.revcmp;
+            revtag2 = this->ltf_mate->first.revcmp;
             std::vector<double> abunds,res; // holds pid-corrected abundances
             double total=0;
 
@@ -935,13 +957,14 @@ public:
         }
     }
 
-    int process_pos_no_abund(Position& pos,Loci& loci,std::vector<Position>& pos_res){
+    int process_pos_no_abund(Position& pos,Loci& loci,std::vector<Position>& pos_res,bool& revtag){
         this->ltf = this->lookup_table.find(pos);
         if(this->ltf == this->lookup_table.end()){ // position is not a multimapper
             std::cerr<<"should never happen since this function only get's called for valid multimappers"<<std::endl;
             exit(-1);
         }
         else{ // multimappers exist - need to evaluate
+            revtag = this->ltf->first.revcmp;
             std::vector<double> uniq,multi,tmp_res,res; // holds pid-corrected abundances
             double utotal=0,mtotal=0,rtotal=0;
 
@@ -953,7 +976,7 @@ public:
         }
     }
 
-    int process_pos_pair(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){
+    int process_pos_pair(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate,bool& revtag1, bool& revtag2){
         std::vector<double> uniq,multi,tmp_res,res; // holds pid-corrected abundances
         double utotal=0,mtotal=0,rtotal=0;
         int idx=0,idx_mate=0; // indices help us keep track of the positions within multimapper blocks
@@ -966,11 +989,13 @@ public:
         if(this->ltf == this->lookup_table.end() && this->ltf_mate == this->lookup_table.end()){ // pair is not a multimapper
             return 0;
         }
-        else if(this->ltf == this->lookup_table.end()){
+        if(this->ltf == this->lookup_table.end()){
+            revtag1 = false; // doesn'tmatter since no multimappers exist
+            revtag2 = this->ltf_mate->first.revcmp;
             // get multimappers to the mate and check if compatible with the current
             // just get all multimappers for the multimapping position
             std::vector<Position> tmp_pos;
-            process_pos_no_abund(pos_mate,loci,tmp_pos);  // TODO: continued - ideally the likelihood estimation will be a separate function after refactoring - for now will create another duplicate of process_pos
+            process_pos_no_abund(pos_mate,loci,tmp_pos,revtag2);  // TODO: continued - ideally the likelihood estimation will be a separate function after refactoring - for now will create another duplicate of process_pos
             // now need to iterate and find valid pairs given
             for(auto& v : tmp_pos){
                 if(v.locus == pos.locus && std::abs((int)v.start - (int)pos.start) < this->fraglen){ // valid pair // TODO: set fragment length based on the precomputed distribution
@@ -989,10 +1014,12 @@ public:
             // TODO: does not do abundance estimation at the moment - need done
         }
         else if(this->ltf_mate == this->lookup_table.end()){
+            revtag1 = this->ltf->first.revcmp;
+            revtag2 = false; // doesn't matter since no multimappers exist
             // get multimappers to the mate and check if compatible with the current
             // just get all multimappers for the multimapping position
             std::vector<Position> tmp_pos;
-            process_pos_no_abund(pos,loci,tmp_pos); // TODO: continued - ideally the likelihood estimation will be a separate function after refactoring - for now will create another duplicate of process_pos
+            process_pos_no_abund(pos,loci,tmp_pos,revtag1); // TODO: continued - ideally the likelihood estimation will be a separate function after refactoring - for now will create another duplicate of process_pos
             // now need to iterate and find valid pairs given
             for(Position v : tmp_pos){
                 if(v.locus == pos_mate.locus && std::abs((int)v.start - (int)pos_mate.start) < this->fraglen){ // valid pair // TODO: set fragment length based on the precomputed distribution
@@ -1011,6 +1038,8 @@ public:
             // TODO: does not do abundance estimation at the moment - need done
         }
         else{ // multimappers exist - need to evaluate
+            revtag1 = this->ltf->first.revcmp;
+            revtag2 = this->ltf_mate->first.revcmp;
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
             this->ii_mate = this->index.begin()+this->ltf_mate->second; // get iterator to the start of a multimapping block in the array
             // here we rely on the sorted order of the multimappers in the index, which guarantees that multimappers on the same locus will appear close by
@@ -1028,9 +1057,9 @@ public:
                         if(locus_found){ // exceeded current locus - can now terminate
                             break;
                         }
-                        else { // can reset locus index to skip iterations in future
-                            locus_index++;
-                        }
+//                        else { // can reset locus index to skip iterations in future
+//                            locus_index++;
+//                        }
                     }
                     if(!this->ii_mate->second){
                         break;
@@ -1176,6 +1205,11 @@ public:
                 tmp.insert(tmp.end(), kv.second.begin(), kv.second.end());
                 std::sort(tmp.begin(), tmp.end(),[](Position const& lhs, Position const& rhs) { return lhs > rhs; });
 
+                this->final_pcords_it = this->final_pcords.insert(tmp);
+                if(!this->final_pcords_it.second){ // only output those which are not in the pcoords set (have already been written out)
+                    continue;
+                }
+
                 for(auto &cv : tmp){
                     res.append(cv.get_strg());
                     res+='\t';
@@ -1250,6 +1284,88 @@ public:
         return seq;
     }
 
+    int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
+    void reverse_al(bam1_t* curAl){
+        // first flip the corresponding flags
+        // regarding the "mate reversed" flag - for single and discordant reads don't do anything TODO:: need to document this and make explicit
+        //    but for paired it should be set accordingly - handled by the duplicated "_pair" function
+        if(curAl->core.flag & 0x10){ // if is reversed - set as not reversed
+            curAl->core.flag &= ~BAM_FREVERSE;
+        }
+        else { // otherwise set as reversed
+            curAl->core.flag |= BAM_FREVERSE;
+        }
+        // now need to get the string and reverse it
+        int i=0;
+        int max_buf_rc = 0;
+        int32_t qlen = curAl->core.l_qseq;
+        int8_t *buf_rc = NULL;
+        if (max_buf_rc < qlen + 1) {
+            max_buf_rc = qlen + 1;
+            kroundup32(max_buf_rc);
+            buf_rc = static_cast<int8_t *>(realloc(buf_rc, max_buf_rc));
+            if (buf_rc == NULL) {
+                fprintf(stderr, "Out of memory");
+                exit(1);
+            }
+        }
+        uint8_t* seq = bam_get_seq(curAl);
+        for (i = 0; i < qlen; ++i) {
+            buf_rc[i] = bam_seqi(seq, i);
+        }
+        for (i = 0; i < qlen>>1; ++i) {
+            uint8_t t = seq_comp_table[buf_rc[qlen - 1 - i]];
+            buf_rc[qlen - 1 - i] = seq_comp_table[buf_rc[i]];
+            buf_rc[i] = t;
+        }
+        if (qlen&1){
+            buf_rc[i] = seq_comp_table[buf_rc[i]];
+        }
+        // now that we have the sequence we can put it back into the original memory
+        for(i=0;i<qlen;i+=2){
+            *seq = (buf_rc[i]&0x0F)<<4 | (buf_rc[i+1]&0x0F);
+            seq++;
+        }
+        if (qlen&1){
+            *seq = (buf_rc[qlen>>1]&0x0F)<<4;
+        }
+    }
+
+    // TODO: add_sequence second time to in order to get the reverse complement
+    //  only add sequence if already exist - but do not create new entries in the kmer table
+    //  this will avoid creating duplicates all together and ensure all matching reverse-complements are added
+    void add_rc_sequence(std::string& seq,GffObj &p_trans,uint32_t geneID,int transID){
+        GList<GffExon>& exon_list = p_trans.exons;
+
+        int el_pos = 0; // current position within the exon list
+        int exon_pos = 0;
+        std::string kmer = "",kmer_rc = ""; // currently evaluated kmer
+        GffExon *cur_exon = exon_list[el_pos];
+        for(int i=0;i<seq.size()-this->kmerlen+1;i++){ // iterate over all kmers in the sequence
+            kmer=seq.substr(i,this->kmerlen);
+            transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
+            kmer_rc=kmer;
+            kmer_rc = reverse(kmer_rc);
+            std::reverse(kmer_rc.begin(), kmer_rc.end());
+
+            Position p_rc(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos,geneID,transID,true); // initialize position and add information to it accordingly
+
+            std::unordered_map<std::string,pcord>::iterator kit_rc = this->kmer_coords.find(kmer_rc);
+            process_remaining(el_pos,exon_pos,p_rc,exon_list,cur_exon); // adds moves to the position object
+            if(kit_rc!=this->kmer_coords.end()){
+                this->pce_rc = kit_rc->second.insert(p_rc); // insert new completed position now
+            }
+
+            // reset_parameters
+            exon_pos++; // increment and evaluate
+            if(exon_pos+cur_exon->start > cur_exon->end){
+                exon_pos = 0;
+                el_pos++;
+                cur_exon = exon_list[el_pos];
+            }
+        }
+    }
+
     // given a full transcript sequence and the pointer to the transcript description (constituent exons)
     // get all kmers and coordinates and load them into the multimapper index
     void add_sequence(std::string& seq,GffObj &p_trans,uint32_t geneID,int transID){
@@ -1262,23 +1378,14 @@ public:
         for(int i=0;i<seq.size()-this->kmerlen+1;i++){ // iterate over all kmers in the sequence
             kmer=seq.substr(i,this->kmerlen);
             transform(kmer.begin(), kmer.end(), kmer.begin(), ::toupper);
-            kmer_rc=kmer;
-//            std::cout<<">"<<kmer<<std::endl;
-            kmer_rc = reverse(kmer_rc);
-            std::reverse(kmer_rc.begin(), kmer_rc.end());
-//            std::cout<<"<"<<kmer_rc<<std::endl;
 
             Position p(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos,geneID,transID,false); // initialize position and add information to it accordingly
-            Position p_rc(p_trans.gseq_id,(uint32_t)p_trans.strand,cur_exon->start+exon_pos,geneID,transID,true); // initialize position and add information to it accordingly
 
             this->kce = this->kmer_coords.insert(std::make_pair(kmer,pcord{}));
-            this->kce_rc = this->kmer_coords.insert(std::make_pair(kmer_rc,pcord{}));
 
             process_remaining(el_pos,exon_pos,p,exon_list,cur_exon); // adds moves to the position object
-            process_remaining(el_pos,exon_pos,p_rc,exon_list,cur_exon); // adds moves to the position object
 
             this->pce = this->kce.first->second.insert(p); // insert new completed position now
-            this->pce_rc = this->kce_rc.first->second.insert(p_rc); // insert new completed position now
 
             // reset_parameters
             exon_pos++; // increment and evaluate
@@ -1288,15 +1395,6 @@ public:
                 cur_exon = exon_list[el_pos];
             }
         }
-    }
-
-    bool lt_noStrand_pair(const std::pair<Position,Position>& lhs, const std::pair<Position,Position>& rhs) const{
-        return (lhs.first.chr <rhs.first.chr ||
-                lhs.first.start<rhs.first.start ||
-                lhs.first.moves<rhs.first.moves) || (lhs.second.chr  <rhs.second.chr ||
-                                                     lhs.second.start<rhs.second.start ||
-                                                     lhs.second.moves<rhs.second.moves);
-//        return lhs.first.lt_noStrand(rhs.first) || lhs.second.lt_noStrand(rhs.second);
     }
 
 private:
@@ -1309,7 +1407,7 @@ private:
         if(pos_res.size()<=1){
             return;
         }
-        // first sort positions by coordinates only (no locus or strand)
+
         std::sort(pos_res.begin(), pos_res.end(),[](Position const& lhs, Position const& rhs) { return lhs.lt_noStrand(rhs); });
 
         // next iterate through and replace any duplicates with a single entry
@@ -1521,7 +1619,7 @@ private:
                             trans = 10*trans + buffer[i] - '0';
                             break;
                         case 5:
-                            rev_tag = (bool)(10*trans+buffer[i] - '0');
+                            rev_tag = (bool)(buffer[i]-'0');
                             elem = Opt::TRANS;
                             pos.set_rev(rev_tag);
                             break;
@@ -1550,6 +1648,8 @@ private:
     typedef std::unordered_set<Position,PosHash_noLoc,PosEq_noLoc> pcord;
     std::pair<pcord::iterator,bool> pce,pce_rc;
     std::unordered_map<std::string,pcord> kmer_coords;
+    std::set<std::vector<Position>> final_pcords; // which pcords have already been written out
+    std::pair<std::set<std::vector<Position>>::iterator,bool> final_pcords_it;
     std::pair<std::unordered_map<std::string,pcord>::iterator,bool> kce,kce_rc;
 
     // now time to write the unique kmers for transcripts

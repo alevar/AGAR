@@ -39,6 +39,39 @@ std::string Indexer::get_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::
     return exon_seq;
 }
 
+std::string Indexer::get_rc_exonic_sequence(GffObj &p_trans,FastaRecord &rec, std::string& coords,int transID){
+    GList<GffExon>& exon_list = p_trans.exons;
+
+    std::string exon_seq;
+    size_t length=0;
+    coords.clear();
+    std::stringstream ss;
+
+    for (int i = 0; i < exon_list.Count(); ++i) {
+        GffExon& cur_exon = *(exon_list.Get(i));
+        length = (cur_exon.end+1) - cur_exon.start;
+
+        exon_seq += rec.seq_.substr(cur_exon.start - 1, length);
+        ss << ',' << cur_exon.start << '_' << cur_exon.end;
+    }
+
+    // get coordinates into the map
+    if (exon_seq.size()>=this->kmerlen and this->multi){ // sanity check for 0 and 1 base exons
+        this->found_gene = this->geneMap.find(std::string(p_trans.getGeneID()));
+        if(this->found_gene != this->geneMap.end()){
+            this->mmap.add_rc_sequence(exon_seq,p_trans,this->found_gene->second.get_locid(),transID);
+        }
+        else{
+            std::cerr<<"@ERROR::something went wrong with gene ID assignment"<<std::endl;
+            std::cerr<<"@ERROR::looking up: "<<p_trans.getGeneID()<<"\t"<<std::string(p_trans.getGeneID())<<std::endl;
+            exit(1);
+        }
+    }
+
+    coords = ss.str().substr(1);
+    return exon_seq;
+}
+
 Indexer::Indexer(std::string gtf_fname, std::string genome_fname,const std::string& out_fname, int kmerlen,bool multi){
     gtf_fname_ = gtf_fname;
     gtf_fhandle_ = fopen(gtf_fname_.c_str(), "r");
@@ -177,8 +210,6 @@ void Indexer::make_transcriptome(){
                 topTransID = std::stoi(out_rec.id_);
             }
             out_rec.desc_="";
-//            out_rec.desc_.append(p_trans->getID());
-//            out_rec.desc_.push_back(':');
             this->found_gene = this->geneMap.find(p_trans->getGeneID());
             if(this->found_gene == this->geneMap.end()) { // gene not found
                 std::cerr << "@ERROR::an error in GeneID ocurred" << std::endl;
@@ -196,6 +227,27 @@ void Indexer::make_transcriptome(){
             fastaWriter.write(out_rec);
         }
     }
+
+    FastaReader fastaReader4rc(genome_fname_);
+    FastaRecord cur_rc_contig;
+
+    while (fastaReader4rc.good()) {
+        fastaReader4rc.next(cur_rc_contig);
+
+        if (contigTransMap_.find(cur_rc_contig.id_) == contigTransMap_.end()){
+            continue;
+        }
+
+        p_contig_vec = contigTransMap_[cur_rc_contig.id_];
+
+        for (int trans_idx : *p_contig_vec) {
+            GffObj *p_trans = gtfReader_.gflst.Get(trans_idx);
+
+            std::string coordstr;
+            get_rc_exonic_sequence(*p_trans,cur_rc_contig, coordstr,trans_idx); // can ignore the return since already been written
+        }
+    }
+
     // TODO: include reverse strand in the multimpper index - needs to be handled correctly when evaluating multimappers
     //     also needs to be reflected in the flags when performing evaluation
     tlst.close();

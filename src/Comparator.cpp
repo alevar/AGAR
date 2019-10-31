@@ -433,6 +433,14 @@ void Comparator::add_T2G_aux(bam1_t *curAl){
     bam_aux_append(curAl,"ZT",'A',1,(const unsigned char*)"+");
 }
 
+void add_revcmp_tag(bam1_t* curAl){ // add tag that the alignment is reverse complemented from a multimapper
+    uint8_t* ptr_op=bam_aux_get(curAl,"ZR");
+    if(ptr_op){
+        bam_aux_del(curAl,ptr_op);
+    }
+    bam_aux_append(curAl,"ZR",'A',1,(const unsigned char*)"+");
+}
+
 int Comparator::write_remaining_both_pair(samFile* al,bam_hdr_t* al_hdr,bam1_t* curAl,bam1_t* mate,std::vector<bam1_t*> al_g_conc){
     if(al_g_conc.size()%2!=0){
         std::cerr<<"@ERROR:::Number of pairs is not even: "<<bam_get_qname(curAl)<<std::endl;
@@ -623,10 +631,6 @@ int Comparator::_process_pair(bam1_t *curAl,bam1_t* mate,bam_hdr_t* al_hdr,int p
     cigar_hash = process_read(curAl,cur_pos,cigars,num_cigars,al_hdr);
     mate_cigar_hash = process_read(mate,cur_pos_mate,cigars_mate,num_cigars_mate,al_hdr);
 
-    if(std::strcmp(bam_get_qname(curAl),"read4234734/rna-XM_006723946.2;mate1:1923-2023;mate2:2322-2422")==0){
-        std::cout<<"found"<<std::endl;
-    }
-
     int cur_num_multi = this->evaluate_multimappers_pair(curAl,mate,cur_pos,cur_pos_mate,cigars,cigars_mate,num_cigars,num_cigars_mate,plus_nm); // also finishes the read
     if(cur_num_multi>0){
         this->num_multi_pair++;
@@ -798,13 +802,14 @@ int Comparator::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
                                           int *cigars,int *cigars_mate,int &num_cigars,int &num_cigars_mate,int plus_nm) {
     int unique;
     std::vector<Position> res_pos,res_pos_mate; // holds the results of the multimapper evaluation
+    bool revtag1,revtag2;
     if(!this->abund){ // compute abundance dynamically
 //        std::cout<<"\n================\n"<<std::endl;
 //        std::cout<<bam_get_qname(curAl)<<std::endl;
-        unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
+        unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate,revtag1,revtag2);
     }
     else{ // rely on the salmon abundance
-        unique = this->mmap.process_pos_pair_precomp(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate);
+        unique = this->mmap.process_pos_pair_precomp(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate,revtag1,revtag2);
     }
 //    std::cerr<<"eval multi_pair: "<<unique<<std::endl;
     if(res_pos.empty()){ // increment abundance
@@ -838,15 +843,17 @@ int Comparator::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
         change_nh_flag(curAl,res_pos.size()+plus_nm);
         change_nh_flag(curAl_mate,res_pos.size()+plus_nm);
         bool prim = true;
+        bool al1_rc = curAl->core.flag&0x10;
+        bool al2_rc = curAl_mate->core.flag&0x10;
+        int orig_flag1 = curAl->core.flag;
+        int orig_flag2 = curAl_mate->core.flag;
         for(int pos_idx=0;pos_idx<res_pos.size();pos_idx++){
+            curAl->core.flag = orig_flag1;
+            curAl_mate->core.flag = orig_flag2;
             // increment total abundances of the locus to which the new cur_pos belongs
             if(!this->abund) {
                 this->loci.add_read_multi(res_pos[pos_idx].locus);
                 this->loci.add_read_multi(res_pos_mate[pos_idx].locus);
-            }
-
-            if(std::strcmp(bam_get_qname(curAl),"read4234734/rna-XM_006723946.2;mate1:1923-2023;mate2:2322-2422")==0){
-                print_cigar(curAl);
             }
 
             // first get the transcript
@@ -891,6 +898,29 @@ int Comparator::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
             memset(cigars, 0, MAX_CIGARS);
             memset(cigars_mate, 0, MAX_CIGARS);
 
+            // check if the position is a reverse complement and change accordingly
+            if(res_pos[pos_idx].revcmp != revtag1){
+                add_revcmp_tag(curAl);
+                this->mmap.reverse_al(curAl);
+                // change mate reverse flag to the reverse of whatever it currently is
+                if(al1_rc){ // set as not reversed
+                    curAl_mate->core.flag &= ~BAM_FMREVERSE;
+                }
+                else { // otherwise set as reversed
+                    curAl_mate->core.flag |= BAM_FMREVERSE;
+                }
+            }
+            if(res_pos_mate[pos_idx].revcmp != revtag2){
+                add_revcmp_tag(curAl_mate);
+                this->mmap.reverse_al(curAl_mate);
+                if(al2_rc){ // if mate is reversed - set as not reversed
+                    curAl->core.flag &= ~BAM_FMREVERSE;
+                }
+                else { // otherwise set as reversed
+                    curAl->core.flag |= BAM_FMREVERSE;
+                }
+            }
+
             int ret_val = this->convert_cigar(i,next_exon,exon_list,num_cigars,read_start,curAl,cigars,res_pos[pos_idx]);
             if (!ret_val) {
                 std::cerr << "@ERROR::Can not create a new cigar string for the single read evaluate_multimapper_pair1" << std::endl;
@@ -904,10 +934,6 @@ int Comparator::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
                 curAl->core.flag |= BAM_FSECONDARY;
             }
             this->finish_read(curAl);
-
-            if(std::strcmp(bam_get_qname(curAl),"read4234734/rna-XM_006723946.2;mate1:1923-2023;mate2:2322-2422")==0){
-                print_cigar(curAl);
-            }
 
             int ret_val_mate = this->convert_cigar(i_mate,next_exon_mate,exon_list_mate,num_cigars_mate,read_start_mate,curAl_mate,cigars_mate,res_pos_mate[pos_idx]);
             if (!ret_val_mate) {
@@ -923,9 +949,6 @@ int Comparator::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
             }
             this->finish_read(curAl_mate);
 
-            if(std::strcmp(bam_get_qname(curAl_mate),"read4234734/rna-XM_006723946.2;mate1:1923-2023;mate2:2322-2422")==0){
-                print_cigar(curAl_mate);
-            }
             prim = false;
         }
         return res_pos.size();
@@ -935,11 +958,12 @@ int Comparator::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
 int Comparator::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars[MAX_CIGARS],int &num_cigars,int plus_nm=0){
     int unique;
     std::vector<Position> res_pos; // holds the results of the multimapper evaluation
+    bool revtag;
     if(!this->abund){ // compute abundance dynamically
-        unique = this->mmap.process_pos(cur_pos,this->loci,res_pos);
+        unique = this->mmap.process_pos(cur_pos,this->loci,res_pos,revtag);
     }
     else{ // compute abundance dynamically
-        unique = this->mmap.process_pos_precomp(cur_pos,this->loci,res_pos);
+        unique = this->mmap.process_pos_precomp(cur_pos,this->loci,res_pos,revtag);
     }
     if(res_pos.empty()){ // increment abundance
         if(!this->abund){
@@ -957,7 +981,10 @@ int Comparator::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars
     else{
         change_nh_flag(curAl,res_pos.size()+plus_nm);
         bool prim = true;
+        bool al_rc = curAl->core.flag&0x10;
+        int orig_flag = curAl->core.flag;
         for(auto &v : res_pos){
+            curAl->core.flag = orig_flag;
             // increment total abundances of the locus to which the new cur_pos belongs - performed for each locus if multiple positions are reported (all or -k)
             if(!this->abund) {
                 this->loci.add_read_multi(v.locus);
@@ -998,6 +1025,13 @@ int Comparator::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars
             else{ // set as secondary alignment
                 curAl->core.flag |= BAM_FSECONDARY;
             }
+
+            // check if the position is a reverse complement and change accordingly
+            if(v.revcmp != revtag){
+                add_revcmp_tag(curAl);
+                this->mmap.reverse_al(curAl);
+            }
+
             this->finish_read(curAl);
             prim = false;
         }
@@ -1166,129 +1200,56 @@ void Comparator::merge(){
     readname_genome = bam_get_qname(al_g1);
     readname_trans = bam_get_qname(al_t1);
 
-    // TODO: process in pairs to compute more accurate nm estimate and perform better cmp_gt
-
     // genome on the top level, and transcriptome on the bottom level - get read from transcriptome - ASSUMES reads are in the same order
     while(true) { // only perfom if unaligned flag is set to true
         al_g_single.clear();
         // see if the mate needs to be loaded
-//        if(al_g1->core.flag &0x2){ // read is paired and aligned as a pair - load mate
-            ret_g = sam_read1(genome_al,al_g_hdr,al_g2);
-            // make sure both mates are currently present
-//            if(al_g1->core.pos != al_g2->core.mpos || al_g1->core.tid != al_g2->core.tid){
-//                std::cerr<<"@ERROR:::detected concordant does not have valid matches"<<std::endl;
-//                exit(-1);
-//            }
-            // load next transcriptomic read
-            ret_t = sam_read1(trans_al,al_t_hdr,al_t2);
-            if(std::strcmp(bam_get_qname(al_t1),bam_get_qname(al_t2))!=0){
-                std::cerr<<"@ERROR:::transcriptomic read does not have expected mate"<<std::endl;
-                exit(-1);
-            }
-            gt_cmp_status = cmp_gt(al_g1,al_g2,al_t1,al_t2);
+        // load second genome mate
+        ret_g = sam_read1(genome_al,al_g_hdr,al_g2);
+        // load next transcriptomic read
+        ret_t = sam_read1(trans_al,al_t_hdr,al_t2);
+        gt_cmp_status = cmp_gt(al_g1,al_g2,al_t1,al_t2);
 
-            // PROCESS separately: concordant and discordant/single - discordant and single should be compared on a per-mate bases while concordant should be compared based on both reads
-            if(gt_cmp_status == STATUS_CMP_READ::UNALIGNED){
-                // skip to the next read in transcriptome
-                ret_t = skip_read(trans_al,al_t_hdr,al_t1);
+        // PROCESS separately: concordant and discordant/single - discordant and single should be compared on a per-mate bases while concordant should be compared based on both reads
+        if(gt_cmp_status == STATUS_CMP_READ::UNALIGNED){
+            // skip to the next read in transcriptome
+            ret_t = skip_read(trans_al,al_t_hdr,al_t1);
+            // write remaining genomic reads from the same read group
+            ret_g = write_remaining_genome_pair(genome_al,al_g_hdr,al_g1,al_g2);
+        }
+        else if(gt_cmp_status == STATUS_CMP_READ::FIRST){ // just output hisat2 alignments
+            // skip to the next read in transcriptome
+            ret_t = skip_read(trans_al,al_t_hdr,al_t1);
+            // write remaining genomic reads from the same read group
+            ret_g = write_remaining_genome_pair(genome_al,al_g_hdr,al_g1,al_g2);
+        }
+        else if(gt_cmp_status == STATUS_CMP_READ::SECOND){ // process transcriptomic and output TODO: transcriptomic can be discordant while in fact being concordant - potential solution is to simply ignore and process multimappers for hisat alignments
+            // skip to the next read in the genome
+            ret_g = skip_read(genome_al,al_g_hdr,al_g1);
+            ret_t = write_remaining_trans_pair(trans_al,al_t_hdr,al_t1,al_t2,false);
+        }
+        else if(gt_cmp_status == STATUS_CMP_READ::BOTH){ // process both genomic and transcriptomic
+            ret_g = skip_read(genome_al,al_g_hdr,al_g1);
+            ret_t = write_remaining_trans_pair(trans_al,al_t_hdr,al_t1,al_t2,true);
+        }
+        else if(gt_cmp_status == STATUS_CMP_READ::ERR_CMP){
+            std::cerr<<"@ERROR:::should not be error in read comparison"<<std::endl;
+        }
+        else{
+            std::cerr<<"@ERROR:::unrecognized error in read comparison: "<<bam_get_qname(al_g1)<<"\t"<<bam_get_qname(al_t1)<<std::endl;
+        }
 
-                // write remaining genomic reads from the same read group
-                ret_g = write_remaining_genome_pair(genome_al,al_g_hdr,al_g1,al_g2);
-            }
-            else if(gt_cmp_status == STATUS_CMP_READ::FIRST){ // just output hisat2 alignments
-                // skip to the next read in transcriptome
-                ret_t = skip_read(trans_al,al_t_hdr,al_t1);
-
-                // write remaining genomic reads from the same read group
-                ret_g = write_remaining_genome_pair(genome_al,al_g_hdr,al_g1,al_g2);
-            }
-            else if(gt_cmp_status == STATUS_CMP_READ::SECOND){ // process transcriptomic and output TODO: transcriptomic can be discordant while in fact being concordant - potential solution is to simply ignore and process multimappers for hisat alignments
-                // skip to the next read in the genome
-                ret_g = skip_read(genome_al,al_g_hdr,al_g1);
-
-                ret_t = write_remaining_trans_pair(trans_al,al_t_hdr,al_t1,al_t2,false);
-            }
-            else if(gt_cmp_status == STATUS_CMP_READ::BOTH){ // process both genomic and transcriptomic
-                ret_g = skip_read(genome_al,al_g_hdr,al_g1);
-//                ret_t = skip_read(trans_al,al_t_hdr,al_t1);
-
-//                ret_g = write_remaining_genome_pair(genome_al,al_g_hdr,al_g1,al_g2);
-                ret_t = write_remaining_trans_pair(trans_al,al_t_hdr,al_t1,al_t2,true);
-//                ret_g = load_remaining_genome_pair(genome_al,al_g_hdr,al_g1,al_g2,al_g_single);
-//                ret_t = write_remaining_both_pair(trans_al,al_t_hdr,al_t1,al_t2,al_g_single);
-
-//            write_remaining_gt_read(al_g1,al_t1,al_g2,al_t2,ret_g,ret_t);
-            }
-            else if(gt_cmp_status == STATUS_CMP_READ::ERR_CMP){
-                std::cerr<<"@ERROR:::should not be error in read comparison"<<std::endl;
-            }
-            else{
-                std::cerr<<"@ERROR:::unrecognized error in read comparison: "<<bam_get_qname(al_g1)<<"\t"<<bam_get_qname(al_t1)<<std::endl;
-            }
-
-            // by now we should have advanced to the next read
-            if(ret_g<0 && ret_t<0){
-                break;
-            }
-            else if(ret_g<0 || ret_t<0){
-                std::cerr<<"@ERROR:::Only one file is over"<<std::endl;
-            }
-            else{ // continue
-                readname_genome = bam_get_qname(al_g1);
-                readname_trans = bam_get_qname(al_t1);
-            }
-//        }
-//        else{
-//            gt_cmp_status = cmp_gt(al_g1,al_t1);
-//
-//            // PROCESS separately: concordant and discordant/single - discordant and single should be compared on a per-mate bases while concordant should be compared based on both reads
-//            if(gt_cmp_status == STATUS_CMP_READ::UNALIGNED){
-//                // skip to the next read in transcriptome
-//                ret_t = skip_read(trans_al,al_t_hdr,al_t1);
-//
-//                // write remaining genomic reads from the same read group
-//                ret_g = write_remaining_genome_read(genome_al,al_g_hdr,al_g1);
-//            }
-//            else if(gt_cmp_status == STATUS_CMP_READ::FIRST){ // just output hisat2 alignments
-//                // skip to the next read in transcriptome
-//                ret_t = skip_read(trans_al,al_t_hdr,al_t1);
-//
-//                // write remaining genomic reads from the same read group
-//                ret_g = write_remaining_genome_read(genome_al,al_g_hdr,al_g1);
-//            }
-//            else if(gt_cmp_status == STATUS_CMP_READ::SECOND){ // process transcriptomic and output TODO: transcriptomic can be discordant while in fact being concordant - potential solution is to simply ignore and process multimappers for hisat alignments
-//                // skip to the next read in the genome
-//                ret_g = skip_read(genome_al,al_g_hdr,al_g1);
-//
-//                ret_t = write_remaining_trans_read(trans_al,al_t_hdr,al_t1,al_t2,false);
-//            }
-//            else if(gt_cmp_status == STATUS_CMP_READ::BOTH){ // process both genomic and transcriptomic
-//            ret_g = skip_read(genome_al,al_g_hdr,al_g1);
-//
-////                ret_g = write_remaining_genome_read(genome_al,al_g_hdr,al_g1);
-//                ret_t = write_remaining_trans_read(trans_al,al_t_hdr,al_t1,al_t2,true);
-//
-////            write_remaining_gt_read(al_g1,al_t1,al_g2,al_t2,ret_g,ret_t);
-//            }
-//            else if(gt_cmp_status == STATUS_CMP_READ::ERR_CMP){
-//                std::cerr<<"@ERROR:::should not be error in read comparison"<<std::endl;
-//            }
-//            else{
-//                std::cerr<<"@ERROR:::unrecognized error in read comparison: "<<bam_get_qname(al_g1)<<"\t"<<bam_get_qname(al_t1)<<std::endl;
-//            }
-//
-//            // by now we should have advanced to the next read
-//            if(ret_g<0 && ret_t<0){
-//                break;
-//            }
-//            else if(ret_g<0 || ret_t<0){
-//                std::cerr<<"@ERROR:::Only one file is over"<<std::endl;
-//            }
-//            else{ // continue
-//                readname_genome = bam_get_qname(al_g1);
-//                readname_trans = bam_get_qname(al_t1);
-//            }
-//        }
+        // by now we should have advanced to the next read
+        if(ret_g<0 && ret_t<0){
+            break;
+        }
+        else if(ret_g<0 || ret_t<0){
+            std::cerr<<"@ERROR:::Only one file is over"<<std::endl;
+        }
+        else{ // continue
+            readname_genome = bam_get_qname(al_g1);
+            readname_trans = bam_get_qname(al_t1);
+        }
     }
     // TODO: consider prefering non-spliced transcriptomic to spliced genomic alignments potentially allowing a few additional mismatches
 

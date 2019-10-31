@@ -16,7 +16,7 @@
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
-#include <math.h>
+#include <cmath>
 
 //#include <htslib/khash.h> // TODO: consider moving the implementation to a better hashmap (such as khash or something else)
 #include <htslib/sam.h>
