@@ -408,6 +408,8 @@ public:
         chr=0,strand=0,start=0,locus=0;
         moves.resize(0); // simplified CIGAR describing the intron-exon coverage of the given kmer
         revcmp=false;
+        abund=0;
+        num_used=0;
     };
     Position(uint32_t chr,uint32_t strand,uint32_t start,uint32_t locus,uint32_t transID,bool revcmp){
         this->chr = chr;
@@ -530,6 +532,8 @@ public:
         this->transIDs.clear();
         this->num_elems = 0;
         this->revcmp = false;
+        this->abund=0;
+        this->num_used=0;
     }
 
     uint8_t size(){return this->num_elems;}
@@ -541,6 +545,7 @@ public:
         start = p2.start;
         locus = p2.locus;
         abund = p2.abund;
+        num_used=p2.num_used;
         for(auto t : p2.transIDs){
             this->add_transID(t);
         }
@@ -795,8 +800,8 @@ public:
         else{ // multimappers exist - need to evaluate
             revtag = this->ltf->first.revcmp;
             // if all mode - need to keep a bool and then just iterate through the entire block and output all values into a vector of positions which can be accessed by the converter and written to the alignment
-            std::vector<double>abunds,res; // holds pid-corrected abundances
-            double total = 0;
+            std::vector<double>abunds,used,res; // holds pid-corrected abundances
+            double total = 0,total_used = 0;
 
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
             int cur_num_multi = get_block_size();
@@ -810,15 +815,20 @@ public:
                 // for this we need the uniq abundances which determine base likelihood
                 // as well as current assignments of multimappers
                 abunds.push_back(this->ii->first.abund);
+                used.push_back(this->ii->first.num_used);
                 total += abunds.back();
+                total_used+=used.back();
 
                 this->ii++; // step to the next position
             }
             abunds.push_back(this->ii->first.abund);
+            used.push_back(this->ii->first.num_used);
             total += abunds.back();
+            total_used+=used.back();
 
-            for(auto &v : abunds){
-                res.push_back(v/total);
+            for(int ai=0;ai<abunds.size();ai++){
+                double error = (abunds[ai]/total) - (used[ai]/total_used);
+                res.push_back(3.0 * error); // TODO: replace with kp
             }
 
             // now need to make the decision which is best
@@ -848,11 +858,13 @@ public:
             copy_current(pos_res);
             this->remove_strand_duplicates(pos_res);
             if(this->all_multi){ // just output the entire block
-                return cur_num_multi; // done
+                return pos_res.size(); // done
             }
             else{ // TODO: do abundance allocation here
                 if(this->loci->is_precomp_abund()){
-                    return select_one(pos_res);
+                    std::vector<int> offsets(pos_res.size()) ; // vector with 100 ints.
+                    std::iota (std::begin(offsets), std::end(offsets), 0);
+                    return select_one(pos_res,offsets);
                 }
             }
         }
@@ -870,8 +882,8 @@ public:
         else{ // multimappers exist - need to evaluate
             revtag1 = this->ltf->first.revcmp;
             revtag2 = this->ltf_mate->first.revcmp;
-            std::vector<double> abunds,res; // holds pid-corrected abundances
-            double total=0;
+            std::vector<double> abunds,used,res; // holds pid-corrected abundances
+            double total=0,total_used=0;
 
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
             this->ii_mate = this->index.begin()+this->ltf_mate->second; // get iterator to the start of a multimapping block in the array
@@ -929,22 +941,29 @@ public:
                 // first need to compute expected values
                 // for this we need the uniq abundances which determine base likelihood
                 // as well as current assignments of multimappers
-                abunds.push_back((this->ii+mp.first)->first.abund);
+                abunds.push_back((this->ii+mp.first)->first.abund+(this->ii_mate+mp.second)->first.abund);
+                used.push_back((this->ii+mp.first)->first.num_used+(this->ii_mate+mp.second)->first.num_used); // TODO: take average with mate not just the first in pair
                 total += abunds.back();
+                total_used+=used.back();
             }
 
-            for(auto &v : abunds){
-                res.push_back(v/total);
+            for(int ai=0;ai<abunds.size();ai++){
+                double error = (abunds[ai]/total) - (used[ai]/total_used);
+                std::cout<<error<<std::endl;
+                res.push_back(1.0 * error); // TODO: needs to be KP
             }
 
             // now need to make the decision which is best
-            int pos_idx = this->get_likely(res,0.0,1.0);
+            int pos_idx = std::distance(res.begin(), std::max_element(res.begin(), res.end())); // this->get_likely(res,0.0,1.0);
             // now follow the iterator to get the actual position object which corresponds to the selected item
 
             int offset = multi_pairs[pos_idx].first; // get the actual offset
             int offset_mate = multi_pairs[pos_idx].second;
             pos_res.push_back((this->index.begin()+this->ltf->second+offset)->first);
             pos_res_mate.push_back((this->index.begin()+this->ltf_mate->second+offset_mate)->first);
+            // increment used
+            (this->index.begin()+this->ltf->second+offset)->first.num_used++;
+            (this->index.begin()+this->ltf_mate->second+offset_mate)->first.num_used++;
             return cur_num_multi;
         }
     }
@@ -968,52 +987,93 @@ public:
         }
     }
 
-    int select_one_pair(std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){ // TODO: add PID controller to achieve correct allocation
-        std::vector<double> abunds;
-        int total=0;
+//    int select_one_pair(std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){
+    int select_one_pair(std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate,std::vector<std::pair<int,int>>& offsets){ // TODO: add PID controller to achieve correct allocation
+
+        //TODO: asa last resort - try implementing th dynamic allocation. Might not work, but why not give it a try
+        //need to make sure that no nans are reported
+
+
+        std::vector<double> abunds,used,res;
+        double total=0.0000001,total_used=0.0000001;
+        double abund=0,num_used=0;
+        int num_mates;
         for(int i=0;i<pos_res.size();i++){
             // first need to compute expected values
             // for this we need the uniq abundances which determine base likelihood
             // as well as current assignments of multimappers
-            abunds.push_back(((double)(pos_res[i].abund+pos_res[i].abund))/2);
+            abund=0; // reset
+            num_used=0; // reset
+            num_mates = 0;
+            if(offsets[i].first!=-1){
+                abund+=(double)pos_res[i].abund;
+                num_used+=(double)pos_res[i].num_used;
+                num_mates+=1;
+            }
+            if(offsets[i].second!=-1){
+                abund+=(double)pos_res_mate[i].abund;
+                num_used+=(double)pos_res_mate[i].num_used;
+                num_mates+=1;
+            }
+
+            abunds.push_back(abund/(double)num_mates);
+            used.push_back(num_used/(double)num_mates);
             total += abunds.back();
+            total_used += used.back();
         }
-        std::vector<double> res;
-        for(auto &v : abunds){
-            res.push_back(v/total);
+//        total = (total==0)?0.00001:total;
+//        total_used = (total_used==0)?0.00001:total_used;
+        for(int ai=0;ai<abunds.size();ai++){
+            double error = (abunds[ai]/total) - (used[ai]/total_used);
+//            std::cout<<error<<std::endl;
+            res.push_back(1.0 * error);
         }
 
         // now need to make the decision which is best
-        int pos_idx = this->get_likely(res,0.0,1.0);
+        int pos_idx = std::distance(res.begin(), std::max_element(res.begin(), res.end())); // this->get_likely(res,0.0,1.0);
+
         // now follow the iterator to get the actual position object which corresponds to the selected item
-
-
         pos_res = std::vector<Position>{pos_res[pos_idx]};
         pos_res_mate = std::vector<Position>{pos_res_mate[pos_idx]};
+
+        // lastly updated that the chosen position has been used for the future PID correction
+        if(offsets[pos_idx].first!=-1){
+            (this->index.begin()+this->ltf->second+offsets[pos_idx].first)->first.num_used++;
+        }
+        if(offsets[pos_idx].second!=-1){
+            (this->index.begin()+this->ltf_mate->second+offsets[pos_idx].second)->first.num_used++;
+        }
+
         return 1;
     }
 
-    int select_one(std::vector<Position>& pos_res){
-        std::vector<double> abunds;
-        int total=0;
+    int select_one(std::vector<Position>& pos_res,std::vector<int>& offsets){
+        std::vector<double> abunds,used,res;
+        double total=0,total_used=0;
+        double abund=0,num_used=0;
+        int num_mates;
+
         for(int i=0;i<pos_res.size();i++){
             // first need to compute expected values
             // for this we need the uniq abundances which determine base likelihood
             // as well as current assignments of multimappers
             abunds.push_back((double)pos_res[i].abund);
+            used.push_back((double)pos_res[i].num_used);
             total += abunds.back();
         }
-        std::vector<double> res;
-        for(auto &v : abunds){
-            res.push_back(v/total);
+        for(int ai=0;ai<abunds.size();ai++){
+            double error = (abunds[ai]/total) - (used[ai]/total_used);
+            res.push_back(1.0 * error);
         }
 
         // now need to make the decision which is best
-        int pos_idx = this->get_likely(res,0.0,1.0);
+        int pos_idx = std::distance(res.begin(), std::max_element(res.begin(), res.end())); // this->get_likely(res,0.0,1.0);
         // now follow the iterator to get the actual position object which corresponds to the selected item
 
-
         pos_res = std::vector<Position>{pos_res[pos_idx]};
+
+        (this->index.begin()+this->ltf->second+offsets[pos_idx])->first.num_used++;
+
         return 1;
     }
 
@@ -1028,6 +1088,16 @@ public:
         this->ltf = this->lookup_table.find(pos);
         this->ltf_mate = this->lookup_table.find(pos_mate);
         if(this->ltf == this->lookup_table.end() && this->ltf_mate == this->lookup_table.end()){ // pair is not a multimapper
+            // since the read is not a multimapper we can increment the abundances across the transcripts
+            // increment dynamic abundances if running in dynamic allocation mode without precomputed abundances
+            // the problem here is that we do not know which transcripts we should be allocating this abundance to
+            // One approach (potentially prone ot unexpected errors) is to assign reads to their respective transcripts
+            // with the hope that when we sum them together, abundances will average themselves out
+
+//            this->transcriptome[pos.transIDs.front()].num_unique++; // TODO: normalize by elen - this requires computation of effective length
+//            this->transcriptome[pos_mate.transIDs.front()].num_unique++;
+//            // TODO: same needs to be implemented in non-paired mode
+
             return 0;
         }
         if(this->ltf == this->lookup_table.end()){
@@ -1038,11 +1108,15 @@ public:
             std::vector<Position> tmp_pos;
             process_pos_no_abund(pos_mate,loci,tmp_pos,revtag2);  // TODO: continued - ideally the likelihood estimation will be a separate function after refactoring - for now will create another duplicate of process_pos
             // now need to iterate and find valid pairs given
+            std::vector<std::pair<int,int>> offsets;
+            int oi=0;
             for(auto& v : tmp_pos){
                 if(v.locus == pos.locus && std::abs((int)v.start - (int)pos.start) < this->fraglen){ // valid pair // TODO: set fragment length based on the precomputed distribution
                     pos_res.push_back(pos);
                     pos_res_mate.push_back(v);
+                    offsets.push_back(std::make_pair(oi,-1));
                 }
+                oi++;
             }
             if(pos_res_mate.empty()){
                 return 0;
@@ -1054,8 +1128,9 @@ public:
             }
             else{ // TODO: do abundance allocation here
                 if(this->loci->is_precomp_abund()){
-                    return select_one_pair(pos_res,pos_res_mate);
+                    return select_one_pair(pos_res,pos_res_mate,offsets);
                 }
+                return pos_res_mate.size(); // TODO: dynamic allocation here if ever re-implemented
             }
         }
         else if(this->ltf_mate == this->lookup_table.end()){
@@ -1066,11 +1141,15 @@ public:
             std::vector<Position> tmp_pos;
             process_pos_no_abund(pos,loci,tmp_pos,revtag1); // TODO: continued - ideally the likelihood estimation will be a separate function after refactoring - for now will create another duplicate of process_pos
             // now need to iterate and find valid pairs given
+            std::vector<std::pair<int,int>> offsets;
+            int oi=0;
             for(Position v : tmp_pos){
                 if(v.locus == pos_mate.locus && std::abs((int)v.start - (int)pos_mate.start) < this->fraglen){ // valid pair // TODO: set fragment length based on the precomputed distribution
                     pos_res_mate.push_back(pos_mate);
                     pos_res.push_back(v);
+                    offsets.push_back(std::make_pair(oi,-1));
                 }
+                oi++;
             }
             if(pos_res.empty()){
                 return 0;
@@ -1078,12 +1157,13 @@ public:
             }
             remove_strand_duplicates_pair(pos_res,pos_res_mate);
             if(this->all_multi){ // just output the entire block
-                return pos_res_mate.size(); // done
+                return pos_res.size(); // done
             }
             else{ // TODO: do abundance allocation here
                 if(this->loci->is_precomp_abund()){
-                    return select_one_pair(pos_res,pos_res_mate);
+                    return select_one_pair(pos_res,pos_res_mate,offsets);
                 }
+                return pos_res.size(); // TODO: dynamic allocation here if ever re-implemented
             }
         }
         else{ // multimappers exist - need to evaluate
@@ -1142,7 +1222,7 @@ public:
             }
             else{ // TODO: do abundance allocation here
                 if(this->loci->is_precomp_abund()){
-                    return select_one_pair(pos_res,pos_res_mate);
+                    return select_one_pair(pos_res,pos_res_mate,multi_pairs);
                 }
                 return cur_num_multi; // TODO: dynamic allocation here
             }
