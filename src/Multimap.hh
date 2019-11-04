@@ -397,14 +397,15 @@ class Position{
 public:
     uint8_t num_elems = 0;
     uint32_t chr=0,strand=0,start=0,locus=0;
-    uint32_t transID=0; // transID can be any transcript which can describe the position to which it belongs; it does not participate in the equality computation
+    int abund = 0; // set abundance to a given position. This would require us to somehow tell which transcripts are shared by a given position
+    int num_used = 0; // whn performing abundance allocation - how many times has the value been written - used for pid correction
+    std::vector<uint32_t> transIDs; // for indexing, this includes all transcripts that contain this position. Otherwise can be any transcript which can describe the position to which it belongs; it does not participate in the equality computation
     std::vector<uint32_t> moves{}; // simplified CIGAR describing the intron-exon coverage of the given kmer
     bool revcmp=false;
 
     Position(){
         num_elems = 0;
         chr=0,strand=0,start=0,locus=0;
-        transID=0; // transID can be any transcript which can describe the position to which it belongs; it does not participate in the equality computation
         moves.resize(0); // simplified CIGAR describing the intron-exon coverage of the given kmer
         revcmp=false;
     };
@@ -413,7 +414,7 @@ public:
         this->strand = strand;
         this->start = start;
         this->locus = locus;
-        this->transID = transID;
+        this->transIDs.push_back(transID);
         this->revcmp = revcmp;
     }
     Position(bam1_t* curAl){ // generate position from an alignment
@@ -427,7 +428,10 @@ public:
     void set_strand(uint32_t new_strand){this->strand=new_strand;this->num_elems++;}
     void set_start(uint32_t new_start){this->start=new_start;this->num_elems++;}
     void set_locus(uint32_t locID){this->locus=locID;this->num_elems++;}
-    void set_trans(uint32_t trans){this->transID=trans;this->num_elems++;}
+    void add_transID(uint32_t trans){
+        this->transIDs.push_back(trans);
+        this->num_elems++;
+    }
     void set_rev(bool rev_tag){this->revcmp=rev_tag;this->num_elems++;}
 
     static bool moves_eq(const std::vector<uint32_t>& m1,const std::vector<uint32_t>& m2) { // m1 must be smaller or equal to m2
@@ -440,9 +444,19 @@ public:
     }
 
     std::string get_strg() const {
+        // remove duplicates from the vector of transIDs
+        std::set<uint32_t> tmp_transIDs;
+        for(auto t : transIDs){
+            tmp_transIDs.insert(t);
+        }
+
         std::string res;
         res.append(std::to_string(this->revcmp)); // the first character always indicates whether reverse complemented or not
-        res.append(std::to_string(this->transID));
+        for(auto t : tmp_transIDs){
+            res.append(std::to_string(t));
+            res += '^';
+        }
+        res.pop_back(); // remove the last ^
         res += ">";
         res.append(std::to_string(this->locus));
         res += "@";
@@ -513,6 +527,7 @@ public:
 
     void clear(){
         this->moves.clear();
+        this->transIDs.clear();
         this->num_elems = 0;
         this->revcmp = false;
     }
@@ -525,13 +540,24 @@ public:
         strand = p2.strand;
         start = p2.start;
         locus = p2.locus;
-        transID = p2.transID;
+        abund = p2.abund;
+        for(auto t : p2.transIDs){
+            this->add_transID(t);
+        }
         for(auto m : p2.moves){
             this->add_move(m);
         }
 //        copy(p2.moves.begin(), p2.moves.end(), back_inserter(moves));
         this->revcmp = p2.revcmp;
     }
+
+    // The new algorithm for multi allocation:
+    // multimappers in the index now should have an integer for the total abundance at the covered position
+    // when loading abundances - add up abundances for all transcripts that cover the given genomic position
+    // How to we get from transcript to positions in the multimapping index?
+    //   this we can get by saving all transcript IDS that share a given position when constructing an index
+    //   then we can have a map which links a transcript ID to all positions
+    //        this may not be the most efficient solution, but should be reliable right now and get the results out fast
 };
 
 inline void hash_combine(std::size_t& seed) { }
@@ -703,7 +729,7 @@ private:
 // and facilitates efficient storage and lookup
 class Multimap{
 public:
-    Multimap() = default;
+    Multimap():tid2pos(100000,std::vector<Position>{}){};
     ~Multimap() = default;
 
     void set_fraglen(int fraglen){
@@ -783,12 +809,12 @@ public:
                 // first need to compute expected values
                 // for this we need the uniq abundances which determine base likelihood
                 // as well as current assignments of multimappers
-                abunds.push_back(loci[this->ii->first.locus].get_abund());
+                abunds.push_back(this->ii->first.abund);
                 total += abunds.back();
 
                 this->ii++; // step to the next position
             }
-            abunds.push_back(loci[this->ii->first.locus].get_abund());
+            abunds.push_back(this->ii->first.abund);
             total += abunds.back();
 
             for(auto &v : abunds){
@@ -819,50 +845,16 @@ public:
             this->ii = this->index.begin()+this->ltf->second; // get iterator to the start of a multimapping block in the array
             int offset = this->ltf->second;
             int cur_num_multi = get_block_size();
+            copy_current(pos_res);
+            this->remove_strand_duplicates(pos_res);
             if(this->all_multi){ // just output the entire block
-                copy_current(pos_res);
-                this->remove_strand_duplicates(pos_res);
                 return cur_num_multi; // done
             }
-            while(this->ii->second){ // iterate until the end of the block
-                // first need to compute expected values
-                // for this we need the uniq abundances which determine base likelihood
-                // as well as current assignments of multimappers
-                uniq.push_back(loci.get_abund(this->ii->first.locus));
-                utotal+=uniq.back();
-                multi.push_back(loci.get_abund_total(this->ii->first.locus));
-                mtotal+=multi.back();
-
-                this->ii++; // step to the next position
+            else{ // TODO: do abundance allocation here
+                if(this->loci->is_precomp_abund()){
+                    return select_one(pos_res);
+                }
             }
-            uniq.push_back(loci.get_abund(this->ii->first.locus));
-            utotal+=uniq.back();
-            multi.push_back(loci.get_abund_total(this->ii->first.locus));
-            mtotal+=multi.back();
-
-            // get expected and compute PID
-            utotal = (utotal==0)?1:utotal;
-            mtotal = (mtotal==0)?1:mtotal;
-            double min = (double)MAX_INT;
-            for(int i=0; i<uniq.size();i++){
-                double expected = (uniq[i]/utotal)*mtotal;
-                double tmp = uniq[i]+loci.get_corrected(this->ii->first.locus,expected+uniq[i],multi[i]+uniq[i]);
-                tmp = (tmp>0.0)?tmp:0.000001;
-                tmp_res.push_back(tmp);
-                min = (tmp<min)?tmp:min;
-                rtotal+=tmp_res.back();
-            }
-
-            for(auto &v : tmp_res){
-                res.push_back(v/rtotal);
-            }
-
-            // now need to make the decision which is best
-            int pos_idx = this->get_likely(res,0.0,1.0);
-            // now follow the iterator to get the actual position object which corresponds to the selected item
-            pos_res.push_back((this->index.begin()+this->ltf->second+pos_idx)->first);
-//            std::cout<<"getting likely"<<std::endl;
-            return cur_num_multi;
         }
     }
 
@@ -937,7 +929,7 @@ public:
                 // first need to compute expected values
                 // for this we need the uniq abundances which determine base likelihood
                 // as well as current assignments of multimappers
-                abunds.push_back(loci[(this->ii+mp.first)->first.locus].get_abund());
+                abunds.push_back((this->ii+mp.first)->first.abund);
                 total += abunds.back();
             }
 
@@ -976,6 +968,55 @@ public:
         }
     }
 
+    int select_one_pair(std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate){ // TODO: add PID controller to achieve correct allocation
+        std::vector<double> abunds;
+        int total=0;
+        for(int i=0;i<pos_res.size();i++){
+            // first need to compute expected values
+            // for this we need the uniq abundances which determine base likelihood
+            // as well as current assignments of multimappers
+            abunds.push_back(((double)(pos_res[i].abund+pos_res[i].abund))/2);
+            total += abunds.back();
+        }
+        std::vector<double> res;
+        for(auto &v : abunds){
+            res.push_back(v/total);
+        }
+
+        // now need to make the decision which is best
+        int pos_idx = this->get_likely(res,0.0,1.0);
+        // now follow the iterator to get the actual position object which corresponds to the selected item
+
+
+        pos_res = std::vector<Position>{pos_res[pos_idx]};
+        pos_res_mate = std::vector<Position>{pos_res_mate[pos_idx]};
+        return 1;
+    }
+
+    int select_one(std::vector<Position>& pos_res){
+        std::vector<double> abunds;
+        int total=0;
+        for(int i=0;i<pos_res.size();i++){
+            // first need to compute expected values
+            // for this we need the uniq abundances which determine base likelihood
+            // as well as current assignments of multimappers
+            abunds.push_back((double)pos_res[i].abund);
+            total += abunds.back();
+        }
+        std::vector<double> res;
+        for(auto &v : abunds){
+            res.push_back(v/total);
+        }
+
+        // now need to make the decision which is best
+        int pos_idx = this->get_likely(res,0.0,1.0);
+        // now follow the iterator to get the actual position object which corresponds to the selected item
+
+
+        pos_res = std::vector<Position>{pos_res[pos_idx]};
+        return 1;
+    }
+
     int process_pos_pair(Position& pos,Position& pos_mate,Loci& loci,std::vector<Position>& pos_res,std::vector<Position>& pos_res_mate,bool& revtag1, bool& revtag2){
         std::vector<double> uniq,multi,tmp_res,res; // holds pid-corrected abundances
         double utotal=0,mtotal=0,rtotal=0;
@@ -1007,11 +1048,15 @@ public:
                 return 0;
                 // TODO: currently this function does not guarantee that the original pair is preserved - it may still be discarded due to the fraglen distribution. However, it should guarantee it is returned or processed somehow else
             }
+            remove_strand_duplicates_pair(pos_res,pos_res_mate);
             if(this->all_multi){ // just output the entire block
-                remove_strand_duplicates_pair(pos_res,pos_res_mate);
                 return pos_res_mate.size(); // done
             }
-            // TODO: does not do abundance estimation at the moment - need done
+            else{ // TODO: do abundance allocation here
+                if(this->loci->is_precomp_abund()){
+                    return select_one_pair(pos_res,pos_res_mate);
+                }
+            }
         }
         else if(this->ltf_mate == this->lookup_table.end()){
             revtag1 = this->ltf->first.revcmp;
@@ -1031,11 +1076,15 @@ public:
                 return 0;
                 // TODO: currently this function does not guarantee that the original pair is preserved - it may still be discarded due to the fraglen distribution. However, it should guarantee it is returned or processed somehow else
             }
+            remove_strand_duplicates_pair(pos_res,pos_res_mate);
             if(this->all_multi){ // just output the entire block
-                remove_strand_duplicates_pair(pos_res,pos_res_mate);
                 return pos_res_mate.size(); // done
             }
-            // TODO: does not do abundance estimation at the moment - need done
+            else{ // TODO: do abundance allocation here
+                if(this->loci->is_precomp_abund()){
+                    return select_one_pair(pos_res,pos_res_mate);
+                }
+            }
         }
         else{ // multimappers exist - need to evaluate
             revtag1 = this->ltf->first.revcmp;
@@ -1081,53 +1130,22 @@ public:
             // now compute abundances for all these blocks
             this->ii = this->index.begin()+this->ltf->second; // return to the start of the multimapping block
             this->ii_mate = this->index.begin()+this->ltf_mate->second; // same for the mate
+
+            for(auto & mp: multi_pairs) { // iterate over all the detected pairs
+                pos_res.push_back((this->ii + mp.first)->first);
+                pos_res_mate.push_back((this->ii_mate + mp.second)->first);
+            }
+            remove_strand_duplicates_pair(pos_res,pos_res_mate);
+
             if(this->all_multi){ // just output the entire block
-                for(auto & mp: multi_pairs) { // iterate over all the detected pairs
-                    pos_res.push_back((this->ii + mp.first)->first);
-                    pos_res_mate.push_back((this->ii_mate + mp.second)->first);
-                }
-                remove_strand_duplicates_pair(pos_res,pos_res_mate);
                 return cur_num_multi; // done
             }
-            for(auto & mp: multi_pairs){
-                // first need to compute expected values
-                // for this we need the uniq abundances which determine base likelihood
-                // as well as current assignments of multimappers
-                uniq.push_back(loci.get_abund((this->ii+mp.first)->first.locus));
-                utotal+=uniq.back();
-                multi.push_back(loci.get_abund_total((this->ii+mp.first)->first.locus));
-                mtotal+=multi.back();
+            else{ // TODO: do abundance allocation here
+                if(this->loci->is_precomp_abund()){
+                    return select_one_pair(pos_res,pos_res_mate);
+                }
+                return cur_num_multi; // TODO: dynamic allocation here
             }
-
-            // TODO: manually count the reads  - where they come from and which ones are multimappers
-            // then walk through the algorithm and make sure it works as expected
-
-            // get expected and compute PID
-            utotal = (utotal==0)?1:utotal;
-            mtotal = (mtotal==0)?1:mtotal;
-            double min = (double)MAX_INT;
-            for(int i=0; i<uniq.size();i++){
-                double expected = (uniq[i]/utotal)*mtotal;
-                double tmp = uniq[i]+loci.get_corrected(this->ii->first.locus,expected+uniq[i],multi[i]+uniq[i]);
-                tmp = (tmp>0.0)?tmp:0.000001;
-                tmp_res.push_back(tmp);
-                min = (tmp<min)?tmp:min;
-                rtotal+=tmp_res.back();
-            }
-
-            for(auto &v : tmp_res){
-                res.push_back(v/rtotal);
-            }
-
-            // now need to make the decision which is best
-            int pos_idx = this->get_likely(res,0.0,1.0);
-            // now follow the iterator to get the actual position object which corresponds to the selected item
-
-            int offset = multi_pairs[pos_idx].first; // get the actual offset
-            int offset_mate = multi_pairs[pos_idx].second;
-            pos_res.push_back((this->index.begin()+this->ltf->second+offset)->first);
-            pos_res_mate.push_back((this->index.begin()+this->ltf_mate->second+offset_mate)->first);
-            return cur_num_multi;
         }
     }
 
@@ -1354,6 +1372,16 @@ public:
             process_remaining(el_pos,exon_pos,p_rc,exon_list,cur_exon); // adds moves to the position object
             if(kit_rc!=this->kmer_coords.end()){
                 this->pce_rc = kit_rc->second.insert(p_rc); // insert new completed position now
+                if(!this->pce_rc.second){ // if it has not been inserted - then we can remove the element - add new transID - re-add the element back to the set; otherwise we can not modify the contents
+                    Position np = *this->pce_rc.first;
+                    np.add_transID(transID);
+                    kit_rc->second.erase(*this->pce_rc.first);
+                    this->pce_rc = kit_rc->second.insert(np);
+                    if(!this->pce_rc.second){
+                        std::cerr<<"the position did not exist"<<std::endl;
+                        exit(-1);
+                    }
+                }
             }
 
             // reset_parameters
@@ -1386,6 +1414,17 @@ public:
             process_remaining(el_pos,exon_pos,p,exon_list,cur_exon); // adds moves to the position object
 
             this->pce = this->kce.first->second.insert(p); // insert new completed position now
+            if(!this->pce.second){ // if it has not been inserted - then we can remove the element - add new transID - readd the element back to the set; otherwise we can not modify the contents
+                Position np = *this->pce.first;
+                np.add_transID(transID);
+                this->kce.first->second.erase(this->pce.first);
+                this->pce = this->kce.first->second.insert(np);
+                if(!this->pce.second){
+                    std::cerr<<"the position did not exist"<<std::endl;
+                    exit(-1);
+                }
+            }
+            // make sure that at least all the transcript ids are saved for each multimapper
 
             // reset_parameters
             exon_pos++; // increment and evaluate
@@ -1393,6 +1432,27 @@ public:
                 exon_pos = 0;
                 el_pos++;
                 cur_exon = exon_list[el_pos];
+            }
+        }
+    }
+
+    void add_abund(int tid,int abund){
+        // iterate over relevant positions in the transcriptome
+        for(auto& mp : this->tid2pos[tid]){
+            // find position in the multimapper index
+            this->ltf = this->lookup_table.find(mp);
+            if(this->ltf != this->lookup_table.end()){
+                this->ii = this->index.begin()+this->ltf->second;
+                while(true){ // iterate over the block to find relevant positions and load abundances
+                    if(this->ii->first == mp){
+                        this->ii->first.abund+=abund;
+                        break;
+                    }
+                    if(!this->ii->second){ // reached the end of the block
+                        break;
+                    }
+                    this->ii++;
+                }
             }
         }
     }
@@ -1544,6 +1604,7 @@ private:
         Position pos;
         // Multimappers are all stored on a single line, so instead of creating pointers for each, we can simply store two small integers, which describe which positions in the index characterize a multimapper
         uint32_t multi_block_start = 0;
+        std::vector<int> transIDs; // this vector is then used to get quich access from a transcript ID to all multimapping positions within that transcript
         for(int i=0;i<k;i++){
             switch(buffer[i]){
                 case '\n':
@@ -1552,20 +1613,32 @@ private:
                     this->index.push_back(std::make_pair(pos,false));
                     this->lte = this->lookup_table.insert(std::make_pair(pos,multi_block_start));
                     multi_block_start = this->index.size(); // end of line implies end of the multimapping block. Now set the start of the next block
+                    for(auto tid : transIDs){
+                        if(tid2pos.size()<=tid){
+                            tid2pos.resize(tid+100000);
+                        }
+                        tid2pos[tid].push_back(pos);
+                    }
                     pos.clear();
                     elem = Opt::REVCMP;
-//                    elem = Opt::TRANS;
                     move = 0;
+                    transIDs.clear();
                     break;
                 case '\t':
                     // end of a full coordinate - write last integer
                     pos.add_move(move);
                     this->index.push_back(std::make_pair(pos,true));
                     this->lte = this->lookup_table.insert(std::make_pair(pos,multi_block_start));
+                    for(auto tid : transIDs){
+                        if(tid2pos.size()<=tid){
+                            tid2pos.resize(tid+100000);
+                        }
+                        tid2pos[tid].push_back(pos);
+                    }
                     pos.clear();
                     elem = Opt::REVCMP;
-//                    elem = Opt::TRANS;
                     move = 0;
+                    transIDs.clear();
                     break;
                 case ' ':
                     //end of current int - write move
@@ -1587,8 +1660,18 @@ private:
                     break;
                 case '>':
                     // got the sample transcript ID
-                    pos.set_trans(trans);
+                    transIDs.push_back(trans);
+                    pos.add_transID(trans);
                     elem = Opt::LOCUS;
+//                    if(trans==30503){
+//                        std::cout<<"found"<<std::endl;
+//                    }
+                    trans = 0;
+                    break;
+                case '^':
+                    //continue loading transcript information
+                    transIDs.push_back(trans);
+                    elem = Opt::TRANS;
                     trans = 0;
                     break;
                 case '-': case '+':
@@ -1638,6 +1721,8 @@ private:
             this->lte = this->lookup_table.insert(std::make_pair(pos,multi_block_start));
         }
     }
+
+    std::vector<std::vector<Position>> tid2pos; // lookup table mapping transcript IDs to positions where index of vector is transcript id and contents of the cell is a vector of positions that belong to this transcript
 
     int kmerlen;
     int fraglen = 200000; // TODO: URGENT!

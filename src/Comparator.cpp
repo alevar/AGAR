@@ -686,7 +686,7 @@ size_t Comparator::process_read(bam1_t *curAl,Position& cur_pos,int cigars[MAX_C
     cur_pos.set_start(read_start);
     cur_pos.set_locus(p_trans.get_geneID());
     cur_pos.set_strand(p_trans.strand);
-    cur_pos.set_trans(target_name);
+    cur_pos.add_transID(target_name);
 
     // secondly build a new cigar string
     int cur_cigar_full[MAX_CIGARS];
@@ -803,15 +803,7 @@ int Comparator::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
     int unique;
     std::vector<Position> res_pos,res_pos_mate; // holds the results of the multimapper evaluation
     bool revtag1,revtag2;
-    if(!this->abund){ // compute abundance dynamically
-//        std::cout<<"\n================\n"<<std::endl;
-//        std::cout<<bam_get_qname(curAl)<<std::endl;
-        unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate,revtag1,revtag2);
-    }
-    else{ // rely on the salmon abundance
-        unique = this->mmap.process_pos_pair_precomp(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate,revtag1,revtag2);
-    }
-//    std::cerr<<"eval multi_pair: "<<unique<<std::endl;
+    unique = this->mmap.process_pos_pair(cur_pos,cur_pos_mate,this->loci,res_pos,res_pos_mate,revtag1,revtag2);
     if(res_pos.empty()){ // increment abundance
         if(!this->abund) { // TODO: only needed when the not reporting all multimappers but rather performing likelihood assignment
             this->loci.add_read(cur_pos.locus);
@@ -857,7 +849,7 @@ int Comparator::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
             }
 
             // first get the transcript
-            GffTranscript& new_trans = transcriptome[res_pos[pos_idx].transID];
+            GffTranscript& new_trans = transcriptome[res_pos[pos_idx].transIDs.back()];
             GVec<GSeg>& exon_list=new_trans.exons;
             GSeg *next_exon=nullptr;
             int32_t read_start=res_pos[pos_idx].start;
@@ -868,7 +860,7 @@ int Comparator::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
                 }
             }
 
-            GffTranscript& new_trans_mate = transcriptome[res_pos_mate[pos_idx].transID];
+            GffTranscript& new_trans_mate = transcriptome[res_pos_mate[pos_idx].transIDs.back()];
             GVec<GSeg>& exon_list_mate=new_trans_mate.exons;
             GSeg *next_exon_mate=nullptr;
             int32_t read_start_mate=res_pos_mate[pos_idx].start;
@@ -879,8 +871,8 @@ int Comparator::evaluate_multimappers_pair(bam1_t *curAl,bam1_t* curAl_mate,Posi
                 }
             }
 
-            add_multi_tag(curAl,res_pos[pos_idx].transID);
-            add_multi_tag(curAl_mate,res_pos_mate[pos_idx].transID);
+            add_multi_tag(curAl,res_pos[pos_idx].transIDs.back());
+            add_multi_tag(curAl_mate,res_pos_mate[pos_idx].transIDs.back());
 
             curAl->core.pos = res_pos[pos_idx].start-1;
             curAl->core.mpos = res_pos_mate[pos_idx].start-1;
@@ -959,12 +951,7 @@ int Comparator::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars
     int unique;
     std::vector<Position> res_pos; // holds the results of the multimapper evaluation
     bool revtag;
-    if(!this->abund){ // compute abundance dynamically
-        unique = this->mmap.process_pos(cur_pos,this->loci,res_pos,revtag);
-    }
-    else{ // compute abundance dynamically
-        unique = this->mmap.process_pos_precomp(cur_pos,this->loci,res_pos,revtag);
-    }
+    unique = this->mmap.process_pos(cur_pos,this->loci,res_pos,revtag);
     if(res_pos.empty()){ // increment abundance
         if(!this->abund){
             this->loci.add_read(cur_pos.locus);
@@ -991,7 +978,7 @@ int Comparator::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars
             }
 
             // first get the transcript
-            GffTranscript& new_trans = transcriptome[v.transID];
+            GffTranscript& new_trans = transcriptome[v.transIDs.back()];
             GVec<GSeg>& exon_list=new_trans.exons;
             GSeg *next_exon=nullptr;
             int32_t read_start=v.start;
@@ -1006,7 +993,7 @@ int Comparator::evaluate_multimappers(bam1_t* curAl,Position& cur_pos,int cigars
             curAl->core.tid = v.chr;
             set_xs(curAl,v.strand);
 
-            add_multi_tag(curAl,v.transID);
+            add_multi_tag(curAl,v.transIDs.back());
 
             // reconvert the cur_pos into a read and output
             num_cigars = 0;
@@ -1477,19 +1464,19 @@ void Comparator::load_abundances(const std::string& abundFP){
     std::cerr<<"@LOG::Reading the transcript abundance file: "<<abundFP<<std::endl;
     std::string aline,col;
     std::getline(abundstream,aline); // skip the header from salmon
-    int locid;
+    int tid;
     float abundance;
     while (std::getline(abundstream,aline)) {
         // given a line we need to extract the name and the TPM
         linestream = new std::stringstream(aline);
         std::getline(*linestream,col,'\t');
-        locid = std::atoi(col.c_str());
+        tid = std::atoi(col.c_str());
         // now need to get the abundance
         std::getline(*linestream,col,'\t'); // skip second column
         std::getline(*linestream,col,'\t'); // skip third column
-        std::getline(*linestream,col,'\t'); // abundance here
+        std::getline(*linestream,col,'\t'); // TPM here
         abundance = std::atof(col.c_str());
-        this->loci[locid].set_abund(abundance);
+        this->mmap.add_abund(tid,abundance);
         delete linestream;
     }
     abundstream.close();
